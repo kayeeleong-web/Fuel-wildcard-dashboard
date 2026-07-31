@@ -32,6 +32,7 @@
   --purple: #864DFE;
   --purple-soft: rgba(134, 77, 254, .10);
   --blue: #11B3E7;
+  --blue-soft: rgba(17, 179, 231, .10);
   --pink: #EC4862;
   --pink-soft: rgba(236, 72, 98, .10);
   --teal: #46BDC6;
@@ -384,6 +385,107 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 #reports[data-range="12"].report-doc:not([data-doc="custom"]) td:not(.r12):not(:first-child) { display: none; }
 /* data-range="24" shows every column (all cells carry .r24) */
 
+/* ==================== Payroll tab ==================== */
+/* This tab is the one exception to "every tab lives inside the shared table/.table-wrap
+   classes" — it needs several independently-frozen leading columns (Name -> Base Salary),
+   not just one, so it uses its own .payroll-table-wrap/.payroll-table rather than
+   .table-wrap/table. Row-level color states (TOTAL row, section bands) deliberately
+   reuse the app's existing `.total` / `.section` classes further down this file instead
+   of reinventing them — only the sticky-offset mechanics and the editable-cell/status
+   states below are genuinely new. */
+
+.payroll-assumptions {
+  display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(17,17,17,.03);
+}
+.pr-assumption { display: flex; flex-direction: column; gap: 6px; }
+.pr-assumption-label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.pr-assumption-input-wrap { display: flex; align-items: center; gap: 6px; }
+.pr-input-assumption { width: 64px; text-align: right; }
+.pr-assumption-suffix { font-size: 12px; color: var(--muted-2); font-family: var(--font-num); }
+.pr-assumption-note { font-size: 11px; color: var(--muted-2); margin-left: auto; max-width: 320px; line-height: 1.5; }
+
+.payroll-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden; box-shadow: 0 1px 2px rgba(17,17,17,.03); margin-bottom: 20px;
+}
+.payroll-card-head {
+  width: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--black); color: #fff; padding: 13px 18px;
+}
+.payroll-card-title-btn {
+  display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600;
+  background: none; border: none; color: #fff; font-family: inherit; padding: 0; cursor: pointer;
+}
+.payroll-chevron { display: inline-block; font-size: 11px; color: var(--on-black-muted); transition: transform .15s ease; }
+.payroll-chevron.open { transform: rotate(90deg); color: #fff; }
+.payroll-card-sub { font-size: 11.5px; color: var(--on-black-muted); font-family: var(--font-num); }
+.payroll-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.payroll-table-wrap { overflow: auto; max-height: 560px; }
+.payroll-table { table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+
+/* Frozen leading columns — position:sticky with a per-column `left` offset computed in
+   JS (PayrollTable.jsx), NOT the single-column .table-wrap rule used elsewhere in this
+   app. table-layout:fixed above + an identical fixed pixel width in header and body
+   (also passed as inline style) is what keeps these offsets valid — letting the browser
+   auto-size any one of these columns by content would silently invalidate every offset
+   after it. */
+.pr-frozen { position: sticky; z-index: 2; }
+thead .pr-frozen { z-index: 5; }
+.pr-frozen-section { z-index: 3; }
+
+/* Regular (non-total, non-section) rows need their own explicit sticky-cell background,
+   same reasoning as the rest of the app's tables — a transparent sticky cell would let
+   scrolled-past month columns show through underneath it. Total/section rows are
+   excluded here so the app's existing .total/.section coloring (below) isn't fought by a
+   more specific selector. */
+.payroll-table tbody tr:not(.total):not(.section) td.pr-frozen { background: var(--panel); }
+.payroll-table tbody tr:not(.total):not(.section):nth-child(even) td.pr-frozen { background: var(--panel-2); }
+.payroll-table tbody tr:not(.total):not(.section):hover td.pr-frozen { background: #F0FBF4; }
+
+/* Planned (TBD) / Dismissed sub-sections — Wildcard-palette equivalents of the Payroll
+   build notes' status sub-sectioning (blue tint for planned, dark "closed" band for
+   dismissed), swapping out the default green .section tint. More specific than the plain
+   `tbody tr.section td` rule above it in this file, so no !important needed. */
+tbody tr.section.pr-tbd td { background: var(--blue-soft); color: var(--black); }
+tbody tr.section.pr-dismissed td { background: var(--black-2); color: rgba(255,255,255,.75); }
+
+/* Actual vs forecast tint — past/current months read plain (zebra shows through);
+   forecast months get a light, muted blue wash, never a saturated color. */
+.pr-month-head.pr-fcst { box-shadow: inset 0 -2px 0 var(--blue); }
+td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
+.pr-year-start { border-left: 2px solid var(--border); }
+thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
+
+/* ---- Editable cells ---- */
+.pr-input {
+  width: 100%; font-family: inherit; font-size: 12.5px; color: var(--text);
+  background: var(--green-soft); border: 1px solid rgba(43,188,98,.35); border-radius: 6px;
+  padding: 6px 8px; transition: background .12s ease, border-color .12s ease;
+}
+.pr-input::placeholder { color: var(--muted-2); }
+.pr-input:focus { outline: none; background: #fff; border-color: var(--green-dark); box-shadow: 0 0 0 2px var(--green-soft); }
+.pr-input-month, .pr-input-assumption { text-align: right; font-family: var(--font-num); }
+.pr-input-date { font-family: var(--font-num); font-size: 11.5px; padding: 5px 6px; }
+.pr-select { appearance: auto; cursor: pointer; }
+.pr-add-bonus { min-width: 160px; }
+.pr-missing { color: var(--muted-2); font-style: italic; font-weight: 400; }
+
+.pr-row-actions { display: flex; align-items: center; gap: 4px; }
+
+/* ---- Fill-range bulk-edit popover ---- */
+.pr-fill-wrap { position: relative; display: inline-flex; }
+.pr-fill-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: 220px;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+  box-shadow: 0 16px 40px rgba(17,17,17,.18); display: flex; flex-direction: column; gap: 8px;
+}
+.pr-fill-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); }
+.pr-fill-row select, .pr-fill-row input { font-family: var(--font-num); font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; width: 120px; }
+.pr-fill-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+
 /* ==================== Footer ==================== */
 .footer { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: var(--black); }
 .footer-links { display: flex; gap: 18px; }
@@ -406,4 +508,12 @@ tbody tr.section td.active-col { background: var(--green-soft); }
   thead th, .table-wrap table th:first-child, .table-wrap table td:first-child { position: static !important; }
   .chart-panel, .kpi-card, .sum-card { box-shadow: none !important; break-inside: avoid; }
   .drill-panel, .drillable .drill-pop { display: none !important; }
+
+  /* Payroll tab — print the roster/bonus/total-comp as flat data, not as an editable
+     tool: unbounded height (no internal scrollbar), no fill-range/add controls, inputs
+     rendered as plain text rather than bordered form fields. */
+  .payroll-table-wrap { max-height: none !important; overflow: visible !important; }
+  .payroll-card { box-shadow: none !important; break-inside: avoid; }
+  .payroll-card-actions, .pr-row-actions { display: none !important; }
+  .pr-input { border: none !important; background: transparent !important; padding: 0 !important; }
 }
