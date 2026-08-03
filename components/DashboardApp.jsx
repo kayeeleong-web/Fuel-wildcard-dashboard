@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Topbar } from './shell/Topbar';
 import { TabNav } from './shell/TabNav';
 import { Footer } from './shell/Footer';
@@ -9,6 +9,9 @@ import { DashboardPanel } from './panels/DashboardPanel';
 import { ReportsPanel } from './panels/ReportsPanel';
 import { CustomPanel } from './panels/CustomPanel';
 import { PayrollPanel } from './panels/PayrollPanel';
+
+const TABS = ['kpi', 'dashboard', 'reports', 'custom', 'payroll'];
+const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
 
 /**
  * The whole client-facing product, post-Clerk-auth. This IS the "Portal" — there is
@@ -23,14 +26,31 @@ import { PayrollPanel } from './panels/PayrollPanel';
  * control visibility, matching the reference build's behavior exactly. Payroll is the
  * one exception: it's a browser-saved forecast tool, not GL data, so it loads its own
  * state client-side (lib/payroll/usePayrollState.js) rather than receiving props here.
+ *
+ * activeTab is remembered in localStorage (ACTIVE_TAB_STORAGE_KEY) so a hard refresh
+ * reopens on whichever tab the user was last viewing instead of resetting to KPI
+ * Report. The initial render still has to start on 'kpi' (server and first client
+ * render must match, or React throws a hydration mismatch) — the saved tab is applied
+ * in a useEffect right after mount, which is the standard way to read a browser-only
+ * API without breaking SSR.
  */
 export function DashboardApp({ clientName, kpiData, dashboardSummary, statements, customReportsList }) {
   const [activeTab, setActiveTab] = useState('kpi');
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+    if (saved && TABS.includes(saved)) setActiveTab(saved);
+  }, []);
+
+  function changeTab(tab) {
+    setActiveTab(tab);
+    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+  }
+
   return (
     <>
-      <Topbar clientName={clientName} onLogoClick={() => setActiveTab('kpi')} />
-      <TabNav activeTab={activeTab} onChange={setActiveTab} reportsCount={customReportsList.length + 3} />
+      <Topbar clientName={clientName} onLogoClick={() => changeTab('kpi')} />
+      <TabNav activeTab={activeTab} onChange={changeTab} reportsCount={customReportsList.length + 3} />
 
       <div className="page">
         <section className={`panel-view${activeTab === 'kpi' ? ' active' : ''}`}>
