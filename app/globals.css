@@ -383,7 +383,35 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 #reports[data-range="6"].report-doc:not([data-doc="custom"]) td:not(.r6):not(:first-child) { display: none; }
 #reports[data-range="12"].report-doc:not([data-doc="custom"]) th:not(.r12):not(:first-child),
 #reports[data-range="12"].report-doc:not([data-doc="custom"]) td:not(.r12):not(:first-child) { display: none; }
-/* data-range="24" shows every column (all cells carry .r24) */
+#reports[data-range="24"].report-doc:not([data-doc="custom"]) th:not(.r24):not(:first-child),
+#reports[data-range="24"].report-doc:not([data-doc="custom"]) td:not(.r24):not(:first-child) { display: none; }
+/* data-range="all" (the ∞ toggle) shows every column, including the blank
+   projection-padding months through PROJECTION_HORIZON — every cell carries .r-all
+   unconditionally, so no hide rule is needed for it. */
+
+/* Year-band header row (2026 / 2027 / ...) always stays visible regardless of which
+   range is selected — it carries every range class unconditionally so none of the
+   three hide-rules above ever match it. Its colSpan simply shrinks to whatever
+   sub-columns remain visible underneath it; nothing extra needed for that.
+   Both header rows use `position: sticky; top: 0` from the generic `thead th` rule —
+   without an explicit offset they'd stack on top of each other instead of below one
+   another while the table scrolls vertically, so the second row gets pushed down by
+   exactly the year-band row's own fixed height. */
+.report-year-row th { background: var(--black-2); text-align: center; font-size: 10px; letter-spacing: 1px; height: 26px; padding: 0 18px; }
+.report-year-row th:first-child { background: var(--black); }
+.report-year-row + tr th { top: 26px; }
+
+/* Month header now stacks a label + an ACT/FCST status chip instead of plain text. */
+.report-month-label { font-size: 10.5px; }
+.report-month-status { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; color: var(--on-black-muted); margin-top: 3px; }
+.report-month-status.fcst { color: var(--blue); }
+
+/* Projected (padded, no-actual-data-yet) months — same soft-blue forecast tint the
+   Payroll tab already uses for a future month, so the visual language matches across
+   the app instead of inventing a second "this is a forecast" color. */
+thead th.pr-fcst { box-shadow: inset 0 -2px 0 var(--blue); }
+tbody td.pr-fcst { background: rgba(17, 179, 231, .06); }
+tbody tr.total td.pr-fcst { background: rgba(17, 179, 231, .16); }
 
 /* ==================== Payroll tab ==================== */
 /* This tab is the one exception to "every tab lives inside the shared table/.table-wrap
