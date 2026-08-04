@@ -64,6 +64,15 @@ const TABS = [
       </svg>
     ),
   },
+  {
+    id: 'assumptions',
+    label: 'Assumptions',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M9 3H5a2 2 0 00-2 2v4M15 3h4a2 2 0 012 2v4M9 21H5a2 2 0 01-2-2v-4M15 21h4a2 2 0 002-2v-4" />
+      </svg>
+    ),
+  },
 ];
 
 export function TabNav({ activeTab, onChange, reportsCount }) {

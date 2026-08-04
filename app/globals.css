@@ -486,6 +486,32 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 .pr-fill-row select, .pr-fill-row input { font-family: var(--font-num); font-size: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; width: 120px; }
 .pr-fill-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
 
+/* ==================== Assumptions tab ==================== */
+/* Reuses the Payroll tab's .payroll-card/.payroll-table/.pr-input shell throughout —
+   same forecast/what-if visual language, just a different data model. Only the pieces
+   below are genuinely new: the Revenue card's live-computed preview strip, the "needs
+   Start On" flag on an unscheduled quarterly cost item, and the footer note under the
+   cost table. */
+.assump-preview {
+  display: flex; flex-direction: column; gap: 6px; margin-top: 16px; padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+.assump-preview-row {
+  display: flex; align-items: center; justify-content: space-between; font-size: 12.5px;
+  color: var(--muted); padding: 2px 0;
+}
+.assump-preview-row b { font-family: var(--font-num); color: var(--text); }
+.assump-preview-row.total { color: var(--black); font-weight: 700; }
+.assump-preview-row.total b { color: var(--green-dark); }
+
+.assump-flag {
+  font-size: 10px; color: var(--pink); font-weight: 600; margin-top: 3px; white-space: nowrap;
+}
+
+.assump-cost-note {
+  font-size: 11px; color: var(--muted-2); line-height: 1.5; padding: 12px 18px;
+}
+
 /* ==================== Footer ==================== */
 .footer { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: var(--black); }
 .footer-links { display: flex; gap: 18px; }

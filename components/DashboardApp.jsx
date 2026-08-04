@@ -9,8 +9,9 @@ import { DashboardPanel } from './panels/DashboardPanel';
 import { ReportsPanel } from './panels/ReportsPanel';
 import { CustomPanel } from './panels/CustomPanel';
 import { PayrollPanel } from './panels/PayrollPanel';
+import { AssumptionsPanel } from './panels/AssumptionsPanel';
 
-const TABS = ['kpi', 'dashboard', 'reports', 'custom', 'payroll'];
+const TABS = ['kpi', 'dashboard', 'reports', 'custom', 'payroll', 'assumptions'];
 const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
 
 /**
@@ -71,6 +72,10 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
 
         <section className={`panel-view${activeTab === 'payroll' ? ' active' : ''}`}>
           <PayrollPanel />
+        </section>
+
+        <section className={`panel-view${activeTab === 'assumptions' ? ' active' : ''}`}>
+          <AssumptionsPanel />
         </section>
       </div>
 

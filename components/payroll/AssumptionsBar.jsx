@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 /** One small editable assumption input — commits on blur, like every other editable
  *  cell on this tab. Percent values are stored/edited as plain numbers (7.5 = 7.5%). */
-function AssumptionField({ label, value, onCommit, suffix = '%' }) {
+export function AssumptionField({ label, value, onCommit, suffix = '%' }) {
   const [draft, setDraft] = useState(value ?? '');
 
   return (
