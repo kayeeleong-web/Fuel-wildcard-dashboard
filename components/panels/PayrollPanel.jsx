@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { AssumptionsBar } from '../payroll/AssumptionsBar';
+import { PayrollSummaryCard } from '../payroll/PayrollSummaryCard';
 import { RosterCard } from '../payroll/RosterCard';
 import { BonusCard } from '../payroll/BonusCard';
 import { TotalCompCard } from '../payroll/TotalCompCard';
@@ -74,36 +75,52 @@ export function PayrollPanel() {
 
       <AssumptionsBar assumptions={state.assumptions} onChange={setAssumptions} />
 
-      <RosterCard
-        roster={state.roster}
-        assumptions={state.assumptions}
-        months={MONTHS}
-        todayIso={todayIso}
-        onChange={setRoster}
-        justAddedId={justAddedId}
-        onFocusHandled={() => setJustAddedId(null)}
-      />
+      {/* Full-bleed wrapper (2026-08-05, Kayee: "I can only see one month" scrolling
+          right) — these tables' frozen columns eat nearly all of the normal 1320px page
+          width, so this section alone breaks out to the full viewport width. PageHead
+          and AssumptionsBar above stay at the normal page width. */}
+      <div className="payroll-wide">
+        <PayrollSummaryCard
+          roster={state.roster}
+          bonuses={state.bonuses}
+          assumptions={state.assumptions}
+          months={MONTHS}
+          todayIso={todayIso}
+        />
 
-      <div style={{ height: 20 }} />
+        <div style={{ height: 20 }} />
 
-      <BonusCard
-        bonuses={state.bonuses}
-        roster={state.roster}
-        assumptions={state.assumptions}
-        months={MONTHS}
-        todayIso={todayIso}
-        onChange={setBonuses}
-      />
+        <RosterCard
+          roster={state.roster}
+          assumptions={state.assumptions}
+          months={MONTHS}
+          todayIso={todayIso}
+          onChange={setRoster}
+          justAddedId={justAddedId}
+          onFocusHandled={() => setJustAddedId(null)}
+        />
 
-      <div style={{ height: 20 }} />
+        <div style={{ height: 20 }} />
 
-      <TotalCompCard
-        roster={state.roster}
-        bonuses={state.bonuses}
-        assumptions={state.assumptions}
-        months={MONTHS}
-        todayIso={todayIso}
-      />
+        <BonusCard
+          bonuses={state.bonuses}
+          roster={state.roster}
+          assumptions={state.assumptions}
+          months={MONTHS}
+          todayIso={todayIso}
+          onChange={setBonuses}
+        />
+
+        <div style={{ height: 20 }} />
+
+        <TotalCompCard
+          roster={state.roster}
+          bonuses={state.bonuses}
+          assumptions={state.assumptions}
+          months={MONTHS}
+          todayIso={todayIso}
+        />
+      </div>
     </>
   );
 }

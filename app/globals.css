@@ -422,6 +422,19 @@ tbody tr.total td.pr-fcst { background: rgba(17, 179, 231, .16); }
    of reinventing them — only the sticky-offset mechanics and the editable-cell/status
    states below are genuinely new. */
 
+/* Breaks Payroll's wide sticky-column tables out of the shared .page 1320px max-width
+   (design-rules.md §"Page shell") so more month columns are visible before a viewer has
+   to scroll — Roster's frozen columns alone run ~1150px, leaving almost no room for the
+   scrollable month grid inside the standard page width (Kayee, 2026-08-05: "when I
+   scroll to the right I can only see one month"). Only wraps the table cards themselves;
+   PageHead/AssumptionsBar stay at the normal page width so titles/actions still align
+   with every other tab. Same 32px side padding as .page, just full viewport width. */
+.payroll-wide {
+  width: 100vw; max-width: 100vw;
+  margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
+  padding-left: 32px; padding-right: 32px; box-sizing: border-box;
+}
+
 .payroll-assumptions {
   display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap;
   background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
