@@ -90,15 +90,19 @@ export function ReportsPanel({ statements, customReports }) {
   );
 }
 
-function rangeClasses(monthIndex, totalMonths) {
-  // Tag from the END (most recent months first) — r6 = last 6, r12 = last 12,
-  // r24 = last 24. r-all is on every column unconditionally (the ∞ toggle), same
-  // trick r24 used to rely on back when the whole array WAS 24 months long.
-  const fromEnd = totalMonths - monthIndex;
+/** r6/r12/r24 must anchor to the last ACTUAL month, never to however far the blank
+ *  2030 padding stretches — otherwise "6M" silently drifts to mean "the last 6
+ *  padded/blank columns" the moment padding is added, which is exactly the bug Kayee
+ *  hit (2026-08-04: switching to ∞ then back to 6M showed blank Dec-2030 columns
+ *  instead of real recent months). fromEnd is 0 at the last actual month, negative
+ *  for every padded month after it — negative values never satisfy any `< N` check
+ *  below, so padded months correctly never carry r6/r12/r24, only r-all. */
+function rangeClasses(monthIndex, lastActualIndex) {
+  const fromEnd = lastActualIndex - monthIndex;
   const classes = ['r-all'];
-  if (fromEnd <= 24) classes.push('r24');
-  if (fromEnd <= 12) classes.push('r12');
-  if (fromEnd <= 6) classes.push('r6');
+  if (fromEnd >= 0 && fromEnd < 24) classes.push('r24');
+  if (fromEnd >= 0 && fromEnd < 12) classes.push('r12');
+  if (fromEnd >= 0 && fromEnd < 6) classes.push('r6');
   return classes.join(' ');
 }
 
@@ -114,19 +118,6 @@ function siblingValuesAtMonth(rows, row, month) {
       label: r.label,
       value: r.values[month] != null ? `$${Math.round(r.values[month]).toLocaleString('en-US')}` : '—',
     }));
-}
-
-/** Consecutive months grouped by year, for the year-band header row —
- *  [{ year: '2026', count: 12 }, ...], oldest first, in column order. */
-function yearBands(months) {
-  const bands = [];
-  for (const m of months) {
-    const year = m.slice(0, 4);
-    const last = bands[bands.length - 1];
-    if (last && last.year === year) last.count += 1;
-    else bands.push({ year, count: 1 });
-  }
-  return bands;
 }
 
 function StatementDoc({ statement, range }) {
@@ -146,14 +137,22 @@ function StatementDoc({ statement, range }) {
         <thead>
           <tr className="report-year-row">
             <th></th>
-            {yearBands(months).map((b) => (
-              // Carries every range class unconditionally so this row is never
-              // hidden by the 6M/12M/24M range-toggle CSS (see globals.css) — its
-              // colSpan just shrinks to whichever sub-columns remain visible.
-              <th key={b.year} colSpan={b.count} className="r6 r12 r24 r-all">
-                {b.year}
-              </th>
-            ))}
+            {months.map((m, i) => {
+              // One real cell per month — same column model as the row below, so a
+              // range-toggle hide can never desync the two rows (a colSpan cell
+              // here previously caused exactly that: see 2026-08-04 bug where a
+              // hidden month left this row's year label sitting over the wrong
+              // column). Only the first month of each year run shows the year
+              // text; every cell in that run shares the same background, so
+              // consecutive same-year cells still read as one continuous band.
+              const year = m.slice(0, 4);
+              const isFirstOfYear = i === 0 || months[i - 1].slice(0, 4) !== year;
+              return (
+                <th key={m} className={rangeClasses(i, lastActualIndex)}>
+                  {isFirstOfYear ? year : ''}
+                </th>
+              );
+            })}
           </tr>
           <tr>
             <th>Account / Line Item</th>
@@ -162,7 +161,7 @@ function StatementDoc({ statement, range }) {
               return (
                 <th
                   key={m}
-                  className={`${rangeClasses(i, months.length)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                  className={`${rangeClasses(i, lastActualIndex)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
                 >
                   <div className="report-month-label">{formatMonthLabel(m)}</div>
                   <div className={`report-month-status${isForecast ? ' fcst' : ''}`}>
@@ -210,7 +209,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex }) 
             return (
               <td
                 key={m}
-                className={`${rangeClasses(i, months.length)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                className={`${rangeClasses(i, lastActualIndex)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
               >
                 {row.isTotal && row.values[m] != null ? (
                   <DrillPopover label={row.label} value={cellText} components={siblingValuesAtMonth(rows, row, m)} />

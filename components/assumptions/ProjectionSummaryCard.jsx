@@ -5,8 +5,8 @@ import { isActiveInMonth, monthlyCostFor, bonusMonthlyFlow, formatMonthLabel } f
 import { formatPayrollAmount } from '../../lib/payroll/payrollData';
 import {
   FIRST_PROJECTED_MONTH,
-  netCollectedRevenue,
-  costPerCampaign,
+  netCollectedRevenueForMonth,
+  costPerCampaignForMonth,
   costItemsTotalForMonth,
 } from '../../lib/assumptions/assumptionsData';
 
@@ -83,11 +83,11 @@ export function ProjectionSummaryCard({ revenue, costItems }) {
                 {
                   label: 'Net Collected Revenue',
                   isTotal: true,
-                  fn: () => netCollectedRevenue(revenue),
+                  fn: (iso) => netCollectedRevenueForMonth(revenue, iso),
                 },
                 {
                   label: 'COGS — Cost Per Campaign',
-                  fn: () => costPerCampaign(revenue),
+                  fn: (iso) => costPerCampaignForMonth(revenue, iso),
                 },
                 {
                   label: 'COGS — Headcount',
@@ -101,8 +101,8 @@ export function ProjectionSummaryCard({ revenue, costItems }) {
                   label: 'Gross Margin',
                   isTotal: true,
                   fn: (iso) =>
-                    netCollectedRevenue(revenue) -
-                    costPerCampaign(revenue) -
+                    netCollectedRevenueForMonth(revenue, iso) -
+                    costPerCampaignForMonth(revenue, iso) -
                     headcountCostForMonth(payrollState, 'CoGS', iso) -
                     costItemsTotalForMonth(costItems, 'CoGS', iso),
                 },
@@ -118,8 +118,8 @@ export function ProjectionSummaryCard({ revenue, costItems }) {
                   label: 'Operating Margin',
                   isTotal: true,
                   fn: (iso) =>
-                    netCollectedRevenue(revenue) -
-                    costPerCampaign(revenue) -
+                    netCollectedRevenueForMonth(revenue, iso) -
+                    costPerCampaignForMonth(revenue, iso) -
                     headcountCostForMonth(payrollState, 'CoGS', iso) -
                     costItemsTotalForMonth(costItems, 'CoGS', iso) -
                     headcountCostForMonth(payrollState, 'OpEx', iso) -
@@ -133,8 +133,8 @@ export function ProjectionSummaryCard({ revenue, costItems }) {
                   label: 'Net Income',
                   isTotal: true,
                   fn: (iso) =>
-                    netCollectedRevenue(revenue) -
-                    costPerCampaign(revenue) -
+                    netCollectedRevenueForMonth(revenue, iso) -
+                    costPerCampaignForMonth(revenue, iso) -
                     headcountCostForMonth(payrollState, 'CoGS', iso) -
                     costItemsTotalForMonth(costItems, 'CoGS', iso) -
                     headcountCostForMonth(payrollState, 'OpEx', iso) -
