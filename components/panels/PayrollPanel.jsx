@@ -75,11 +75,12 @@ export function PayrollPanel() {
 
       <AssumptionsBar assumptions={state.assumptions} onChange={setAssumptions} />
 
-      {/* Full-bleed wrapper (2026-08-05, Kayee: "I can only see one month" scrolling
-          right) — these tables' frozen columns eat nearly all of the normal 1320px page
-          width, so this section alone breaks out to the full viewport width. PageHead
-          and AssumptionsBar above stay at the normal page width. */}
-      <div className="payroll-wide">
+      {/* Wide wrapper (2026-08-05, Kayee: "I can only see one month" scrolling right) —
+          these tables' frozen columns eat nearly all of the normal 1320px page width, so
+          this section alone breaks out wider (capped, with a gutter on both sides — see
+          .page-wide in globals.css). PageHead and AssumptionsBar above stay at the
+          normal page width. */}
+      <div className="page-wide">
         <PayrollSummaryCard
           roster={state.roster}
           bonuses={state.bonuses}

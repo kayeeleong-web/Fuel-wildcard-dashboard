@@ -106,11 +106,16 @@ export function ReportsPanel({ statements, customReports }) {
         )}
       </div>
 
-      {reportType !== 'custom' ? (
-        <StatementDoc statement={statements[reportType]} range={range} />
-      ) : (
-        <CustomReportsList reports={customReports} />
-      )}
+      {/* Wide wrapper — same treatment as Payroll's tables (globals.css .page-wide),
+          so every wide-table tab behaves consistently (Kayee, 2026-08-05: "all pages
+          needs to be consistant"). Toolbar/PageHead above stay at the normal page width. */}
+      <div className="page-wide">
+        {reportType !== 'custom' ? (
+          <StatementDoc statement={statements[reportType]} range={range} />
+        ) : (
+          <CustomReportsList reports={customReports} />
+        )}
+      </div>
     </>
   );
 }
