@@ -527,7 +527,13 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 .pr-input-month, .pr-input-assumption { text-align: right; font-family: var(--font-num); }
 .pr-input-date { font-family: var(--font-num); font-size: 11.5px; padding: 5px 6px; }
 .pr-select { appearance: auto; cursor: pointer; }
-.pr-add-bonus { min-width: 160px; }
+/* Sits inside the black .payroll-card-head bar (unlike every other .pr-input, which
+   sits on a light table cell) — .pr-input's default pale-green-bg/dark-text combo has
+   almost no contrast there (Kayee, 2026-08-05 screenshot: "the font is dark the user
+   wouldn't know to click it"). White bg + dark text reads as a clear clickable control
+   against the black header instead. */
+.pr-add-bonus { min-width: 160px; background: #fff; color: var(--text); border: 1px solid rgba(255,255,255,.3); }
+.pr-add-bonus:focus { background: #fff; color: var(--text); }
 .pr-missing { color: var(--muted-2); font-style: italic; font-weight: 400; }
 
 .pr-row-actions { display: flex; align-items: center; gap: 4px; }
