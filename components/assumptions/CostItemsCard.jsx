@@ -28,9 +28,10 @@ function Picker({ value, options, onCommit }) {
  * is it? / $ / Cadence / Category / Start On), rather than splitting into separate
  * COGS/OPEX tables. The Category column is what determines whether a row counts
  * toward projected COGS, OPEX, or Other (Non-Operating) each month — see
- * ProjectionSummaryCard. Monthly items recur every month from Start On (or always, if
- * Start On is blank); Quarterly items need a Start On date to know which months they
- * land in — left blank, they show as "needs Start On" rather than guessing.
+ * ProjectionSummaryCard. Monthly items show their full $ every active month;
+ * Quarterly items show their total / 3 every active month (spread evenly — e.g.
+ * Vetric's $5,250/quarter shows as $1,750 every month, per Kayee 2026-08-05). Start
+ * On is optional on both — leave it blank for "always active."
  */
 export function CostItemsCard({ costItems, onChange }) {
   function updateItem(id, patch) {
@@ -77,7 +78,6 @@ export function CostItemsCard({ costItems, onChange }) {
           </thead>
           <tbody>
             {costItems.map((item) => {
-              const needsStartOn = item.cadence === 'Quarterly' && !item.startOn;
               return (
                 <tr key={item.id}>
                   <td>
@@ -102,7 +102,6 @@ export function CostItemsCard({ costItems, onChange }) {
                   </td>
                   <td>
                     <DateInput value={item.startOn} onCommit={(v) => updateItem(item.id, { startOn: v })} />
-                    {needsStartOn && <div className="assump-flag">needs Start On</div>}
                   </td>
                   <td>
                     <button
@@ -125,8 +124,8 @@ export function CostItemsCard({ costItems, onChange }) {
 
       <div className="payroll-card-footer assump-cost-note">
         Whether a row counts toward projected COGS, OPEX, or Other from {FIRST_PROJECTED_MONTH} onward depends only
-        on its Category — Monthly items recur every month; Quarterly items land every 3rd month counted from Start
-        On.
+        on its Category — Monthly items show their full $ every month; Quarterly items show their total ÷ 3 every
+        month (spread evenly, not billed as a lump sum once a quarter).
       </div>
     </div>
   );

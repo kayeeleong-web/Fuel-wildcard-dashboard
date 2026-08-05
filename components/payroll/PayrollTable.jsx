@@ -26,6 +26,13 @@ export function PayrollTable({
   rowGroups, // [{ key, label, rowModifier, rows: [{ id, cells: {...}, monthCells: {...}, className }] }]
   headActions,
   footer,
+  // Skips the outer dark card chrome (background/border/collapse-toggle) and renders
+  // just a small plain label + the table itself, so several of these can sit inside
+  // ONE parent .payroll-card instead of each becoming its own separate box. Added for
+  // the Assumptions tab's Revenue card (2026-08-04, Kayee: "all revenue related stuff
+  // should be in one box") — defaults to false so Roster/Bonus/Total Comp, which DO
+  // want to be their own distinct collapsible cards, are completely unaffected.
+  embedded = false,
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -40,6 +47,85 @@ export function PayrollTable({
   }, [frozenColumns]);
 
   const tableWidth = offsets.totalWidth + months.length * monthWidth;
+
+  const tableMarkup = !collapsed && (
+    <>
+      <div className="payroll-table-wrap">
+        <table className="payroll-table" style={{ width: tableWidth }}>
+          <thead>
+            <tr>
+              {frozenColumns.map((col, i) => (
+                <th
+                  key={col.key}
+                  className="pr-frozen pr-frozen-head"
+                  style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
+                >
+                  {col.label}
+                </th>
+              ))}
+              {months.map((iso) => (
+                <th key={iso} className={monthHeadClass(iso, todayIso)} style={{ width: monthWidth }}>
+                  {formatMonthLabel(iso)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {totalRow && (
+              // "total" (not a bespoke class) is exactly the app's existing black-band
+              // total-row convention (globals.css `tbody tr.total td`) — reused here
+              // rather than reinvented, per design-rules.md "reuse the reference
+              // build's class names for the same purpose."
+              <tr className="total">
+                {frozenColumns.map((col, i) => (
+                  <td
+                    key={col.key}
+                    className="pr-frozen"
+                    style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
+                  >
+                    {totalRow.cells[col.key]}
+                  </td>
+                ))}
+                {months.map((iso) => (
+                  <td key={iso} className={monthTintClass(iso, todayIso)} style={{ width: monthWidth }}>
+                    {totalRow.monthCells[iso]}
+                  </td>
+                ))}
+              </tr>
+            )}
+
+            {rowGroups.map((group) => (
+              <RowGroup
+                key={group.key}
+                group={group}
+                frozenColumns={frozenColumns}
+                offsets={offsets}
+                months={months}
+                monthWidth={monthWidth}
+                todayIso={todayIso}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {footer && <div className="payroll-card-footer">{footer}</div>}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="payroll-embedded">
+        {(title || subtitle || headActions) && (
+          <div className="payroll-embedded-head">
+            {title && <span className="payroll-embedded-title">{title}</span>}
+            {subtitle && <span className="payroll-embedded-sub">{subtitle}</span>}
+            {headActions && <span className="payroll-card-actions">{headActions}</span>}
+          </div>
+        )}
+        {tableMarkup}
+      </div>
+    );
+  }
 
   return (
     <div className="payroll-card">
@@ -61,73 +147,7 @@ export function PayrollTable({
         {headActions && <span className="payroll-card-actions">{headActions}</span>}
       </div>
 
-      {!collapsed && (
-        <>
-          <div className="payroll-table-wrap">
-            <table className="payroll-table" style={{ width: tableWidth }}>
-              <thead>
-                <tr>
-                  {frozenColumns.map((col, i) => (
-                    <th
-                      key={col.key}
-                      className="pr-frozen pr-frozen-head"
-                      style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
-                    >
-                      {col.label}
-                    </th>
-                  ))}
-                  {months.map((iso) => (
-                    <th
-                      key={iso}
-                      className={monthHeadClass(iso, todayIso)}
-                      style={{ width: monthWidth }}
-                    >
-                      {formatMonthLabel(iso)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {totalRow && (
-                  // "total" (not a bespoke class) is exactly the app's existing black-band
-                  // total-row convention (globals.css `tbody tr.total td`) — reused here
-                  // rather than reinvented, per design-rules.md "reuse the reference
-                  // build's class names for the same purpose."
-                  <tr className="total">
-                    {frozenColumns.map((col, i) => (
-                      <td
-                        key={col.key}
-                        className="pr-frozen"
-                        style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
-                      >
-                        {totalRow.cells[col.key]}
-                      </td>
-                    ))}
-                    {months.map((iso) => (
-                      <td key={iso} className={monthTintClass(iso, todayIso)} style={{ width: monthWidth }}>
-                        {totalRow.monthCells[iso]}
-                      </td>
-                    ))}
-                  </tr>
-                )}
-
-                {rowGroups.map((group) => (
-                  <RowGroup
-                    key={group.key}
-                    group={group}
-                    frozenColumns={frozenColumns}
-                    offsets={offsets}
-                    months={months}
-                    monthWidth={monthWidth}
-                    todayIso={todayIso}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {footer && <div className="payroll-card-footer">{footer}</div>}
-        </>
-      )}
+      {tableMarkup}
     </div>
   );
 }

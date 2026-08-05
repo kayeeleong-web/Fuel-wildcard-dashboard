@@ -464,6 +464,22 @@ tbody tr.total td.pr-fcst { background: rgba(17, 179, 231, .16); }
 thead .pr-frozen { z-index: 5; }
 .pr-frozen-section { z-index: 3; }
 
+/* A frozen-column label longer than its fixed width (e.g. "Cost Per Campaign (COGS,
+   feeds next month)") used to visually bleed into the first month column instead of
+   wrapping — table cells don't clip overflowing content by default, and the generic
+   `tbody td { white-space: nowrap }` rule elsewhere in this file made it worse. Frozen
+   cells specifically get to wrap; every other cell keeps its normal single-line
+   behavior. */
+.pr-frozen { white-space: normal; line-height: 1.35; }
+
+/* Embedded PayrollTable (Assumptions tab's Revenue card) — no outer card chrome, just
+   a small plain label above the table, since it's meant to sit inside a PARENT
+   .payroll-card alongside sibling embedded tables rather than being its own box. */
+.payroll-embedded { margin-top: 16px; }
+.payroll-embedded-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.payroll-embedded-title { font-size: 12.5px; font-weight: 700; color: var(--black); }
+.payroll-embedded-sub { font-size: 11px; color: var(--muted-2); }
+
 /* Regular (non-total, non-section) rows need their own explicit sticky-cell background,
    same reasoning as the rest of the app's tables — a transparent sticky cell would let
    scrolled-past month columns show through underneath it. Total/section rows are

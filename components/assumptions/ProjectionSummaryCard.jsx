@@ -7,7 +7,7 @@ import {
   FIRST_PROJECTED_MONTH,
   netCollectedRevenueForMonth,
   costPerCampaignForMonth,
-  costItemsTotalForMonth,
+  costItemAmountForMonth,
 } from '../../lib/assumptions/assumptionsData';
 
 function monthsForward(startIso, count) {
@@ -45,14 +45,66 @@ function headcountCostForMonth(payrollState, costType, iso) {
  * straight from Payroll's saved roster (split by each employee's own CoGS/OpEx
  * costType) rather than asking for it twice.
  *
+ * Row labels are NOT renamed/bucketed — each Non-Headcount Cost item shows under its
+ * own real name (Vetric, Software, Misc, Rent, etc., exactly as typed into the Cost
+ * Items table), same as Kayee's actual sheet. Per Kayee (2026-08-05):
+ *   - COGS = Cost Per Campaign (formula) + every Cost Item tagged Category=CoGS, by
+ *     name (Vetric, Software, Misc, ...) + Headcount (Payroll roster, costType=CoGS).
+ *   - OPEX = every Cost Item tagged Category=OpEx, by name + Headcount (Payroll
+ *     roster, costType=OpEx).
+ *   - Other (Non-Operating) = every Cost Item tagged Category=Other, by name.
+ * Kayee flagged that actual GL months won't break COGS out with a distinct
+ * Headcount-CoGS line the way this projection does — this breakdown is
+ * projection-only and expected to diverge in structure from actual months.
+ *
  * This card does NOT write into the Reports/Dashboard/KPI tabs yet — per Kayee
  * (2026-08-04): "just create the structure first we will decide on the math later."
- * Wiring these projected months into the GL-backed statements is the next step once
- * the COGS "Misc"/"Vetric" reconciliation is settled (see assumptionsData.js header).
  */
 export function ProjectionSummaryCard({ revenue, costItems }) {
   const { state: payrollState, hydrated } = usePayrollState();
   const months = monthsForward(FIRST_PROJECTED_MONTH, 6);
+
+  const cogsItems = costItems.filter((i) => i.category === 'CoGS');
+  const opexItems = costItems.filter((i) => i.category === 'OpEx');
+  const otherItems = costItems.filter((i) => i.category === 'Other');
+
+  function cogsTotal(iso) {
+    return (
+      costPerCampaignForMonth(revenue, iso) +
+      cogsItems.reduce((sum, i) => sum + costItemAmountForMonth(i, iso), 0) +
+      headcountCostForMonth(payrollState, 'CoGS', iso)
+    );
+  }
+  function opexTotal(iso) {
+    return opexItems.reduce((sum, i) => sum + costItemAmountForMonth(i, iso), 0) + headcountCostForMonth(payrollState, 'OpEx', iso);
+  }
+  function otherTotal(iso) {
+    return otherItems.reduce((sum, i) => sum + costItemAmountForMonth(i, iso), 0);
+  }
+
+  const rows = [
+    { label: 'Net Collected Revenue', isTotal: true, fn: (iso) => netCollectedRevenueForMonth(revenue, iso) },
+    { label: 'Cost Per Campaign', fn: (iso) => costPerCampaignForMonth(revenue, iso) },
+    ...cogsItems.map((item) => ({ label: item.name || 'Untitled', fn: (iso) => costItemAmountForMonth(item, iso) })),
+    { label: 'Headcount', fn: (iso) => headcountCostForMonth(payrollState, 'CoGS', iso) },
+    { label: 'Total COGS', isTotal: true, fn: (iso) => cogsTotal(iso) },
+    { label: 'Gross Margin', isTotal: true, fn: (iso) => netCollectedRevenueForMonth(revenue, iso) - cogsTotal(iso) },
+    ...opexItems.map((item) => ({ label: item.name || 'Untitled', fn: (iso) => costItemAmountForMonth(item, iso) })),
+    { label: 'Headcount', fn: (iso) => headcountCostForMonth(payrollState, 'OpEx', iso) },
+    { label: 'Total OPEX', isTotal: true, fn: (iso) => opexTotal(iso) },
+    {
+      label: 'Operating Margin',
+      isTotal: true,
+      fn: (iso) => netCollectedRevenueForMonth(revenue, iso) - cogsTotal(iso) - opexTotal(iso),
+    },
+    ...otherItems.map((item) => ({ label: item.name || 'Untitled', fn: (iso) => costItemAmountForMonth(item, iso) })),
+    { label: 'Total Other (Non-Operating)', isTotal: true, fn: (iso) => otherTotal(iso) },
+    {
+      label: 'Net Income',
+      isTotal: true,
+      fn: (iso) => netCollectedRevenueForMonth(revenue, iso) - cogsTotal(iso) - opexTotal(iso) - otherTotal(iso),
+    },
+  ];
 
   return (
     <div className="payroll-card">
@@ -79,70 +131,8 @@ export function ProjectionSummaryCard({ revenue, costItems }) {
               </tr>
             </thead>
             <tbody>
-              {[
-                {
-                  label: 'Net Collected Revenue',
-                  isTotal: true,
-                  fn: (iso) => netCollectedRevenueForMonth(revenue, iso),
-                },
-                {
-                  label: 'COGS — Cost Per Campaign',
-                  fn: (iso) => costPerCampaignForMonth(revenue, iso),
-                },
-                {
-                  label: 'COGS — Headcount',
-                  fn: (iso) => headcountCostForMonth(payrollState, 'CoGS', iso),
-                },
-                {
-                  label: 'COGS — Non-Headcount',
-                  fn: (iso) => costItemsTotalForMonth(costItems, 'CoGS', iso),
-                },
-                {
-                  label: 'Gross Margin',
-                  isTotal: true,
-                  fn: (iso) =>
-                    netCollectedRevenueForMonth(revenue, iso) -
-                    costPerCampaignForMonth(revenue, iso) -
-                    headcountCostForMonth(payrollState, 'CoGS', iso) -
-                    costItemsTotalForMonth(costItems, 'CoGS', iso),
-                },
-                {
-                  label: 'OPEX — Headcount',
-                  fn: (iso) => headcountCostForMonth(payrollState, 'OpEx', iso),
-                },
-                {
-                  label: 'OPEX — Non-Headcount',
-                  fn: (iso) => costItemsTotalForMonth(costItems, 'OpEx', iso),
-                },
-                {
-                  label: 'Operating Margin',
-                  isTotal: true,
-                  fn: (iso) =>
-                    netCollectedRevenueForMonth(revenue, iso) -
-                    costPerCampaignForMonth(revenue, iso) -
-                    headcountCostForMonth(payrollState, 'CoGS', iso) -
-                    costItemsTotalForMonth(costItems, 'CoGS', iso) -
-                    headcountCostForMonth(payrollState, 'OpEx', iso) -
-                    costItemsTotalForMonth(costItems, 'OpEx', iso),
-                },
-                {
-                  label: 'Other (Non-Operating)',
-                  fn: (iso) => costItemsTotalForMonth(costItems, 'Other', iso),
-                },
-                {
-                  label: 'Net Income',
-                  isTotal: true,
-                  fn: (iso) =>
-                    netCollectedRevenueForMonth(revenue, iso) -
-                    costPerCampaignForMonth(revenue, iso) -
-                    headcountCostForMonth(payrollState, 'CoGS', iso) -
-                    costItemsTotalForMonth(costItems, 'CoGS', iso) -
-                    headcountCostForMonth(payrollState, 'OpEx', iso) -
-                    costItemsTotalForMonth(costItems, 'OpEx', iso) -
-                    costItemsTotalForMonth(costItems, 'Other', iso),
-                },
-              ].map((row) => (
-                <tr key={row.label} className={row.isTotal ? 'total' : undefined}>
+              {rows.map((row, idx) => (
+                <tr key={`${row.label}-${idx}`} className={row.isTotal ? 'total' : undefined}>
                   <td style={{ textAlign: 'left' }}>{row.label}</td>
                   {months.map((iso) => (
                     <td key={iso}>{formatPayrollAmount(row.fn(iso)) || '$0'}</td>

@@ -13,7 +13,7 @@ import {
   costPerCampaignForMonth,
 } from '../../lib/assumptions/assumptionsData';
 
-const METRIC_COLUMN = [{ key: 'metric', label: '', width: 240 }];
+const METRIC_COLUMN = [{ key: 'metric', label: '', width: 320 }];
 
 /**
  * Revenue Assumptions — split into the three portions Kayee asked for (2026-08-04):
@@ -141,9 +141,8 @@ export function RevenueAssumptionsCard({ revenue, onChange }) {
         </div>
       </div>
 
-      <div style={{ height: 14 }} />
-
       <PayrollTable
+        embedded
         title="Subscription Revenue — Campaigns"
         subtitle="Editable — how many campaigns per month"
         frozenColumns={METRIC_COLUMN}
@@ -152,9 +151,8 @@ export function RevenueAssumptionsCard({ revenue, onChange }) {
         rowGroups={[{ key: 'campaigns', label: null, rows: campaignRows }]}
       />
 
-      <div style={{ height: 14 }} />
-
       <PayrollTable
+        embedded
         title="Transactional Revenue — Meetings"
         subtitle="Editable — how many meetings booked & attended per month"
         frozenColumns={METRIC_COLUMN}

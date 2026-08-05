@@ -4,6 +4,31 @@ import { useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
+import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
+import {
+  upfrontRevenueForMonth,
+  meetingRevenueForMonth,
+  netCollectedRevenueForMonth,
+  campaignsForMonth,
+  meetingsForMonth,
+} from '../../lib/assumptions/assumptionsData';
+
+/** Which PL rows get their projected (post-actual) months filled from the
+ *  Assumptions tab, and which Assumptions calculation feeds each one — per Kayee
+ *  (2026-08-04): "if I change something [in Assumptions] it should reflect in the
+ *  P&L projection." Subscription Revenue = Upfront $ (campaigns x Upfront Rate),
+ *  Transaction Revenue = Meeting $ (meetings x Per-Meeting Rate), Total Revenue = the
+ *  Uncollectible-adjusted net (both streams already get the same haircut individually
+ *  before summing, since (a x (1-r)) + (b x (1-r)) = (a+b) x (1-r) — mathematically
+ *  identical either way). These exact key names are transcribed from Kayee's live PL
+ *  sheet (2026-08-04 screenshots) — if the sheet's Key column for these rows ever
+ *  changes, this silently stops projecting (the row just shows "—" again) rather than
+ *  crashing, which is the safe failure mode for a keyed lookup like this. */
+const PL_REVENUE_PROJECTIONS = {
+  revenue_subscription_revenue: (rev, iso) => upfrontRevenueForMonth(rev, iso),
+  revenue_transaction_revenue: (rev, iso) => meetingRevenueForMonth(rev, iso),
+  total_revenue: (rev, iso) => netCollectedRevenueForMonth(rev, iso),
+};
 
 const STATEMENT_LABELS = { PL: 'P&L', CF: 'Cash Flow', BS: 'Balance Sheet' };
 const STATUS_CLASS = { Ready: 'good', 'In Review': undefined, Scheduled: undefined, Draft: undefined };
@@ -120,13 +145,76 @@ function siblingValuesAtMonth(rows, row, month) {
     }));
 }
 
+/** Explains HOW a projected revenue cell's number came about — same idea as the
+ *  hover note Kayee showed from another Fuel dashboard build ("Coach Rate, $/session
+ *  — entered directly each month... not derived from other rows"). Only meaningful
+ *  for a FORECAST cell (an actual month is just whatever the Google Sheet says, no
+ *  calc to explain) on one of the three Assumptions-driven rows — every other cell
+ *  returns null and renders as plain text, same as before. */
+function revenueCalcExplanation(rowKey, revenue, iso) {
+  if (!revenue) return null;
+  if (rowKey === 'revenue_subscription_revenue') {
+    return {
+      calcNote: 'Subscription Revenue = # of Campaigns × Upfront Rate. Both editable on the Assumptions tab.',
+      components: [
+        { label: '# of Campaigns', value: campaignsForMonth(revenue, iso).toLocaleString('en-US') },
+        { label: 'Upfront Rate', value: `$${Number(revenue.upfrontRate).toLocaleString('en-US')}` },
+      ],
+    };
+  }
+  if (rowKey === 'revenue_transaction_revenue') {
+    const hasManualEntry = revenue.meetingsByMonth[iso] != null;
+    return {
+      calcNote: hasManualEntry
+        ? 'Transaction Revenue = # of Meetings × Per Meeting Rate. Meetings entered directly for this month — editable on the Assumptions tab.'
+        : `Transaction Revenue = # of Meetings × Per Meeting Rate. No Meetings figure entered for this month yet, so it's auto-suggested as round(Meeting Conversion% × Campaigns from ${revenue.meetingsLagMonths}mo ago) — editable on the Assumptions tab.`,
+      components: [
+        { label: '# of Meetings', value: meetingsForMonth(revenue, iso).toLocaleString('en-US') },
+        { label: 'Per Meeting Rate', value: `$${Number(revenue.perMeetingRate).toLocaleString('en-US')}` },
+      ],
+    };
+  }
+  if (rowKey === 'total_revenue') {
+    return {
+      calcNote: `Total Revenue = Subscription $ + Transaction $, net of ${revenue.uncollectiblePct}% Uncollectible. Rates editable on the Assumptions tab.`,
+      components: [
+        { label: 'Subscription Revenue (gross)', value: `$${Math.round(upfrontRevenueForMonth(revenue, iso)).toLocaleString('en-US')}` },
+        { label: 'Transaction Revenue (gross)', value: `$${Math.round(meetingRevenueForMonth(revenue, iso)).toLocaleString('en-US')}` },
+      ],
+    };
+  }
+  return null;
+}
+
+/** Returns `statement.rows` unchanged, except any row in PL_REVENUE_PROJECTIONS gets
+ *  its PROJECTED months (index > lastActualIndex) filled from the Assumptions tab's
+ *  live state instead of left blank. Actual months are never touched — only indices
+ *  past the real data get patched, and only for the PL statement (CF/BS are
+ *  untouched; only Revenue is modeled today, per Kayee's "structure first" build). */
+function withRevenueProjections(statement, months, lastActualIndex, revenue) {
+  if (statement.type !== 'PL' || !revenue) return statement.rows;
+  return statement.rows.map((row) => {
+    const projectFn = PL_REVENUE_PROJECTIONS[row.key];
+    if (!projectFn) return row;
+    const patchedValues = { ...row.values };
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      patchedValues[months[i]] = projectFn(revenue, months[i]);
+    }
+    return { ...row, values: patchedValues };
+  });
+}
+
 function StatementDoc({ statement, range }) {
+  const { state: assumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
+
   if (!statement) return <div className="cap">No data for this statement yet.</div>;
   // currentMonth = the last ACTUAL month (before any blank padding), so "active-col"
   // still marks the latest real reporting month, not the padded 2030 horizon.
   const currentMonth = statement.months[statement.months.length - 1];
   const months = extendMonthsThrough(statement.months, PROJECTION_HORIZON);
   const lastActualIndex = statement.months.length - 1;
+  const revenue = assumptionsHydrated ? assumptionsState?.revenue : null;
+  const rows = withRevenueProjections(statement, months, lastActualIndex, revenue);
 
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
@@ -173,14 +261,15 @@ function StatementDoc({ statement, range }) {
           </tr>
         </thead>
         <tbody>
-          {groupBySection(statement.rows).map(([section, rows]) => (
+          {groupBySection(rows).map(([section, sectionRows]) => (
             <FragmentRows
               key={section}
               section={section}
-              rows={rows}
+              rows={sectionRows}
               months={months}
               currentMonth={currentMonth}
               lastActualIndex={lastActualIndex}
+              revenue={revenue}
             />
           ))}
         </tbody>
@@ -189,7 +278,7 @@ function StatementDoc({ statement, range }) {
   );
 }
 
-function FragmentRows({ section, rows, months, currentMonth, lastActualIndex }) {
+function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue }) {
   return (
     <>
       {/* Two cells, not one colSpan cell — position:sticky on a <td> with colspan doesn't
@@ -206,12 +295,20 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex }) 
           {months.map((m, i) => {
             const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
             const isForecast = i > lastActualIndex;
+            const calcInfo = isForecast ? revenueCalcExplanation(row.key, revenue, m) : null;
             return (
               <td
                 key={m}
                 className={`${rangeClasses(i, lastActualIndex)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
               >
-                {row.isTotal && row.values[m] != null ? (
+                {calcInfo ? (
+                  <DrillPopover
+                    label={row.label}
+                    value={cellText}
+                    components={calcInfo.components}
+                    calcNote={calcInfo.calcNote}
+                  />
+                ) : row.isTotal && row.values[m] != null ? (
                   <DrillPopover label={row.label} value={cellText} components={siblingValuesAtMonth(rows, row, m)} />
                 ) : (
                   cellText
