@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   DEPARTMENT_OPTIONS,
   EMPLOYMENT_STATUSES,
@@ -43,6 +44,37 @@ const SECTION_ORDER = [
  * the top so the running headcount cost is visible without scrolling to the bottom.
  */
 export function RosterCard({ roster, assumptions, months, todayIso, onChange, justAddedId, onFocusHandled }) {
+  // Drag-to-reorder (Kayee, 2026-08-05: "turn it into draggable so people can rearrange
+  // people") — scoped to within one section only (Active/Planned/Dismissed don't mix),
+  // per Kayee's call, so dragging never silently changes someone's Employment status.
+  const [draggedId, setDraggedId] = useState(null);
+
+  function reorderWithinSection(sectionKey, fromId, toId) {
+    if (fromId === toId) return;
+    const sectionIds = roster.filter((r) => (r.employment || 'Active') === sectionKey).map((r) => r.id);
+    const fromIndex = sectionIds.indexOf(fromId);
+    const toIndex = sectionIds.indexOf(toId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const reorderedIds = [...sectionIds];
+    const [moved] = reorderedIds.splice(fromIndex, 1);
+    reorderedIds.splice(toIndex, 0, moved);
+
+    // Walk the roster in its existing order, and wherever a row belongs to this
+    // section, substitute the next id off the freshly-reordered list — every other
+    // row (and every other section's rows) stays exactly where it was. Filtering by
+    // section for display only cares about relative order among matching rows, so
+    // this alone is enough to make the drag visible without touching anything else.
+    let cursor = 0;
+    const rosterById = Object.fromEntries(roster.map((r) => [r.id, r]));
+    const newRoster = roster.map((r) => {
+      if ((r.employment || 'Active') !== sectionKey) return r;
+      const next = rosterById[reorderedIds[cursor]];
+      cursor += 1;
+      return next;
+    });
+    onChange(newRoster);
+  }
+
   function updateEmployee(id, patch) {
     onChange(roster.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
@@ -100,10 +132,10 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     rowModifier: section.rowModifier,
     rows: roster
       .filter((r) => (r.employment || 'Active') === section.key)
-      .map((employee) => buildRow(employee)),
+      .map((employee) => buildRow(employee, section.key)),
   }));
 
-  function buildRow(employee) {
+  function buildRow(employee, sectionKey) {
     const monthCells = {};
     for (const iso of months) {
       if (employee.isRamp) {
@@ -126,9 +158,38 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     return {
       id: employee.id,
       monthCells,
+      className: draggedId === employee.id ? 'pr-dragging' : undefined,
+      draggable: true,
+      // Row itself is draggable (HTML5 DnD requires that), but the drag only actually
+      // starts if the gesture began on the handle icon specifically — otherwise
+      // clicking/dragging to select text inside a Name field would trigger a row drag.
+      onDragStart: (e) => {
+        if (!e.target.closest('[data-drag-handle]')) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggedId(employee.id);
+      },
+      onDragOver: (e) => e.preventDefault(),
+      onDrop: (e) => {
+        e.preventDefault();
+        if (draggedId) reorderWithinSection(sectionKey, draggedId, employee.id);
+        setDraggedId(null);
+      },
+      onDragEnd: () => setDraggedId(null),
       cells: {
         actions: (
           <div className="pr-row-actions">
+            <span
+              className="icon-btn pr-drag-handle"
+              data-drag-handle
+              title="Drag to reorder within this section"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            </span>
             <FillRangeButton
               months={months}
               valueLabel={employee.isRamp ? 'Headcount' : 'Value'}

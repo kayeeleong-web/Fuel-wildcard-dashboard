@@ -192,7 +192,19 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso,
         </tr>
       )}
       {group.rows.map((row) => (
-        <tr key={row.id} className={row.className}>
+        // draggable/onDrag*/onDrop are optional passthrough — only Roster rows supply
+        // them (drag-to-reorder within a section), so Bonus/Total Comp/Summary rows
+        // just render a plain, non-draggable <tr> as before (undefined props are a
+        // no-op on a DOM element).
+        <tr
+          key={row.id}
+          className={row.className}
+          draggable={row.draggable}
+          onDragStart={row.onDragStart}
+          onDragOver={row.onDragOver}
+          onDrop={row.onDrop}
+          onDragEnd={row.onDragEnd}
+        >
           {frozenColumns.map((col, i) => (
             <td
               key={col.key}
@@ -430,9 +442,14 @@ export function FillRangeButton({ months, onApply, valueLabel = 'Value', valuePl
 
   return (
     <div className="pr-fill-wrap">
+      {/* A small cell-with-a-fill-arrow icon (not three lines — that reads as a drag
+          handle in almost every app, which this button isn't; Kayee, 2026-08-05: "why
+          would I do it with the three lines click?"). This one visually says "take this
+          one value and spread it across a range" instead. */}
       <button ref={btnRef} type="button" className="icon-btn" title="Fill a range of months with one value" onClick={toggleOpen}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M4 12h16M4 6h16M4 18h10" />
+          <rect x="3" y="9" width="6" height="6" rx="1" />
+          <path d="M9 12h8m0 0l-3-3m3 3l-3 3" />
         </svg>
       </button>
       {open &&

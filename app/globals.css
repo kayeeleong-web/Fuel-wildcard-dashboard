@@ -563,6 +563,14 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 
 .pr-row-actions { display: flex; align-items: center; gap: 4px; }
 
+/* Drag handle (Roster rows only) — genuinely draggable, unlike the Fill-Range button
+   above it, which just opens a bulk-edit popover and used to (confusingly) share this
+   same three-line icon (Kayee, 2026-08-05: "why would I do it with the three lines
+   click?"). Reorders within one section only (Active/Planned/Dismissed never mix). */
+.pr-drag-handle { cursor: grab; }
+.pr-drag-handle:active { cursor: grabbing; }
+tr.pr-dragging { opacity: .4; }
+
 /* ---- Fill-range bulk-edit popover ---- */
 .pr-fill-wrap { position: relative; display: inline-flex; }
 .pr-fill-pop {
