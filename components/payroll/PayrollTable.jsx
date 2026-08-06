@@ -262,13 +262,16 @@ export function MonthInput({ value, onCommit }) {
   );
 }
 
-/** Headcount-ramp month cell — used only for Roster "ramp" rows: a role we don't have
+/** Headcount-ramp month cell — used only on the Hiring Plan card: a role we don't have
  *  anyone in yet, planned to fill with several people over time (e.g. "Junior Creative
  *  Hire" ramping to 3 people by Dec 2026), matching the source sheet's own "New Hires
- *  per Month" headcount table (Kayee, 2026-08-05). The editable figure here is a
- *  headcount COUNT, not a dollar amount — the $ cost for that month (shown as a small
- *  caption underneath) is always count x per-person loaded cost, computed automatically
- *  in payrollData.js (monthlyCostFor), never typed directly. */
+ *  per Month" headcount table (Kayee, 2026-08-05). The editable figure here is the
+ *  INCREMENTAL new-hire count for that specific month (usually 0, occasionally 1+) —
+ *  not a running total, so the user never has to retype the same cumulative number
+ *  across every month after a hire (Kayee, 2026-08-05: "plug in the number month over
+ *  month and it will count"). The $ caption underneath is always the resulting running
+ *  cost (headcount-to-date x per-person loaded cost), computed automatically in
+ *  payrollData.js (monthlyCostFor / cumulativeHeadcountFor), never typed directly. */
 export function HeadcountMonthInput({ count, costPreview, onCommit }) {
   const [draft, setDraft] = useState(count ? String(count) : '');
   const [focused, setFocused] = useState(false);

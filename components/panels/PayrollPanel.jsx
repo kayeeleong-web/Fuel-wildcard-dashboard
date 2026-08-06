@@ -5,6 +5,7 @@ import { PageHead } from '../ui/PageHead';
 import { AssumptionsBar } from '../payroll/AssumptionsBar';
 import { PayrollSummaryCard } from '../payroll/PayrollSummaryCard';
 import { RosterCard } from '../payroll/RosterCard';
+import { HiringPlanCard } from '../payroll/HiringPlanCard';
 import { BonusCard } from '../payroll/BonusCard';
 import { TotalCompCard } from '../payroll/TotalCompCard';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
@@ -99,6 +100,16 @@ export function PayrollPanel() {
           onChange={setRoster}
           justAddedId={justAddedId}
           onFocusHandled={() => setJustAddedId(null)}
+        />
+
+        <div style={{ height: 20 }} />
+
+        <HiringPlanCard
+          roster={state.roster}
+          assumptions={state.assumptions}
+          months={MONTHS}
+          todayIso={todayIso}
+          onChange={setRoster}
         />
 
         <div style={{ height: 20 }} />

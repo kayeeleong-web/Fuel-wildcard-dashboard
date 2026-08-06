@@ -10,10 +10,13 @@ const FROZEN_COLUMNS = [{ key: 'line', label: 'Line item', width: 220 }];
  * "Salary, Bonus & Commission" rollup Kayee showed from another project (screenshot,
  * 2026-08-05): a Total row plus its component rollups, sitting above the detail cards
  * so the headline numbers don't require opening/scrolling into Roster or Bonus first.
- * Wildcard only has two rollups feeding Total Comp — Base Salaries and Bonus —
- * so this card shows exactly those two, not the six from the reference screenshot
- * (that project tracks Full-Time/Part-Time/Sales Commission separately; Wildcard's
- * roster doesn't split that way).
+ *
+ * Base Salaries is split into Existing (current Roster) vs Planned Hires (Hiring Plan
+ * ramp roles) — separate cards now that those two live apart on the tab (Kayee,
+ * 2026-08-05: "leave current employees in their own sections") — so the bottom-line
+ * impact of a hiring plan is visible at a glance without opening the Hiring Plan card
+ * itself ("I need to know in P&L and cash perspective how would it affect my bottom
+ * line").
  *
  * tintForecast={false}: every month here is a live calculation off editable Payroll
  * inputs, never a pulled "actual" figure from a GL — so the app's ACT/FCST blue tint
@@ -22,8 +25,14 @@ const FROZEN_COLUMNS = [{ key: 'line', label: 'Line item', width: 220 }];
  * is only projection and calculations" — asking why Sep-2026 onward was blue).
  */
 export function PayrollSummaryCard({ roster, bonuses, assumptions, months, todayIso }) {
-  function rosterMonthly(iso) {
-    return roster.reduce((sum, employee) => sum + monthlyCostFor(employee, iso, assumptions), 0);
+  const existing = roster.filter((r) => !r.isRamp);
+  const planned = roster.filter((r) => r.isRamp);
+
+  function existingMonthly(iso) {
+    return existing.reduce((sum, employee) => sum + monthlyCostFor(employee, iso, assumptions), 0);
+  }
+  function plannedMonthly(iso) {
+    return planned.reduce((sum, role) => sum + monthlyCostFor(role, iso, assumptions), 0);
   }
   function bonusMonthly(iso) {
     return bonuses.reduce((sum, bonus) => {
@@ -35,15 +44,23 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
   const totalRow = {
     cells: { line: <b>Total</b> },
     monthCells: Object.fromEntries(
-      months.map((iso) => [iso, <b key={iso}>{formatPayrollAmount(rosterMonthly(iso) + bonusMonthly(iso)) || '$0'}</b>])
+      months.map((iso) => [
+        iso,
+        <b key={iso}>{formatPayrollAmount(existingMonthly(iso) + plannedMonthly(iso) + bonusMonthly(iso)) || '$0'}</b>,
+      ])
     ),
   };
 
   const rows = [
     {
-      id: 'roster',
-      cells: { line: 'Base Salaries' },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(rosterMonthly(iso)) || '$0'])),
+      id: 'existing',
+      cells: { line: 'Existing Base Salaries' },
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingMonthly(iso)) || '$0'])),
+    },
+    {
+      id: 'planned',
+      cells: { line: 'Planned Hires' },
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedMonthly(iso)) || '$0'])),
     },
     {
       id: 'bonus',
@@ -55,7 +72,7 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
   return (
     <PayrollTable
       title="Payroll Summary"
-      subtitle="Total comp rollup — Base Salaries + Bonus, read-only"
+      subtitle="Total comp rollup — Existing + Planned Hires + Bonus, read-only"
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}

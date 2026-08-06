@@ -1,22 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  DEPARTMENT_OPTIONS,
-  EMPLOYMENT_STATUSES,
-  formatPayrollAmount,
-  headcountFor,
-  monthlyCostFor,
-} from '../../lib/payroll/payrollData';
-import {
-  DateInput,
-  FillRangeButton,
-  HeadcountMonthInput,
-  MonthInput,
-  PayrollTable,
-  PickerInput,
-  TextInput,
-} from './PayrollTable';
+import { DEPARTMENT_OPTIONS, EMPLOYMENT_STATUSES, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
+import { DateInput, FillRangeButton, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
 const FROZEN_COLUMNS = [
   { key: 'actions', label: '', width: 64 },
@@ -37,13 +23,19 @@ const SECTION_ORDER = [
 ];
 
 /**
- * Employee Roster — the editable heart of the Payroll tab. Frozen leading columns
- * (Name → Base Salary) stay put while the monthly $ grid scrolls; every roster member
- * is split into Active / Planned (TBD) / Dismissed sections (Kayee's actual "Employment"
- * field, carried straight from her sheet — see payrollData.js). A TOTAL row is pinned at
- * the top so the running headcount cost is visible without scrolling to the bottom.
+ * Employee Roster — the editable heart of the Payroll tab, but ONLY current real people
+ * (Active / Planned (TBD) / Dismissed, per each person's actual "Employment" field).
+ * Not-yet-hired roles with a ramping headcount live on their own Hiring Plan card
+ * instead (Kayee, 2026-08-05: "create a separate section for hiring plan, leave current
+ * employees in their own sections") — this card still receives the FULL roster array
+ * (and writes the full array back via onChange) so Hiring Plan rows pass through
+ * untouched, it just never renders or edits them. Frozen leading columns (Name → Base
+ * Salary) stay put while the monthly $ grid scrolls. A TOTAL row is pinned at the top
+ * so the running headcount cost (of real people only) is visible without scrolling.
  */
 export function RosterCard({ roster, assumptions, months, todayIso, onChange, justAddedId, onFocusHandled }) {
+  const employees = roster.filter((r) => !r.isRamp);
+
   // Drag-to-reorder (Kayee, 2026-08-05: "turn it into draggable so people can rearrange
   // people") — scoped to within one section only (Active/Planned/Dismissed don't mix),
   // per Kayee's call, so dragging never silently changes someone's Employment status.
@@ -51,7 +43,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
 
   function reorderWithinSection(sectionKey, fromId, toId) {
     if (fromId === toId) return;
-    const sectionIds = roster.filter((r) => (r.employment || 'Active') === sectionKey).map((r) => r.id);
+    const sectionIds = employees.filter((r) => (r.employment || 'Active') === sectionKey).map((r) => r.id);
     const fromIndex = sectionIds.indexOf(fromId);
     const toIndex = sectionIds.indexOf(toId);
     if (fromIndex === -1 || toIndex === -1) return;
@@ -67,7 +59,9 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     let cursor = 0;
     const rosterById = Object.fromEntries(roster.map((r) => [r.id, r]));
     const newRoster = roster.map((r) => {
-      if ((r.employment || 'Active') !== sectionKey) return r;
+      // Ramp rows can share the same 'TBD' employment value but live on the Hiring
+      // Plan card, not here — excluded so they never get pulled into this reorder.
+      if (r.isRamp || (r.employment || 'Active') !== sectionKey) return r;
       const next = rosterById[reorderedIds[cursor]];
       cursor += 1;
       return next;
@@ -98,39 +92,20 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     );
   }
 
-  // Ramp rows (see payrollData.js headcountFor) track a headcount COUNT per month
-  // instead of a dollar override — a separate updater/fill so the two never collide.
-  function updateHeadcount(id, iso, value) {
-    onChange(
-      roster.map((r) => (r.id === id ? { ...r, headcountByMonth: { ...r.headcountByMonth, [iso]: value } } : r))
-    );
-  }
-
-  function fillHeadcount(id, targetMonths, value) {
-    onChange(
-      roster.map((r) => {
-        if (r.id !== id) return r;
-        const patch = {};
-        for (const m of targetMonths) patch[m] = value;
-        return { ...r, headcountByMonth: { ...r.headcountByMonth, ...patch } };
-      })
-    );
-  }
-
   function removeEmployee(id, name) {
     if (typeof window !== 'undefined' && !window.confirm(`Remove ${name || 'this person'} from the roster?`)) return;
     onChange(roster.filter((r) => r.id !== id));
   }
 
   const departmentOptions = Array.from(
-    new Set([...DEPARTMENT_OPTIONS, ...roster.map((r) => r.department).filter(Boolean)])
+    new Set([...DEPARTMENT_OPTIONS, ...employees.map((r) => r.department).filter(Boolean)])
   );
 
   const rowGroups = SECTION_ORDER.map((section) => ({
     key: section.key,
     label: section.label,
     rowModifier: section.rowModifier,
-    rows: roster
+    rows: employees
       .filter((r) => (r.employment || 'Active') === section.key)
       .map((employee) => buildRow(employee, section.key)),
   }));
@@ -138,21 +113,8 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
   function buildRow(employee, sectionKey) {
     const monthCells = {};
     for (const iso of months) {
-      if (employee.isRamp) {
-        // Ramp row: the editable figure is a headcount count, not a dollar amount — cost
-        // (shown as a small caption under the count) is always count x per-person loaded
-        // cost, computed in payrollData.js, never typed directly here.
-        monthCells[iso] = (
-          <HeadcountMonthInput
-            count={headcountFor(employee, iso)}
-            costPreview={formatPayrollAmount(monthlyCostFor(employee, iso, assumptions))}
-            onCommit={(n) => updateHeadcount(employee.id, iso, n)}
-          />
-        );
-      } else {
-        const val = monthlyCostFor(employee, iso, assumptions);
-        monthCells[iso] = <MonthInput value={val} onCommit={(n) => updateMonthly(employee.id, iso, n)} />;
-      }
+      const val = monthlyCostFor(employee, iso, assumptions);
+      monthCells[iso] = <MonthInput value={val} onCommit={(n) => updateMonthly(employee.id, iso, n)} />;
     }
 
     return {
@@ -190,16 +152,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
                 <path d="M4 7h16M4 12h16M4 17h16" />
               </svg>
             </span>
-            <FillRangeButton
-              months={months}
-              valueLabel={employee.isRamp ? 'Headcount' : 'Value'}
-              valuePlaceholder={employee.isRamp ? 'e.g. 2' : '$'}
-              onApply={(targetMonths, value) =>
-                employee.isRamp
-                  ? fillHeadcount(employee.id, targetMonths, value)
-                  : fillRange(employee.id, targetMonths, value)
-              }
-            />
+            <FillRangeButton months={months} onApply={(targetMonths, value) => fillRange(employee.id, targetMonths, value)} />
             <button
               type="button"
               className="icon-btn"
@@ -213,18 +166,15 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
           </div>
         ),
         name: (
-          <div className="pr-name-cell">
-            <TextInput
-              value={employee.name}
-              placeholder="Name"
-              focusOnMount={employee.id === justAddedId}
-              onCommit={(v) => {
-                updateEmployee(employee.id, { name: v });
-                if (employee.id === justAddedId) onFocusHandled?.();
-              }}
-            />
-            {employee.isRamp && <span className="pr-ramp-badge">Ramp</span>}
-          </div>
+          <TextInput
+            value={employee.name}
+            placeholder="Name"
+            focusOnMount={employee.id === justAddedId}
+            onCommit={(v) => {
+              updateEmployee(employee.id, { name: v });
+              if (employee.id === justAddedId) onFocusHandled?.();
+            }}
+          />
         ),
         department: (
           <PickerInput
@@ -252,16 +202,8 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
             onCommit={(v) => updateEmployee(employee.id, { title: v })}
           />
         ),
-        // Ramp rows have no single start/end date — headcount per month (below) drives
-        // when this role's cost/bonus kicks in instead.
-        startDate: employee.isRamp ? (
-          <span className="pr-missing">Ramps by headcount →</span>
-        ) : (
-          <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />
-        ),
-        endDate: employee.isRamp ? null : (
-          <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />
-        ),
+        startDate: <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />,
+        endDate: <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />,
         employment: (
           <select
             className="pr-input pr-select"
@@ -289,7 +231,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     cells: { name: <b>TOTAL</b> },
     monthCells: Object.fromEntries(
       months.map((iso) => {
-        const sum = roster.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
+        const sum = employees.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
         return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
       })
     ),
@@ -298,7 +240,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
   return (
     <PayrollTable
       title="Employee Roster"
-      subtitle={`${roster.length} people`}
+      subtitle={`${employees.length} people`}
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}

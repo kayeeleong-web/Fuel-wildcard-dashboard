@@ -18,10 +18,10 @@ const FROZEN_COLUMNS = [
  * Monthly flow = Bonus $ x Bonus Attainment% / 12, and only pays out during months the
  * linked roster member is actually active (see payrollData.js bonusMonthlyFlow) — no
  * separate start/end dates to maintain here, unlike the source sheet. For a headcount-
- * "ramp" role (Roster's not-yet-hired rows — Junior Creative Hire, Head of Ops, etc.),
- * that same per-person bonus figure is automatically multiplied by however many people
- * are planned for that role that month — no separate UI here, bonusMonthlyFlow already
- * does the multiply (Kayee, 2026-08-05: "bonus should be a calculation based on
+ * "ramp" role (Hiring Plan's not-yet-hired roles — Junior Creative Hire, Head of Ops,
+ * etc.), that same per-person bonus figure is automatically multiplied by however many
+ * people are planned for that role that month — no separate UI here, bonusMonthlyFlow
+ * already does the multiply (Kayee, 2026-08-05: "bonus should be a calculation based on
  * [headcount ramp]").
  */
 export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onChange }) {
