@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatMonthLabel } from '../../lib/payroll/payrollData';
 
 /**
@@ -22,6 +23,13 @@ export function PayrollTable({
   months,
   monthWidth = 92,
   todayIso,
+  // Whether future months get the app's ACT/FCST blue tint at all. Defaults to true
+  // for tabs like Reports, which mix real reported months with genuine projections.
+  // The whole Payroll tab is user-entered projection/calculation, never a pulled
+  // "actual" figure, so every Payroll card passes tintForecast={false} — otherwise
+  // every month after today reads as a misleading "this one's different" blue wash
+  // (Kayee, 2026-08-05: "everything in here is only projection and calculations").
+  tintForecast = true,
   totalRow, // { cells: {[frozenKey]: node}, monthCells: { [iso]: node } } | null
   rowGroups, // [{ key, label, rowModifier, rows: [{ id, cells: {...}, monthCells: {...}, className }] }]
   headActions,
@@ -64,7 +72,7 @@ export function PayrollTable({
                 </th>
               ))}
               {months.map((iso) => (
-                <th key={iso} className={monthHeadClass(iso, todayIso)} style={{ width: monthWidth }}>
+                <th key={iso} className={monthHeadClass(iso, todayIso, tintForecast)} style={{ width: monthWidth }}>
                   {formatMonthLabel(iso)}
                 </th>
               ))}
@@ -87,7 +95,7 @@ export function PayrollTable({
                   </td>
                 ))}
                 {months.map((iso) => (
-                  <td key={iso} className={monthTintClass(iso, todayIso)} style={{ width: monthWidth }}>
+                  <td key={iso} className={monthTintClass(iso, todayIso, tintForecast)} style={{ width: monthWidth }}>
                     {totalRow.monthCells[iso]}
                   </td>
                 ))}
@@ -103,6 +111,7 @@ export function PayrollTable({
                 months={months}
                 monthWidth={monthWidth}
                 todayIso={todayIso}
+                tintForecast={tintForecast}
               />
             ))}
           </tbody>
@@ -152,17 +161,17 @@ export function PayrollTable({
   );
 }
 
-function monthHeadClass(iso, todayIso) {
-  return `pr-month-head ${monthTintClass(iso, todayIso)}`;
+function monthHeadClass(iso, todayIso, tintForecast) {
+  return `pr-month-head ${monthTintClass(iso, todayIso, tintForecast)}`;
 }
 
-function monthTintClass(iso, todayIso) {
-  let cls = iso > todayIso ? 'pr-fcst' : 'pr-act';
+function monthTintClass(iso, todayIso, tintForecast) {
+  let cls = tintForecast && iso > todayIso ? 'pr-fcst' : 'pr-act';
   if (iso.endsWith('-01')) cls += ' pr-year-start';
   return cls;
 }
 
-function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso }) {
+function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso, tintForecast }) {
   if (!group.rows.length) return null;
   return (
     <>
@@ -194,7 +203,7 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso 
             </td>
           ))}
           {months.map((iso) => (
-            <td key={iso} className={`pr-month-cell ${monthTintClass(iso, todayIso)}`} style={{ width: monthWidth }}>
+            <td key={iso} className={`pr-month-cell ${monthTintClass(iso, todayIso, tintForecast)}`} style={{ width: monthWidth }}>
               {row.monthCells[iso]}
             </td>
           ))}
@@ -238,6 +247,47 @@ export function MonthInput({ value, onCommit }) {
         onCommit(n);
       }}
     />
+  );
+}
+
+/** Headcount-ramp month cell — used only for Roster "ramp" rows: a role we don't have
+ *  anyone in yet, planned to fill with several people over time (e.g. "Junior Creative
+ *  Hire" ramping to 3 people by Dec 2026), matching the source sheet's own "New Hires
+ *  per Month" headcount table (Kayee, 2026-08-05). The editable figure here is a
+ *  headcount COUNT, not a dollar amount — the $ cost for that month (shown as a small
+ *  caption underneath) is always count x per-person loaded cost, computed automatically
+ *  in payrollData.js (monthlyCostFor), never typed directly. */
+export function HeadcountMonthInput({ count, costPreview, onCommit }) {
+  const [draft, setDraft] = useState(count ? String(count) : '');
+  const [focused, setFocused] = useState(false);
+
+  const display = focused ? draft : count ? String(count) : '';
+
+  return (
+    <div className="pr-headcount-cell">
+      <input
+        type="text"
+        inputMode="numeric"
+        className="pr-input pr-input-headcount"
+        value={display}
+        placeholder="0"
+        onFocus={(e) => {
+          const current = count ? String(count) : '';
+          const next = current === '0' ? '' : current;
+          e.target.value = next;
+          setDraft(next);
+          setFocused(true);
+          e.target.select();
+        }}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const n = Math.max(0, Math.round(Number(String(draft).replace(/[^0-9.-]/g, '')) || 0));
+          setFocused(false);
+          onCommit(n);
+        }}
+      />
+      {costPreview && <span className="pr-headcount-cost">{costPreview}</span>}
+    </div>
   );
 }
 
@@ -328,73 +378,118 @@ export function PickerInput({ value, options, onCommit, placeholder }) {
 
 /** Small inline "fill a range with one value" bulk-edit control — pick a start month, end
  *  month, and value, apply across every month in between. Saves editing 20+ monthly
- *  cells by hand one at a time (Payroll build notes). */
-export function FillRangeButton({ months, onApply }) {
+ *  cells by hand one at a time (Payroll build notes).
+ *
+ *  The popover is rendered through a portal into document.body at a `position: fixed`
+ *  spot computed from the trigger button's own bounding box, rather than as a plain
+ *  `position: absolute` child of the button. Roster/Bonus rows live inside
+ *  `.payroll-table-wrap`, which needs `overflow: auto` for the sticky-column scrolling
+ *  to work at all — an absolutely-positioned popover nested inside that ancestor gets
+ *  clipped to its scroll box, so only a sliver of the popover's corner was ever visible
+ *  (Kayee, 2026-08-05: "I click it but nothing show up but like a corner of the box").
+ *  Escaping to a body-level portal sidesteps that clipping entirely. */
+export function FillRangeButton({ months, onApply, valueLabel = 'Value', valuePlaceholder = '$' }) {
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(months[0]);
   const [to, setTo] = useState(months[months.length - 1]);
   const [value, setValue] = useState('');
-  const wrapRef = useRef(null);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+
+  function updatePosition() {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 6, left: rect.left });
+  }
+
+  function toggleOpen() {
+    if (!open) updatePosition();
+    setOpen((o) => !o);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function handleReposition() {
+      updatePosition();
+    }
+    function handleOutside(e) {
+      if (popRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return;
+      setOpen(false);
+    }
+    window.addEventListener('scroll', handleReposition, true);
+    window.addEventListener('resize', handleReposition);
+    document.addEventListener('mousedown', handleOutside);
+    return () => {
+      window.removeEventListener('scroll', handleReposition, true);
+      window.removeEventListener('resize', handleReposition);
+      document.removeEventListener('mousedown', handleOutside);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   return (
-    <div className="pr-fill-wrap" ref={wrapRef}>
-      <button type="button" className="icon-btn" title="Fill a range of months with one value" onClick={() => setOpen((o) => !o)}>
+    <div className="pr-fill-wrap">
+      <button ref={btnRef} type="button" className="icon-btn" title="Fill a range of months with one value" onClick={toggleOpen}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M4 12h16M4 6h16M4 18h10" />
         </svg>
       </button>
-      {open && (
-        <div className="pr-fill-pop">
-          <div className="pr-fill-row">
-            <label>From</label>
-            <select value={from} onChange={(e) => setFrom(e.target.value)}>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {formatMonthLabel(m)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="pr-fill-row">
-            <label>To</label>
-            <select value={to} onChange={(e) => setTo(e.target.value)}>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {formatMonthLabel(m)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="pr-fill-row">
-            <label>Value</label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="$"
-            />
-          </div>
-          <div className="pr-fill-actions">
-            <button type="button" className="btn" onClick={() => setOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={() => {
-                const n = Number(String(value).replace(/[^0-9.-]/g, '')) || 0;
-                const targetMonths = months.filter((m) => m >= from && m <= to);
-                onApply(targetMonths, n);
-                setOpen(false);
-                setValue('');
-              }}
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <div ref={popRef} className="pr-fill-pop" style={{ position: 'fixed', top: pos.top, left: pos.left }}>
+            <div className="pr-fill-row">
+              <label>From</label>
+              <select value={from} onChange={(e) => setFrom(e.target.value)}>
+                {months.map((m) => (
+                  <option key={m} value={m}>
+                    {formatMonthLabel(m)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="pr-fill-row">
+              <label>To</label>
+              <select value={to} onChange={(e) => setTo(e.target.value)}>
+                {months.map((m) => (
+                  <option key={m} value={m}>
+                    {formatMonthLabel(m)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="pr-fill-row">
+              <label>{valueLabel}</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={valuePlaceholder}
+              />
+            </div>
+            <div className="pr-fill-actions">
+              <button type="button" className="btn" onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => {
+                  const n = Number(String(value).replace(/[^0-9.-]/g, '')) || 0;
+                  const targetMonths = months.filter((m) => m >= from && m <= to);
+                  onApply(targetMonths, n);
+                  setOpen(false);
+                  setValue('');
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

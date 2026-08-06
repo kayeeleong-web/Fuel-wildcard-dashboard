@@ -545,6 +545,22 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 .pr-add-bonus:focus { background: #fff; color: var(--text); }
 .pr-missing { color: var(--muted-2); font-style: italic; font-weight: 400; }
 
+/* ---- Headcount-ramp rows (Roster) ---- */
+/* A role we don't have anyone in yet, planned to fill with several people over time
+   (e.g. "Junior Creative Hire" ramping to 3 people by Dec 2026) — matches the source
+   sheet's own "New Hires per Month" headcount table (Kayee, 2026-08-05). */
+.pr-name-cell { display: flex; align-items: center; gap: 6px; }
+.pr-ramp-badge {
+  flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .3px; color: var(--blue);
+  background: var(--blue-soft); border-radius: 20px; padding: 2px 7px; white-space: nowrap;
+}
+/* Two-line cell: an editable headcount count on top, the computed $ cost (count x
+   per-person loaded cost) as a small read-only caption underneath — the dollar figure
+   is never typed directly here, only the count is. */
+.pr-headcount-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pr-input-headcount { width: 46px; text-align: center; padding: 5px 2px; }
+.pr-headcount-cost { font-size: 9.5px; color: var(--muted-2); font-family: var(--font-num); white-space: nowrap; }
+
 .pr-row-actions { display: flex; align-items: center; gap: 4px; }
 
 /* ---- Fill-range bulk-edit popover ---- */

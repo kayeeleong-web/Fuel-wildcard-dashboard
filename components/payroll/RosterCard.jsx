@@ -4,11 +4,13 @@ import {
   DEPARTMENT_OPTIONS,
   EMPLOYMENT_STATUSES,
   formatPayrollAmount,
+  headcountFor,
   monthlyCostFor,
 } from '../../lib/payroll/payrollData';
 import {
   DateInput,
   FillRangeButton,
+  HeadcountMonthInput,
   MonthInput,
   PayrollTable,
   PickerInput,
@@ -24,7 +26,7 @@ const FROZEN_COLUMNS = [
   { key: 'startDate', label: 'Start Date', width: 130 },
   { key: 'endDate', label: 'End Date', width: 130 },
   { key: 'employment', label: 'Employment', width: 100 },
-  { key: 'baseSalary', label: 'Base Salary', width: 120, align: 'right' },
+  { key: 'baseSalary', label: 'Base Salaries', width: 120, align: 'right' },
 ];
 
 const SECTION_ORDER = [
@@ -64,6 +66,25 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     );
   }
 
+  // Ramp rows (see payrollData.js headcountFor) track a headcount COUNT per month
+  // instead of a dollar override — a separate updater/fill so the two never collide.
+  function updateHeadcount(id, iso, value) {
+    onChange(
+      roster.map((r) => (r.id === id ? { ...r, headcountByMonth: { ...r.headcountByMonth, [iso]: value } } : r))
+    );
+  }
+
+  function fillHeadcount(id, targetMonths, value) {
+    onChange(
+      roster.map((r) => {
+        if (r.id !== id) return r;
+        const patch = {};
+        for (const m of targetMonths) patch[m] = value;
+        return { ...r, headcountByMonth: { ...r.headcountByMonth, ...patch } };
+      })
+    );
+  }
+
   function removeEmployee(id, name) {
     if (typeof window !== 'undefined' && !window.confirm(`Remove ${name || 'this person'} from the roster?`)) return;
     onChange(roster.filter((r) => r.id !== id));
@@ -85,8 +106,21 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
   function buildRow(employee) {
     const monthCells = {};
     for (const iso of months) {
-      const val = monthlyCostFor(employee, iso, assumptions);
-      monthCells[iso] = <MonthInput value={val} onCommit={(n) => updateMonthly(employee.id, iso, n)} />;
+      if (employee.isRamp) {
+        // Ramp row: the editable figure is a headcount count, not a dollar amount — cost
+        // (shown as a small caption under the count) is always count x per-person loaded
+        // cost, computed in payrollData.js, never typed directly here.
+        monthCells[iso] = (
+          <HeadcountMonthInput
+            count={headcountFor(employee, iso)}
+            costPreview={formatPayrollAmount(monthlyCostFor(employee, iso, assumptions))}
+            onCommit={(n) => updateHeadcount(employee.id, iso, n)}
+          />
+        );
+      } else {
+        const val = monthlyCostFor(employee, iso, assumptions);
+        monthCells[iso] = <MonthInput value={val} onCommit={(n) => updateMonthly(employee.id, iso, n)} />;
+      }
     }
 
     return {
@@ -95,7 +129,16 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
       cells: {
         actions: (
           <div className="pr-row-actions">
-            <FillRangeButton months={months} onApply={(targetMonths, value) => fillRange(employee.id, targetMonths, value)} />
+            <FillRangeButton
+              months={months}
+              valueLabel={employee.isRamp ? 'Headcount' : 'Value'}
+              valuePlaceholder={employee.isRamp ? 'e.g. 2' : '$'}
+              onApply={(targetMonths, value) =>
+                employee.isRamp
+                  ? fillHeadcount(employee.id, targetMonths, value)
+                  : fillRange(employee.id, targetMonths, value)
+              }
+            />
             <button
               type="button"
               className="icon-btn"
@@ -109,15 +152,18 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
           </div>
         ),
         name: (
-          <TextInput
-            value={employee.name}
-            placeholder="Name"
-            focusOnMount={employee.id === justAddedId}
-            onCommit={(v) => {
-              updateEmployee(employee.id, { name: v });
-              if (employee.id === justAddedId) onFocusHandled?.();
-            }}
-          />
+          <div className="pr-name-cell">
+            <TextInput
+              value={employee.name}
+              placeholder="Name"
+              focusOnMount={employee.id === justAddedId}
+              onCommit={(v) => {
+                updateEmployee(employee.id, { name: v });
+                if (employee.id === justAddedId) onFocusHandled?.();
+              }}
+            />
+            {employee.isRamp && <span className="pr-ramp-badge">Ramp</span>}
+          </div>
         ),
         department: (
           <PickerInput
@@ -145,8 +191,16 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
             onCommit={(v) => updateEmployee(employee.id, { title: v })}
           />
         ),
-        startDate: <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />,
-        endDate: <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />,
+        // Ramp rows have no single start/end date — headcount per month (below) drives
+        // when this role's cost/bonus kicks in instead.
+        startDate: employee.isRamp ? (
+          <span className="pr-missing">Ramps by headcount →</span>
+        ) : (
+          <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />
+        ),
+        endDate: employee.isRamp ? null : (
+          <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />
+        ),
         employment: (
           <select
             className="pr-input pr-select"
@@ -184,6 +238,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
     <PayrollTable
       title="Employee Roster"
       subtitle={`${roster.length} people`}
+      tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}
       todayIso={todayIso}

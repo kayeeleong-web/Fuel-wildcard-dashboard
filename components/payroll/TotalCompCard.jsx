@@ -12,8 +12,9 @@ const FROZEN_COLUMNS = [
 /**
  * Total Comp — read-only rollup: each person's loaded roster cost plus any bonus flow
  * they're linked to, combined per month. Purely derived from the Roster and Bonus cards
- * above (no new data entry here), same sticky-column table shell, defaulted collapsed
- * since it repeats the same person list as the roster above it.
+ * above (no new data entry here), same sticky-column table shell. Expanded by default
+ * (Kayee, 2026-08-05: "Total Comp is automatically collapsed. keep it expanded") —
+ * it's one of only two rollup cards on the tab and shouldn't need an extra click to see.
  */
 export function TotalCompCard({ roster, bonuses, assumptions, months, todayIso }) {
   const bonusesByEmployee = {};
@@ -60,7 +61,7 @@ export function TotalCompCard({ roster, bonuses, assumptions, months, todayIso }
     <PayrollTable
       title="Total Comp"
       subtitle="Base cost + bonus, combined — read-only"
-      defaultCollapsed
+      tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}
       todayIso={todayIso}
