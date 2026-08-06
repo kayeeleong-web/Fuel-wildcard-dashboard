@@ -389,6 +389,17 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    projection-padding months through PROJECTION_HORIZON — every cell carries .r-all
    unconditionally, so no hide rule is needed for it. */
 
+/* data-range="yr2026" — the default landing view (Kayee, 2026-08-06): full calendar
+   year Jan-Dec 2026 regardless of how far that is from the last actual month, so
+   opening Reports doesn't require the ∞ toggle + a scroll past 2024/2025 every time.
+   Every month cell always carries its own .y<year> class (see rangeClasses() in
+   ReportsPanel.jsx), independent of the r6/r12/r24 trailing-window classes above. */
+#reports[data-range="yr2026"].report-doc:not([data-doc="custom"]) th:not(.y2026):not(:first-child),
+#reports[data-range="yr2026"].report-doc:not([data-doc="custom"]) td:not(.y2026):not(:first-child) { display: none; }
+
+.seg-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+.seg-group-label { font-size: 10px; font-weight: 700; color: var(--muted-2); text-transform: uppercase; letter-spacing: .5px; padding: 0 2px; white-space: nowrap; }
+
 /* Year-band header row (2026 / 2027 / ...) always stays visible regardless of which
    range is selected — it carries every range class unconditionally so none of the
    three hide-rules above ever match it. Its colSpan simply shrinks to whatever
@@ -411,7 +422,13 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    the app instead of inventing a second "this is a forecast" color. */
 thead th.pr-fcst { box-shadow: inset 0 -2px 0 var(--blue); }
 tbody td.pr-fcst { background: rgba(17, 179, 231, .06); }
-tbody tr.total td.pr-fcst { background: rgba(17, 179, 231, .16); }
+/* A total row is already black-bg/white-text (tbody tr.total td above) — the light
+   blue wash used on regular forecast cells reads as near-white-on-near-white there,
+   which is what made these cells "hard to see" (Kayee, 2026-08-06 screenshot). Total
+   rows instead keep their normal black/white and get the same thin blue accent line
+   the header row already uses for "this column is a forecast" (thead th.pr-fcst
+   above), so contrast never drops regardless of range/row. */
+tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0 var(--blue); }
 
 /* ==================== Payroll tab ==================== */
 /* This tab is the one exception to "every tab lives inside the shared table/.table-wrap
@@ -607,6 +624,49 @@ tr.pr-dragging { opacity: .4; }
 .assump-cost-note {
   font-size: 11px; color: var(--muted-2); line-height: 1.5; padding: 12px 18px;
 }
+
+/* ==================== Payroll — outer grouping sections ==================== */
+/* Existing / Planned each roll their Base + Bonus cards up into one outer collapsible
+   box (Kayee, 2026-08-06: "make existing into one box... that way if I want to
+   collapse existing the whole base and bonus will be collapsed together"). A colored
+   dot on the box header echoes the same-colored dot on its matching Payroll Summary
+   row (and Total Comp's), so a business owner can visually trace "this number up top"
+   to "this section down here" without reading labels closely — clicking a Summary row
+   jumps to and expands the matching box. Deliberately a lighter tinted header (not the
+   black .payroll-card-head bar) so these read as an outer "folder" one level up from
+   the black-headed cards inside them, not as another identical card. */
+.pr-outer-section {
+  border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+  background: var(--panel); box-shadow: 0 1px 2px rgba(17,17,17,.03);
+}
+.pr-outer-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--panel-2); border: none; padding: 15px 18px; cursor: pointer; text-align: left;
+}
+.pr-outer-head:hover { background: #ECEDEF; }
+.pr-outer-chevron {
+  display: inline-block; font-size: 11px; color: var(--muted); transition: transform .15s ease; flex: none;
+}
+.pr-outer-chevron.open { transform: rotate(90deg); color: var(--black); }
+.pr-outer-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.pr-outer-title { font-size: 14.5px; font-weight: 700; color: var(--black); font-family: 'Space Grotesk', sans-serif; }
+.pr-outer-sub { font-size: 11.5px; color: var(--muted); }
+.pr-outer-note {
+  font-size: 11.5px; color: var(--muted); line-height: 1.55; padding: 12px 18px 0;
+  border-top: 1px solid var(--border); margin-top: 0;
+}
+.pr-outer-body { padding: 18px; display: flex; flex-direction: column; gap: 20px; }
+
+/* Payroll Summary's line-item rows double as a "table of contents" for the boxes below —
+   each non-total row gets a colored dot (matching its section's box) and is clickable,
+   scrolling to and auto-expanding that section (Kayee: "clicking it will bring them to
+   that section"). */
+.pr-summary-row-btn {
+  display: flex; align-items: center; gap: 8px; background: none; border: none; padding: 0;
+  font: inherit; color: inherit; cursor: pointer; text-align: left;
+}
+.pr-summary-row-btn:hover { text-decoration: underline; }
+.pr-summary-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* ==================== Footer ==================== */
 .footer { display: flex; align-items: center; justify-content: space-between; padding: 20px 32px; background: var(--black); }

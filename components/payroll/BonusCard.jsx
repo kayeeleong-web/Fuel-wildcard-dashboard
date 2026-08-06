@@ -23,10 +23,24 @@ const FROZEN_COLUMNS = [
  * people are planned for that role that month — no separate UI here, bonusMonthlyFlow
  * already does the multiply (Kayee, 2026-08-05: "bonus should be a calculation based on
  * [headcount ramp]").
+ *
+ * `scope` ('existing' | 'planned') restricts which bonuses this instance displays and
+ * offers to add — Existing Bonus lives inside the Existing outer box (linked to real
+ * roster people), Planned Bonus lives inside the Planned outer box (linked to Hiring
+ * Plan ramp roles), per Kayee's 2026-08-06 four-line-item Summary redesign. Both
+ * instances still read/write the SAME full `bonuses` array via onChange — scope only
+ * filters what's rendered here, so nothing is duplicated or lost switching between them.
  */
-export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onChange }) {
+export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onChange, scope = 'all' }) {
   const rosterById = Object.fromEntries(roster.map((e) => [e.id, e]));
-  const availableToAdd = roster.filter((e) => !bonuses.some((b) => b.employeeId === e.id));
+  const scopedBonuses = bonuses.filter((b) => {
+    if (scope === 'all') return true;
+    const employee = rosterById[b.employeeId];
+    const isRamp = !!employee?.isRamp;
+    return scope === 'planned' ? isRamp : !isRamp;
+  });
+  const scopedRoster = roster.filter((e) => (scope === 'planned' ? e.isRamp : scope === 'existing' ? !e.isRamp : true));
+  const availableToAdd = scopedRoster.filter((e) => !bonuses.some((b) => b.employeeId === e.id));
 
   function updateBonus(id, patch) {
     onChange(bonuses.map((b) => (b.id === id ? { ...b, ...patch } : b)));
@@ -59,7 +73,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
     onChange([...bonuses, { id: generateId('bonus'), employeeId, bonusAmount: 0, monthlyOverrides: {} }]);
   }
 
-  const rows = bonuses.map((bonus) => {
+  const rows = scopedBonuses.map((bonus) => {
     const employee = rosterById[bonus.employeeId];
     const monthCells = {};
     for (const iso of months) {
@@ -99,7 +113,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
     cells: { name: <b>TOTAL</b> },
     monthCells: Object.fromEntries(
       months.map((iso) => {
-        const sum = bonuses.reduce((acc, b) => acc + bonusMonthlyFlow(b, rosterById[b.employeeId], iso, assumptions), 0);
+        const sum = scopedBonuses.reduce((acc, b) => acc + bonusMonthlyFlow(b, rosterById[b.employeeId], iso, assumptions), 0);
         return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
       })
     ),
@@ -108,7 +122,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
   return (
     <PayrollTable
       title="Bonus"
-      subtitle={`${bonuses.length} people · Bonus Attainment ${assumptions.bonusAttainment}%`}
+      subtitle={`${scopedBonuses.length} ${scope === 'planned' ? 'planned role' : 'people'}${scopedBonuses.length === 1 ? '' : 's'} · Bonus Attainment ${assumptions.bonusAttainment}%`}
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}

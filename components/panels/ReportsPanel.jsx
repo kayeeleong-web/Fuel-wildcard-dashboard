@@ -72,7 +72,12 @@ function extendMonthsThrough(months, throughIso) {
  */
 export function ReportsPanel({ statements, customReports }) {
   const [reportType, setReportType] = useState('PL');
-  const [range, setRange] = useState('6');
+  // Defaults to the full 2026 calendar year (Jan-Dec) rather than a trailing window off
+  // the last actual month — per Kayee (2026-08-06): opening Reports used to always land
+  // on old months, requiring the ∞ toggle + a scroll past 2024/2025 every single refresh
+  // just to see this year's forecast. "Historical" (6M/12M/24M/∞, all anchored to the
+  // last actual month like before) is still one click away in the same toggle group.
+  const [range, setRange] = useState('yr2026');
 
   return (
     <>
@@ -92,6 +97,16 @@ export function ReportsPanel({ statements, customReports }) {
         </div>
         {reportType !== 'custom' && (
           <div className="seg right">
+            {/* "2026" is the default landing view (full Jan-Dec 2026, actual + forecast
+                together) — everything after it is grouped under one "Historical" label
+                since they all anchor to trailing windows off the last actual month
+                instead of a fixed calendar year (Kayee, 2026-08-06: "default to the full
+                year of 2026 ... if I want to go to historical I click another toggle"). */}
+            <button className={range === 'yr2026' ? 'active' : undefined} onClick={() => setRange('yr2026')}>
+              2026
+            </button>
+            <span className="seg-divider" />
+            <span className="seg-group-label">Historical</span>
             {[
               { id: '6', label: '6M' },
               { id: '12', label: '12M' },
@@ -127,12 +142,16 @@ export function ReportsPanel({ statements, customReports }) {
  *  instead of real recent months). fromEnd is 0 at the last actual month, negative
  *  for every padded month after it — negative values never satisfy any `< N` check
  *  below, so padded months correctly never carry r6/r12/r24, only r-all. */
-function rangeClasses(monthIndex, lastActualIndex) {
+function rangeClasses(monthIndex, lastActualIndex, month) {
   const fromEnd = lastActualIndex - monthIndex;
   const classes = ['r-all'];
   if (fromEnd >= 0 && fromEnd < 24) classes.push('r24');
   if (fromEnd >= 0 && fromEnd < 12) classes.push('r12');
   if (fromEnd >= 0 && fromEnd < 6) classes.push('r6');
+  // Calendar-year tag (independent of how far back/forward this column is from the last
+  // actual month) — what the "2026" default view's CSS actually filters on, since a
+  // fixed calendar year isn't expressible as a trailing window off lastActualIndex.
+  if (month) classes.push(`y${month.slice(0, 4)}`);
   return classes.join(' ');
 }
 
@@ -241,7 +260,7 @@ function StatementDoc({ statement, range }) {
               const year = m.slice(0, 4);
               const isFirstOfYear = i === 0 || months[i - 1].slice(0, 4) !== year;
               return (
-                <th key={m} className={rangeClasses(i, lastActualIndex)}>
+                <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
                   {isFirstOfYear ? year : ''}
                 </th>
               );
@@ -254,7 +273,7 @@ function StatementDoc({ statement, range }) {
               return (
                 <th
                   key={m}
-                  className={`${rangeClasses(i, lastActualIndex)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                  className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
                 >
                   <div className="report-month-label">{formatMonthLabel(m)}</div>
                   <div className={`report-month-status${isForecast ? ' fcst' : ''}`}>
@@ -304,7 +323,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
             return (
               <td
                 key={m}
-                className={`${rangeClasses(i, lastActualIndex)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
               >
                 {calcInfo ? (
                   <DrillPopover

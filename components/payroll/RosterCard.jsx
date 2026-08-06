@@ -1,7 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { DEPARTMENT_OPTIONS, EMPLOYMENT_STATUSES, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
+import {
+  DEPARTMENT_OPTIONS,
+  EMPLOYMENT_STATUSES,
+  formatPayrollAmount,
+  generateId,
+  monthlyCostFor,
+} from '../../lib/payroll/payrollData';
 import { DateInput, FillRangeButton, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
 const FROZEN_COLUMNS = [
@@ -23,7 +29,7 @@ const SECTION_ORDER = [
 ];
 
 /**
- * Employee Roster — the editable heart of the Payroll tab, but ONLY current real people
+ * Employees — the editable heart of the Payroll tab, but ONLY current real people
  * (Active / Planned (TBD) / Dismissed, per each person's actual "Employment" field).
  * Not-yet-hired roles with a ramping headcount live on their own Hiring Plan card
  * instead (Kayee, 2026-08-05: "create a separate section for hiring plan, leave current
@@ -32,9 +38,32 @@ const SECTION_ORDER = [
  * untouched, it just never renders or edits them. Frozen leading columns (Name → Base
  * Salary) stay put while the monthly $ grid scrolls. A TOTAL row is pinned at the top
  * so the running headcount cost (of real people only) is visible without scrolling.
+ * "+ Add Employee" lives on this card's own header (Kayee, 2026-08-06: "move the add
+ * employee button to the employee roster section") rather than the page-level header,
+ * so it sits right next to the list it actually adds to — same self-contained-add
+ * pattern as the Hiring Plan and Bonus cards' own add controls.
  */
-export function RosterCard({ roster, assumptions, months, todayIso, onChange, justAddedId, onFocusHandled }) {
+export function RosterCard({ roster, assumptions, months, todayIso, onChange }) {
   const employees = roster.filter((r) => !r.isRamp);
+  const [justAddedId, setJustAddedId] = useState(null);
+
+  function addEmployee() {
+    const id = generateId('emp');
+    const newEmployee = {
+      id,
+      name: '',
+      department: '',
+      costType: 'OpEx',
+      title: '',
+      startDate: '',
+      endDate: '',
+      employment: 'TBD',
+      baseSalary: 0,
+      monthlyOverrides: {},
+    };
+    onChange([...roster, newEmployee]);
+    setJustAddedId(id);
+  }
 
   // Drag-to-reorder (Kayee, 2026-08-05: "turn it into draggable so people can rearrange
   // people") — scoped to within one section only (Active/Planned/Dismissed don't mix),
@@ -172,7 +201,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
             focusOnMount={employee.id === justAddedId}
             onCommit={(v) => {
               updateEmployee(employee.id, { name: v });
-              if (employee.id === justAddedId) onFocusHandled?.();
+              if (employee.id === justAddedId) setJustAddedId(null);
             }}
           />
         ),
@@ -239,7 +268,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
 
   return (
     <PayrollTable
-      title="Employee Roster"
+      title="Employees"
       subtitle={`${employees.length} people`}
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
@@ -247,6 +276,13 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange, ju
       todayIso={todayIso}
       totalRow={totalRow}
       rowGroups={rowGroups}
+      headActions={
+        // Plain .btn (white bg), not .btn.primary — .btn.primary is solid black and
+        // would disappear against this card's own black header bar.
+        <button type="button" className="btn" onClick={addEmployee}>
+          + Add Employee
+        </button>
+      }
     />
   );
 }
