@@ -19,28 +19,35 @@ import {
   prevMonth,
 } from '../../lib/assumptions/assumptionsData';
 
-// Which Reports section a custom cost item's category rolls up under — matched by the
-// live sheet's own `section` string (read verbatim, same as row.key/label — see
-// lib/data/sources/googleSheets.ts), with a few common aliases for OpEx since only
-// "COGS" has been directly confirmed from a screenshot so far (2026-08-06). A category
-// with no matching section present just doesn't get individual rows (safe no-op) —
-// its $ still counts in Total COGS/OpEx either way (see cogsTotalForMonth/
-// opexTotalForMonth above), so nothing is ever silently missing from the totals, only
-// from the optional per-item breakdown.
+// Which Reports section a NOT-YET-matched custom cost item's category rolls up under
+// — matched by the live sheet's own `section` string (read verbatim, same as
+// row.key/label — see lib/data/sources/googleSheets.ts). COGS is confirmed to be one
+// flat section, so unmatched CoGS items land there. OpEx is NOT one flat section on
+// Kayee's real sheet (2026-08-06 screenshot: it's split into granular sections like
+// FACILITIES, each with its own Total row) — there's no single safe place to drop an
+// unmatched OpEx item, so it's deliberately left out here. An unmatched OpEx item still
+// counts in Total OpEx (cogsTotalForMonth/opexTotalForMonth already sum every item
+// regardless), it just won't get its own visible row until it's matched to a real row
+// below or a real OpEx section is confirmed.
 const CUSTOM_ACCOUNT_SECTION_ALIASES = {
   CoGS: ['COGS'],
-  OpEx: ['OPEX', 'OPERATING EXPENSES', 'OPERATING EXPENSE', 'OPEX & OTHER', 'SG&A', 'OPERATING COSTS', 'OPERATING EXPENSES (OPEX)'],
 };
 
-// Cost items that are the SAME cost as an existing real P&L row, just entered under a
-// different name on Assumptions — these feed that existing row directly instead of
-// getting their own new custom-account row (which would double it up on-screen).
-// Confirmed by Kayee (2026-08-06): "software projection in cogs should be at the same
-// line as software - cost of revenue... they are the same". Keyed by the Assumptions
-// cost item's stable `id` (see SEED_COST_ITEMS in assumptionsData.js) -> the real P&L
-// row's exact label.
+// Cost items that are the SAME cost as an existing real P&L row, just named
+// differently on Assumptions than the row's actual label — these feed that existing
+// row directly instead of getting their own new custom-account row (which would
+// double it up on-screen). Exact-name matches (e.g. the "Rent" cost item -> a real
+// "Rent" row) are handled automatically below (matchCostItemToExistingRow) and don't
+// need an entry here — this map is only for name MISMATCHES Kayee's confirmed by hand:
+//   - software -> 'Software - Cost of Revenue' (2026-08-06: "they are the same")
+//   - travel -> 'Total Travel' (2026-08-06: "Travel is the total travel")
+//   - team-lunches -> 'Meals (Office)' (2026-08-06: "Team Lunches is Meals (Office)")
+// Keyed by the Assumptions cost item's stable `id` (see SEED_COST_ITEMS in
+// assumptionsData.js) -> the real P&L row's exact label.
 const COST_ITEM_ROW_LABEL_OVERRIDES = {
   software: 'Software - Cost of Revenue',
+  travel: 'Total Travel',
+  'team-lunches': 'Meals (Office)',
 };
 
 /** Which PL rows get their projected (post-actual) months filled from the
@@ -365,14 +372,29 @@ function costCalcExplanation(rowLabel, ctx, iso) {
       ],
     };
   }
-  if (rowLabel === COST_ITEM_ROW_LABEL_OVERRIDES.software) {
-    const item = ctx.costItems.find((i) => i.id === 'software');
+  const matchedItem = matchCostItemToRowLabel(rowLabel, ctx.costItems);
+  if (matchedItem) {
     return {
-      calcNote: 'Same figure as the "Software" cost item on the Assumptions tab (CoGS) — shown on this line since it\'s the same cost. Edit the amount there.',
-      components: item ? [{ label: 'Software (Assumptions)', value: fmt(costItemAmountForMonth(item, iso)) }] : [],
+      calcNote: `Same figure as the "${matchedItem.name}" cost item on the Assumptions tab (${matchedItem.category}) — shown on this line since it's the same cost. Edit the amount there.`,
+      components: [{ label: `${matchedItem.name} (Assumptions)`, value: fmt(costItemAmountForMonth(matchedItem, iso)) }],
     };
   }
   return null;
+}
+
+/** Finds the Assumptions cost item (if any) that feeds a given real P&L row — an
+ *  explicit COST_ITEM_ROW_LABEL_OVERRIDES entry always wins (for confirmed name
+ *  mismatches like Travel -> "Total Travel"); otherwise falls back to an exact,
+ *  case-insensitive name match (e.g. a "Rent" cost item auto-matches a real "Rent"
+ *  row with zero extra config) — a safe default since an exact name match is about as
+ *  strong a "these are the same thing" signal as this data model can give without a
+ *  dedicated GL-account-id field on either side. */
+function matchCostItemToRowLabel(rowLabel, costItems) {
+  if (!costItems || !rowLabel) return null;
+  const overrideId = Object.keys(COST_ITEM_ROW_LABEL_OVERRIDES).find((id) => COST_ITEM_ROW_LABEL_OVERRIDES[id] === rowLabel);
+  if (overrideId) return costItems.find((i) => i.id === overrideId) || null;
+  const target = rowLabel.trim().toLowerCase();
+  return costItems.find((i) => (i.name || '').trim().toLowerCase() === target) || null;
 }
 
 /** Returns `statement.rows` unchanged, except any row in PL_REVENUE_PROJECTIONS gets
@@ -412,24 +434,33 @@ function withCostProjections(statementType, rows, months, lastActualIndex, ctx) 
   });
 }
 
-/** Patches a specific Assumptions cost item's forecast values directly onto an EXISTING
- *  real P&L row (see COST_ITEM_ROW_LABEL_OVERRIDES) instead of adding a new one — for
- *  cost items Kayee's confirmed are literally the same line as something already on
- *  the sheet, just named differently on Assumptions (2026-08-06: Software). Same
- *  forecast-only rule as everything else here; the matched row's item is excluded from
- *  withCustomAccountRows below so it never ALSO shows up as a duplicate new row. */
+/** Patches every Assumptions cost item that matches an EXISTING real P&L row (via
+ *  matchCostItemToRowLabel — either an explicit override or an exact name match, e.g.
+ *  Rent -> Rent) directly onto that row, instead of adding a new one — for cost items
+ *  that are literally the same line as something already on the sheet, just possibly
+ *  named differently on Assumptions (2026-08-06: Software, Travel, Team Lunches).
+ *  Same forecast-only rule as everything else here. Returns { rows, matchedIds } —
+ *  matchedIds is used by withCustomAccountRows below so a matched item never ALSO
+ *  shows up as a duplicate new row. */
 function withNamedCostItemProjections(statementType, rows, costItems, months, lastActualIndex) {
-  if (statementType !== 'PL' || !costItems || costItems.length === 0) return rows;
-  return rows.map((row) => {
-    const itemId = Object.keys(COST_ITEM_ROW_LABEL_OVERRIDES).find((id) => COST_ITEM_ROW_LABEL_OVERRIDES[id] === row.label);
-    const item = itemId && costItems.find((i) => i.id === itemId);
+  if (statementType !== 'PL' || !costItems || costItems.length === 0) return { rows, matchedIds: new Set() };
+  const matchedIds = new Set();
+  const patchedRows = rows.map((row) => {
+    // Not excluding isTotal here on purpose — "Travel" maps onto a real "Total Travel"
+    // row (2026-08-06: "Travel is the total travel"), which is itself a section total,
+    // not a leaf line. `row.custom` IS excluded so this can never match onto a row we
+    // ourselves injected (this runs before that injection anyway, but harmless either way).
+    if (row.custom) return row;
+    const item = matchCostItemToRowLabel(row.label, costItems);
     if (!item) return row;
+    matchedIds.add(item.id);
     const patchedValues = { ...row.values };
     for (let i = lastActualIndex + 1; i < months.length; i++) {
       patchedValues[months[i]] = costItemAmountForMonth(item, months[i]);
     }
     return { ...row, values: patchedValues };
   });
+  return { rows: patchedRows, matchedIds };
 }
 
 /** First matching section name that's actually present in this statement's real rows —
@@ -474,10 +505,11 @@ function buildCustomAccountRow(item, section, months, lastActualIndex) {
  *  stays read-only (unlike Hampton's inline-editable version) — editing still only
  *  happens on the Assumptions tab, one source of truth, no dual-edit risk.
  *
- *  Applied AFTER withCostProjections, so it only ADDS visible rows — it never changes
- *  Total COGS/Total OpEx's numbers (those already sum every cost item internally via
- *  cogsTotalForMonth/opexTotalForMonth), so there's no double-counting risk. */
-function withCustomAccountRows(statementType, rows, costItems, months, lastActualIndex) {
+ *  Applied AFTER withNamedCostItemProjections, so it only ADDS visible rows for items
+ *  that DIDN'T already find a real row home — it never changes Total COGS/Total OpEx's
+ *  numbers (those already sum every cost item internally via cogsTotalForMonth/
+ *  opexTotalForMonth), so there's no double-counting risk. */
+function withCustomAccountRows(statementType, rows, costItems, months, lastActualIndex, matchedIds) {
   if (statementType !== 'PL' || !costItems || costItems.length === 0) return rows;
   const sectionsPresent = new Set(rows.map((r) => r.section));
   let next = rows;
@@ -485,9 +517,9 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
   for (const category of ['CoGS', 'OpEx']) {
     const section = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES[category]);
     if (!section) continue;
-    // Skip any item already handled by withNamedCostItemProjections (merged onto an
-    // existing real row instead) — otherwise it'd show up twice.
-    const items = costItems.filter((i) => i.category === category && !(i.id in COST_ITEM_ROW_LABEL_OVERRIDES));
+    // Skip any item already merged onto an existing real row by
+    // withNamedCostItemProjections — otherwise it'd show up twice.
+    const items = costItems.filter((i) => i.category === category && !matchedIds.has(i.id));
     if (items.length === 0) continue;
 
     // Insert right before this section's Total row (so custom rows sit below the
@@ -538,8 +570,14 @@ function StatementDoc({ statement, range }) {
   };
   const revenueProjectedRows = withRevenueProjections(statement, months, lastActualIndex, revenue);
   const costProjectedRows = withCostProjections(statement.type, revenueProjectedRows, months, lastActualIndex, costCtx);
-  const namedItemRows = withNamedCostItemProjections(statement.type, costProjectedRows, costCtx.costItems, months, lastActualIndex);
-  const rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex);
+  const { rows: namedItemRows, matchedIds } = withNamedCostItemProjections(
+    statement.type,
+    costProjectedRows,
+    costCtx.costItems,
+    months,
+    lastActualIndex
+  );
+  const rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex, matchedIds);
 
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
