@@ -400,6 +400,33 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .seg-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
 .seg-group-label { font-size: 10px; font-weight: 700; color: var(--muted-2); text-transform: uppercase; letter-spacing: .5px; padding: 0 2px; white-space: nowrap; }
 
+/* ==================== Reports — P&L Assumptions sidebar ==================== */
+/* 30/70 split when open (Kayee, 2026-08-06: "keep the width 30/70"), collapsing to a
+   slim hamburger rail so the P&L table reclaims today's full-width layout when the
+   sidebar isn't needed ("hide to hamburger you can keep the original layout we have
+   now"). align-items: flex-start so the sidebar's height never stretches to match the
+   (much taller) scrolling table next to it. */
+.reports-with-sidebar { display: flex; align-items: flex-start; gap: 18px; }
+.reports-sidebar { flex: 0 0 30%; max-width: 30%; min-width: 280px; display: flex; flex-direction: column; gap: 18px; }
+.reports-main { flex: 1 1 0%; min-width: 0; }
+.reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
+.reports-sidebar-rail { display: flex; }
+.reports-sidebar-toggle { flex: none; }
+
+/* Revenue Assumptions fields stacked one per line (Kayee: "instead of horizontal make
+   them vertical") — reuses the exact same .pr-assumption field component as the
+   Payroll assumptions bar (app/globals.css `.pr-assumption` is already internally
+   column-oriented: label above input), this container just stacks the fields
+   themselves in a column instead of wrapping them in a row. */
+.pr-assumption-sidebar-list { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; }
+.pr-assumption-sidebar-list .pr-assumption-input-wrap { justify-content: flex-end; }
+.pr-assumption-sidebar-list .pr-input-assumption { flex: 1; width: auto; }
+
+/* A "driver" row embedded directly in the P&L (the # of Campaigns / # of Meetings
+   inputs under Subscription/Transaction Revenue, 2026-08-06) — indented + muted +
+   italic so it reads as a supporting input for the row above it, not another GL line. */
+tr.report-driver-row td:first-child { padding-left: 34px; font-style: italic; color: var(--muted); font-size: 11.5px; }
+
 /* Year-band header row (2026 / 2027 / ...) always stays visible regardless of which
    range is selected — it carries every range class unconditionally so none of the
    three hide-rules above ever match it. Its colSpan simply shrinks to whatever

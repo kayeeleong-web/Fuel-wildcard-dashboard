@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
+import { MonthInput } from '../payroll/PayrollTable';
+import { PLAssumptionsSidebar } from '../reports/PLAssumptionsSidebar';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
@@ -178,6 +180,17 @@ export function ReportsPanel({ statements, customReports }) {
   // actual not projection").
   const [range, setRange] = useState('yr2026');
 
+  // Lifted up from StatementDoc (2026-08-06) so the P&L Assumptions sidebar and the
+  // table itself share ONE Assumptions state instead of each reading their own copy —
+  // Kayee: "merge assumption into reports... so that everything is being in the same
+  // place, no need to switch between assumption and P&L." Sidebar defaults open so the
+  // merge is visible immediately; collapses to a slim rail when not needed, per Kayee's
+  // "like a lot of major websites... hide it into a hamburger."
+  const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const showSidebar = reportType === 'PL';
+
   return (
     <>
       <PageHead title="Reports" subtitle="P&L, Cash Flow, Balance Sheet, and saved custom reports" />
@@ -222,10 +235,40 @@ export function ReportsPanel({ statements, customReports }) {
           so every wide-table tab behaves consistently (Kayee, 2026-08-05: "all pages
           needs to be consistant"). Toolbar/PageHead above stay at the normal page width. */}
       <div className="page-wide">
-        {reportType !== 'custom' ? (
-          <StatementDoc statement={statements[reportType]} range={range} />
-        ) : (
+        {reportType === 'custom' ? (
           <CustomReportsList reports={customReports} />
+        ) : showSidebar ? (
+          // P&L only, for now (Kayee, 2026-08-06: "we work on P&L first") — a 30/70
+          // split when the Assumptions sidebar is open, collapsing back to today's
+          // full-width table (the exact same StatementDoc, unchanged) when it's
+          // hidden into the hamburger rail.
+          <div className={`reports-with-sidebar${sidebarCollapsed ? ' is-collapsed' : ''}`}>
+            <PLAssumptionsSidebar
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+              revenue={assumptionsHydrated ? assumptionsState?.revenue : null}
+              costItems={assumptionsHydrated ? assumptionsState?.costItems : null}
+              onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
+              onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
+            />
+            <div className="reports-main">
+              <StatementDoc
+                statement={statements[reportType]}
+                range={range}
+                assumptionsState={assumptionsState}
+                setAssumptionsState={setAssumptionsState}
+                assumptionsHydrated={assumptionsHydrated}
+              />
+            </div>
+          </div>
+        ) : (
+          <StatementDoc
+            statement={statements[reportType]}
+            range={range}
+            assumptionsState={assumptionsState}
+            setAssumptionsState={setAssumptionsState}
+            assumptionsHydrated={assumptionsHydrated}
+          />
         )}
       </div>
     </>
@@ -259,7 +302,7 @@ function rangeClasses(monthIndex, lastActualIndex, month) {
  *  so they don't get a popover — never fabricate a composition that isn't there. */
 function siblingValuesAtMonth(rows, row, month) {
   return rows
-    .filter((r) => r.key !== row.key && !r.isTotal)
+    .filter((r) => r.key !== row.key && !r.isTotal && !r.driver)
     .map((r) => ({
       label: r.label,
       value: r.values[month] != null ? `$${Math.round(r.values[month]).toLocaleString('en-US')}` : '—',
@@ -561,8 +604,57 @@ function customAccountCalcExplanation(row) {
   };
 }
 
-function StatementDoc({ statement, range }) {
-  const { state: assumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
+function buildDriverRow(key, label, section, months, getValue, onCommit) {
+  const monthCells = {};
+  for (const iso of months) {
+    monthCells[iso] = <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />;
+  }
+  return { key, label, section, isTotal: false, driver: true, values: {}, monthCells };
+}
+
+/** Embeds the # of Campaigns / # of Meetings inputs directly under Subscription
+ *  Revenue / Transaction Revenue in the P&L itself — Kayee (2026-08-06): "put it
+ *  inside of revenue so that as the user adjust it, it will show up directly in
+ *  revenue... no need to switch between assumption and P&L." These are genuinely
+ *  editable everywhere (not forecast-only like other projected rows) since they're
+ *  drivers, not booked GL dollars — editing an earlier month still matters even after
+ *  it's "actual" because Meetings' auto-suggestion looks back at Campaigns from N
+ *  months ago. Always inserted right after their revenue row regardless of range
+ *  toggle — the range CSS classes on rangeClasses() hide/show columns, this only
+ *  controls which ROWS exist. */
+function withRevenueDriverRows(rows, months, revenue, onSetCampaign, onSetMeeting) {
+  if (!revenue || !onSetCampaign || !onSetMeeting) return rows;
+  let next = rows;
+  const subRow = next.find((r) => r.key === 'revenue_subscription_revenue');
+  const txRow = next.find((r) => r.key === 'revenue_transaction_revenue');
+  if (subRow) {
+    const idx = next.findIndex((r) => r.key === 'revenue_subscription_revenue');
+    const driverRow = buildDriverRow(
+      '__driver_campaigns',
+      '↳ # of Campaigns',
+      subRow.section,
+      months,
+      (iso) => campaignsForMonth(revenue, iso),
+      onSetCampaign
+    );
+    next = [...next.slice(0, idx + 1), driverRow, ...next.slice(idx + 1)];
+  }
+  if (txRow) {
+    const idx = next.findIndex((r) => r.key === 'revenue_transaction_revenue');
+    const driverRow = buildDriverRow(
+      '__driver_meetings',
+      '↳ # of Meetings',
+      txRow.section,
+      months,
+      (iso) => meetingsForMonth(revenue, iso),
+      onSetMeeting
+    );
+    next = [...next.slice(0, idx + 1), driverRow, ...next.slice(idx + 1)];
+  }
+  return next;
+}
+
+function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
   if (!statement) return <div className="cap">No data for this statement yet.</div>;
@@ -610,6 +702,27 @@ function StatementDoc({ statement, range }) {
     rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex, matchedIds);
   } catch (err) {
     console.warn('Custom cost-item row projection failed:', err);
+  }
+  if (statement.type === 'PL' && revenue && setAssumptionsState) {
+    try {
+      rows = withRevenueDriverRows(
+        rows,
+        months,
+        revenue,
+        (iso, n) =>
+          setAssumptionsState({
+            ...assumptionsState,
+            revenue: { ...assumptionsState.revenue, campaignsByMonth: { ...assumptionsState.revenue.campaignsByMonth, [iso]: n } },
+          }),
+        (iso, n) =>
+          setAssumptionsState({
+            ...assumptionsState,
+            revenue: { ...assumptionsState.revenue, meetingsByMonth: { ...assumptionsState.revenue.meetingsByMonth, [iso]: n } },
+          })
+      );
+    } catch (err) {
+      console.warn('Revenue driver row injection failed:', err);
+    }
   }
 
   return (
@@ -687,9 +800,20 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         <td colSpan={months.length}></td>
       </tr>
       {rows.map((row) => (
-        <tr key={row.key} className={row.isTotal ? 'total' : undefined}>
+        <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
           <td>{row.label}</td>
           {months.map((m, i) => {
+            // A "driver" row (e.g. the embedded # of Campaigns / # of Meetings inputs,
+            // 2026-08-06) supplies its own editable cell content directly instead of a
+            // computed $ value — same monthCells-override pattern PayrollTable already
+            // uses, so this table can hold a real <input>, not just formatted text.
+            if (row.monthCells && row.monthCells[m] !== undefined) {
+              return (
+                <td key={m} className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}`}>
+                  {row.monthCells[m]}
+                </td>
+              );
+            }
             const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
             const isForecast = i > lastActualIndex;
             // Same defensive rule as the row pipeline above (StatementDoc) — a bad
