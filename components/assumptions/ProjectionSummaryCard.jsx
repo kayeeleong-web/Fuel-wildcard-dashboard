@@ -1,8 +1,7 @@
 'use client';
 
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
-import { isActiveInMonth, monthlyCostFor, bonusMonthlyFlow, formatMonthLabel } from '../../lib/payroll/payrollData';
-import { formatPayrollAmount } from '../../lib/payroll/payrollData';
+import { formatMonthLabel, formatPayrollAmount, headcountCostByCostType } from '../../lib/payroll/payrollData';
 import {
   FIRST_PROJECTED_MONTH,
   netCollectedRevenueForMonth,
@@ -22,21 +21,12 @@ function monthsForward(startIso, count) {
 
 /** Headcount cost (base + bonus, loaded) for one costType ('CoGS' | 'OpEx'), one
  *  month — read from the Payroll tab's own saved roster/bonuses so this never
- *  duplicates headcount data entry. */
+ *  duplicates headcount data entry. Thin null-guard wrapper around the shared
+ *  headcountCostByCostType formula (lib/payroll/payrollData.js) — Reports' Total
+ *  COGS/OpEx forecast projection uses the exact same shared formula (2026-08-06). */
 function headcountCostForMonth(payrollState, costType, iso) {
   if (!payrollState) return 0;
-  const { roster, bonuses, assumptions } = payrollState;
-  let total = 0;
-  for (const emp of roster) {
-    if (emp.costType !== costType) continue;
-    total += monthlyCostFor(emp, iso, assumptions);
-  }
-  for (const bonus of bonuses) {
-    const emp = roster.find((r) => r.id === bonus.employeeId);
-    if (!emp || emp.costType !== costType) continue;
-    total += bonusMonthlyFlow(bonus, emp, iso, assumptions);
-  }
-  return total;
+  return headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, costType, iso);
 }
 
 /**

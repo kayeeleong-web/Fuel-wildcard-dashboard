@@ -5,13 +5,31 @@ import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
+import { usePayrollState } from '../../lib/payroll/usePayrollState';
+import { headcountCostByCostType } from '../../lib/payroll/payrollData';
 import {
   upfrontRevenueForMonth,
   meetingRevenueForMonth,
   netCollectedRevenueForMonth,
   campaignsForMonth,
   meetingsForMonth,
+  costPerCampaignForMonth,
+  costItemsTotalForMonth,
+  costItemAmountForMonth,
 } from '../../lib/assumptions/assumptionsData';
+
+// Which Reports section a custom cost item's category rolls up under — matched by the
+// live sheet's own `section` string (read verbatim, same as row.key/label — see
+// lib/data/sources/googleSheets.ts), with a few common aliases for OpEx since only
+// "COGS" has been directly confirmed from a screenshot so far (2026-08-06). A category
+// with no matching section present just doesn't get individual rows (safe no-op) —
+// its $ still counts in Total COGS/OpEx either way (see cogsTotalForMonth/
+// opexTotalForMonth above), so nothing is ever silently missing from the totals, only
+// from the optional per-item breakdown.
+const CUSTOM_ACCOUNT_SECTION_ALIASES = {
+  CoGS: ['COGS'],
+  OpEx: ['OPEX', 'OPERATING EXPENSES', 'OPERATING EXPENSE', 'OPEX & OTHER', 'SG&A', 'OPERATING COSTS', 'OPERATING EXPENSES (OPEX)'],
+};
 
 /** Which PL rows get their projected (post-actual) months filled from the
  *  Assumptions tab, and which Assumptions calculation feeds each one — per Kayee
@@ -28,6 +46,62 @@ const PL_REVENUE_PROJECTIONS = {
   revenue_subscription_revenue: (rev, iso) => upfrontRevenueForMonth(rev, iso),
   revenue_transaction_revenue: (rev, iso) => meetingRevenueForMonth(rev, iso),
   total_revenue: (rev, iso) => netCollectedRevenueForMonth(rev, iso),
+};
+
+/** Total COGS = Cost Per Campaign + every Assumptions Cost Item tagged CoGS +
+ *  Payroll headcount (base+bonus) tagged costType=CoGS — this is Kayee's own stated
+ *  definition (see lib/assumptions/assumptionsData.js header, 2026-08-05) and the
+ *  exact same formula the Assumptions tab's Projection Preview already computes
+ *  (components/assumptions/ProjectionSummaryCard.jsx), just reused here. */
+function cogsTotalForMonth(revenue, costItems, payrollState, iso) {
+  return (
+    costPerCampaignForMonth(revenue, iso) +
+    costItemsTotalForMonth(costItems, 'CoGS', iso) +
+    (payrollState ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'CoGS', iso) : 0)
+  );
+}
+
+/** Total OpEx = every Assumptions Cost Item tagged OpEx + Payroll headcount tagged
+ *  costType=OpEx — same definition/source as ProjectionSummaryCard's OPEX line. */
+function opexTotalForMonth(costItems, payrollState, iso) {
+  return (
+    costItemsTotalForMonth(costItems, 'OpEx', iso) +
+    (payrollState ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso) : 0)
+  );
+}
+
+/** COGS/OpEx projection, matched by row LABEL rather than row.key (2026-08-06) — unlike
+ *  Revenue's keys, the live sheet's actual Key-column strings for Total COGS/OpEx
+ *  haven't been confirmed yet, but these exact LABELS are directly visible in Kayee's
+ *  own P&L screenshot (2026-08-06), and label text is read verbatim from the sheet the
+ *  same way key is (lib/data/sources/googleSheets.ts), so matching on it carries no
+ *  extra risk. A few common aliases are included for the OpEx/margin rows, which
+ *  weren't visible in that screenshot — a non-matching alias is a safe no-op (the cell
+ *  just stays "—", never a fabricated wrong number).
+ *
+ *  Deliberately NOT wired: any "Net Income" row — that may include non-operating items
+ *  (interest, taxes, D&A, other income) this tab has no data for at all, and a
+ *  plausible-looking-but-incomplete number there would be worse than the current blank
+ *  (CLAUDE.md: "a wrong number that looks fine is worse than a visible error"). */
+const PL_COST_PROJECTIONS_BY_LABEL = {
+  'Total COGS': (ctx, iso) => cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  'Total OpEx': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
+  'Total OPEX': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
+  'Total Operating Expenses': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
+  'Gross Profit': (ctx, iso) => netCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  'Gross Margin': (ctx, iso) => netCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  'Operating Profit': (ctx, iso) =>
+    netCollectedRevenueForMonth(ctx.revenue, iso) -
+    cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
+    opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
+  'Operating Income': (ctx, iso) =>
+    netCollectedRevenueForMonth(ctx.revenue, iso) -
+    cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
+    opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
+  'Operating Margin': (ctx, iso) =>
+    netCollectedRevenueForMonth(ctx.revenue, iso) -
+    cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
+    opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
 };
 
 const STATEMENT_LABELS = { PL: 'P&L', CF: 'Cash Flow', BS: 'Balance Sheet' };
@@ -210,6 +284,65 @@ function revenueCalcExplanation(rowKey, revenue, iso) {
   return null;
 }
 
+/** Same idea as revenueCalcExplanation, for the label-matched COGS/OpEx/margin rows
+ *  (see PL_COST_PROJECTIONS_BY_LABEL above) — shows what actually fed the number
+ *  instead of the generic same-section-siblings popover, since those siblings (the
+ *  individual GL-category COGS lines) aren't populated by this projection and would
+ *  otherwise show as a confusing wall of "—" under a real total. */
+function costCalcExplanation(rowLabel, ctx, iso) {
+  if (!ctx.revenue) return null;
+  const cogs = cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso);
+  const opex = opexTotalForMonth(ctx.costItems, ctx.payrollState, iso);
+  const totalRevenue = netCollectedRevenueForMonth(ctx.revenue, iso);
+  const headcountCogs = ctx.payrollState
+    ? headcountCostByCostType(ctx.payrollState.roster, ctx.payrollState.bonuses, ctx.payrollState.assumptions, 'CoGS', iso)
+    : 0;
+  const headcountOpex = ctx.payrollState
+    ? headcountCostByCostType(ctx.payrollState.roster, ctx.payrollState.bonuses, ctx.payrollState.assumptions, 'OpEx', iso)
+    : 0;
+  const fmt = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
+
+  if (rowLabel === 'Total COGS') {
+    return {
+      calcNote: 'Total COGS = Cost Per Campaign + Non-Headcount Cost items tagged CoGS + Payroll headcount tagged CoGS. Editable on the Assumptions and Payroll tabs.',
+      components: [
+        { label: 'Cost Per Campaign', value: fmt(costPerCampaignForMonth(ctx.revenue, iso)) },
+        { label: 'Non-Headcount Costs (CoGS)', value: fmt(costItemsTotalForMonth(ctx.costItems, 'CoGS', iso)) },
+        { label: 'Payroll Headcount (CoGS)', value: fmt(headcountCogs) },
+      ],
+    };
+  }
+  if (['Total OpEx', 'Total OPEX', 'Total Operating Expenses'].includes(rowLabel)) {
+    return {
+      calcNote: 'Total OpEx = Non-Headcount Cost items tagged OpEx + Payroll headcount tagged OpEx. Editable on the Assumptions and Payroll tabs.',
+      components: [
+        { label: 'Non-Headcount Costs (OpEx)', value: fmt(costItemsTotalForMonth(ctx.costItems, 'OpEx', iso)) },
+        { label: 'Payroll Headcount (OpEx)', value: fmt(headcountOpex) },
+      ],
+    };
+  }
+  if (['Gross Profit', 'Gross Margin'].includes(rowLabel)) {
+    return {
+      calcNote: 'Gross Profit = Total Revenue − Total COGS.',
+      components: [
+        { label: 'Total Revenue', value: fmt(totalRevenue) },
+        { label: 'Total COGS', value: fmt(cogs) },
+      ],
+    };
+  }
+  if (['Operating Profit', 'Operating Income', 'Operating Margin'].includes(rowLabel)) {
+    return {
+      calcNote: 'Operating Profit = Total Revenue − Total COGS − Total OpEx.',
+      components: [
+        { label: 'Total Revenue', value: fmt(totalRevenue) },
+        { label: 'Total COGS', value: fmt(cogs) },
+        { label: 'Total OpEx', value: fmt(opex) },
+      ],
+    };
+  }
+  return null;
+}
+
 /** Returns `statement.rows` unchanged, except any row in PL_REVENUE_PROJECTIONS gets
  *  its PROJECTED months (index > lastActualIndex) filled from the Assumptions tab's
  *  live state instead of left blank. Actual months are never touched — only indices
@@ -228,8 +361,107 @@ function withRevenueProjections(statement, months, lastActualIndex, revenue) {
   });
 }
 
+/** Same idea as withRevenueProjections, matched by row LABEL instead of row.key (see
+ *  PL_COST_PROJECTIONS_BY_LABEL for why) — Total COGS/OpEx and the margin rows
+ *  derived from them (2026-08-06, Kayee: "you should have cogs payroll from the
+ *  payroll tab and the expenses from assumptions... did you link it?" — this is that
+ *  link). `rows` here is already the output of withRevenueProjections, so Total
+ *  Revenue is already patched before Gross Profit/Operating Profit read it. */
+function withCostProjections(statementType, rows, months, lastActualIndex, ctx) {
+  if (statementType !== 'PL' || !ctx.revenue) return rows;
+  return rows.map((row) => {
+    const projectFn = PL_COST_PROJECTIONS_BY_LABEL[row.label];
+    if (!projectFn) return row;
+    const patchedValues = { ...row.values };
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      patchedValues[months[i]] = projectFn(ctx, months[i]);
+    }
+    return { ...row, values: patchedValues };
+  });
+}
+
+/** First matching section name that's actually present in this statement's real rows —
+ *  never invents a section that isn't there. */
+function findPresentSection(sectionsPresent, aliases) {
+  for (const alias of aliases) {
+    if (sectionsPresent.has(alias)) return alias;
+  }
+  return null;
+}
+
+function buildCustomAccountRow(item, section, months, lastActualIndex) {
+  const values = {};
+  // Forecast-only, same rule as Hampton's original (never masks a real booked GL
+  // month) — a custom account has no GL entry of its own, so actual months stay "—".
+  for (let i = lastActualIndex + 1; i < months.length; i++) {
+    values[months[i]] = costItemAmountForMonth(item, months[i]);
+  }
+  return {
+    key: `custom_cost_${item.id}`,
+    label: item.name || 'Untitled',
+    section,
+    isTotal: false,
+    custom: true,
+    values,
+  };
+}
+
+/** Ports Hampton's "Custom Accounts" pattern (custom-accounts-feature-reference.md,
+ *  2026-08-06): every Non-Headcount Cost item Kayee has already created on the
+ *  Assumptions tab shows up as its own named row in the matching COGS/OpEx section
+ *  here, instead of only being folded into the Total. No new "create account" UI
+ *  needed in Reports — Assumptions' existing "+ Add Cost" IS the creation flow; this
+ *  just makes what's already created visible where the P&L actually lives. Reports
+ *  stays read-only (unlike Hampton's inline-editable version) — editing still only
+ *  happens on the Assumptions tab, one source of truth, no dual-edit risk.
+ *
+ *  Applied AFTER withCostProjections, so it only ADDS visible rows — it never changes
+ *  Total COGS/Total OpEx's numbers (those already sum every cost item internally via
+ *  cogsTotalForMonth/opexTotalForMonth), so there's no double-counting risk. */
+function withCustomAccountRows(statementType, rows, costItems, months, lastActualIndex) {
+  if (statementType !== 'PL' || !costItems || costItems.length === 0) return rows;
+  const sectionsPresent = new Set(rows.map((r) => r.section));
+  let next = rows;
+
+  for (const category of ['CoGS', 'OpEx']) {
+    const section = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES[category]);
+    if (!section) continue;
+    const items = costItems.filter((i) => i.category === category);
+    if (items.length === 0) continue;
+
+    // Insert right before this section's Total row (so custom rows sit below the
+    // built-in GL line items, above the Total, same order Hampton uses) — falls back
+    // to right after the section's last row if it has no Total row of its own.
+    let insertAt = next.findIndex((r) => r.section === section && r.isTotal);
+    if (insertAt === -1) {
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].section === section) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+    }
+    if (insertAt === -1) continue;
+
+    const customRows = items.map((item) => buildCustomAccountRow(item, section, months, lastActualIndex));
+    next = [...next.slice(0, insertAt), ...customRows, ...next.slice(insertAt)];
+  }
+  return next;
+}
+
+/** Explains a custom account row — there's no further breakdown (it's a single
+ *  user-entered $ figure, same as a MonthInput cell on Assumptions), so this is just a
+ *  pointer back to where it's actually edited, not a components list. */
+function customAccountCalcExplanation(row) {
+  return {
+    calcNote: `"${row.label}" is a custom account entered on the Assumptions tab's Non-Headcount Costs table — edit it there. It's already included in this section's Total.`,
+    components: [],
+  };
+}
+
 function StatementDoc({ statement, range }) {
   const { state: assumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
+  const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
   if (!statement) return <div className="cap">No data for this statement yet.</div>;
   // currentMonth = the last ACTUAL month (before any blank padding), so "active-col"
@@ -238,7 +470,14 @@ function StatementDoc({ statement, range }) {
   const months = extendMonthsThrough(statement.months, PROJECTION_HORIZON);
   const lastActualIndex = statement.months.length - 1;
   const revenue = assumptionsHydrated ? assumptionsState?.revenue : null;
-  const rows = withRevenueProjections(statement, months, lastActualIndex, revenue);
+  const costCtx = {
+    revenue,
+    costItems: assumptionsHydrated ? assumptionsState?.costItems || [] : [],
+    payrollState: payrollHydrated ? payrollState : null,
+  };
+  const revenueProjectedRows = withRevenueProjections(statement, months, lastActualIndex, revenue);
+  const costProjectedRows = withCostProjections(statement.type, revenueProjectedRows, months, lastActualIndex, costCtx);
+  const rows = withCustomAccountRows(statement.type, costProjectedRows, costCtx.costItems, months, lastActualIndex);
 
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
@@ -294,6 +533,7 @@ function StatementDoc({ statement, range }) {
               currentMonth={currentMonth}
               lastActualIndex={lastActualIndex}
               revenue={revenue}
+              costCtx={costCtx}
             />
           ))}
         </tbody>
@@ -302,7 +542,7 @@ function StatementDoc({ statement, range }) {
   );
 }
 
-function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue }) {
+function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx }) {
   return (
     <>
       {/* Two cells, not one colSpan cell — position:sticky on a <td> with colspan doesn't
@@ -319,7 +559,11 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           {months.map((m, i) => {
             const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
             const isForecast = i > lastActualIndex;
-            const calcInfo = isForecast ? revenueCalcExplanation(row.key, revenue, m) : null;
+            const calcInfo = isForecast
+              ? revenueCalcExplanation(row.key, revenue, m) ||
+                costCalcExplanation(row.label, costCtx, m) ||
+                (row.custom ? customAccountCalcExplanation(row) : null)
+              : null;
             return (
               <td
                 key={m}
