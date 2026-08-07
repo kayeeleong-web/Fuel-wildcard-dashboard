@@ -10,6 +10,7 @@ import { ReportsPanel } from './panels/ReportsPanel';
 import { CustomPanel } from './panels/CustomPanel';
 import { PayrollPanel } from './panels/PayrollPanel';
 import { AssumptionsPanel } from './panels/AssumptionsPanel';
+import { PanelErrorBoundary } from './shell/PanelErrorBoundary';
 
 const TABS = ['kpi', 'dashboard', 'reports', 'custom', 'payroll', 'assumptions'];
 const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
@@ -54,28 +55,44 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
       <TabNav activeTab={activeTab} onChange={changeTab} reportsCount={customReportsList.length + 3} />
 
       <div className="page">
+        {/* Every panel below stays mounted regardless of activeTab (see file header) —
+            each one is wrapped in its own PanelErrorBoundary so a crash rendering ONE
+            tab (e.g. from stale/incompatible saved localStorage data on Payroll or
+            Assumptions) can never take down every other tab too (2026-08-06). */}
         <section className={`panel-view${activeTab === 'kpi' ? ' active' : ''}`}>
-          <KPIReportPanel kpiData={kpiData} />
+          <PanelErrorBoundary name="KPI Report">
+            <KPIReportPanel kpiData={kpiData} />
+          </PanelErrorBoundary>
         </section>
 
         <section className={`panel-view${activeTab === 'dashboard' ? ' active' : ''}`}>
-          <DashboardPanel summary={dashboardSummary} plStatement={statements.PL} kpiData={kpiData} />
+          <PanelErrorBoundary name="Dashboard">
+            <DashboardPanel summary={dashboardSummary} plStatement={statements.PL} kpiData={kpiData} />
+          </PanelErrorBoundary>
         </section>
 
         <section className={`panel-view${activeTab === 'reports' ? ' active' : ''}`}>
-          <ReportsPanel statements={statements} customReports={customReportsList} />
+          <PanelErrorBoundary name="Reports">
+            <ReportsPanel statements={statements} customReports={customReportsList} />
+          </PanelErrorBoundary>
         </section>
 
         <section className={`panel-view${activeTab === 'custom' ? ' active' : ''}`}>
-          <CustomPanel reportsCount={customReportsList.length} />
+          <PanelErrorBoundary name="Custom">
+            <CustomPanel reportsCount={customReportsList.length} />
+          </PanelErrorBoundary>
         </section>
 
         <section className={`panel-view${activeTab === 'payroll' ? ' active' : ''}`}>
-          <PayrollPanel />
+          <PanelErrorBoundary name="Payroll">
+            <PayrollPanel />
+          </PanelErrorBoundary>
         </section>
 
         <section className={`panel-view${activeTab === 'assumptions' ? ' active' : ''}`}>
-          <AssumptionsPanel />
+          <PanelErrorBoundary name="Assumptions">
+            <AssumptionsPanel />
+          </PanelErrorBoundary>
         </section>
       </div>
 
