@@ -20,12 +20,18 @@ import { CostItemsCard } from '../assumptions/CostItemsCard';
  */
 export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange }) {
   if (collapsed) {
+    // Full-height, brand-green rail (2026-08-07, Kayee: "make hamburger more obvious
+    // because user might miss it") — a lone 28px icon square floating in an otherwise
+    // empty column read as decoration, not a control. This spans the sidebar's whole
+    // stretched height and carries a vertical "ASSUMPTIONS" label alongside the icon,
+    // so there's no missing that something's tucked away here.
     return (
       <div className="reports-sidebar-rail">
-        <button type="button" className="icon-btn reports-sidebar-toggle" title="Show Assumptions" onClick={onToggleCollapse}>
+        <button type="button" className="reports-sidebar-toggle-rail" title="Show Revenue Assumptions & Non-Headcount Costs" onClick={onToggleCollapse}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M4 7h16M4 12h16M4 17h16" />
           </svg>
+          <span>Assumptions</span>
         </button>
       </div>
     );
@@ -55,10 +61,14 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
             Revenue Assumptions
           </span>
           <span className="payroll-card-actions">
-            <button type="button" className="icon-btn reports-sidebar-toggle" title="Hide Assumptions" onClick={onToggleCollapse}>
+            {/* Text label alongside the icon (2026-08-07) — same "make it obvious"
+                reasoning as the collapsed rail; a bare icon in a black header bar full
+                of other icon-less text was easy to skim past. */}
+            <button type="button" className="reports-sidebar-toggle-open" title="Hide Assumptions" onClick={onToggleCollapse}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M4 7h16M4 12h16M4 17h16" />
               </svg>
+              Hide
             </button>
           </span>
         </div>
