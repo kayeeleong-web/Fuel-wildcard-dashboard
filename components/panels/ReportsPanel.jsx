@@ -234,14 +234,18 @@ export function ReportsPanel({ statements, customReports }) {
       {/* Wide wrapper — same treatment as Payroll's tables (globals.css .page-wide),
           so every wide-table tab behaves consistently (Kayee, 2026-08-05: "all pages
           needs to be consistant"). Toolbar/PageHead above stay at the normal page width. */}
-      <div className="page-wide">
+      <div className={`page-wide${showSidebar && !sidebarCollapsed ? ' page-wide-reports-open' : ''}`}>
         {reportType === 'custom' ? (
           <CustomReportsList reports={customReports} />
         ) : showSidebar ? (
           // P&L only, for now (Kayee, 2026-08-06: "we work on P&L first") — a 30/70
           // split when the Assumptions sidebar is open, collapsing back to today's
           // full-width table (the exact same StatementDoc, unchanged) when it's
-          // hidden into the hamburger rail.
+          // hidden into the hamburger rail. The wrapper above also picks up
+          // .page-wide-reports-open while expanded (2026-08-07, Kayee: "use the space
+          // on the left and right") so this view alone can borrow the gutter room the
+          // normal .page-wide cap reserves everywhere else, instead of squeezing the
+          // Non-Headcount Costs table into a narrower column than it needs.
           <div className={`reports-with-sidebar${sidebarCollapsed ? ' is-collapsed' : ''}`}>
             <PLAssumptionsSidebar
               collapsed={sidebarCollapsed}

@@ -404,28 +404,83 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 /* 30/70 split when open (Kayee, 2026-08-06: "keep the width 30/70"), collapsing to a
    slim hamburger rail so the P&L table reclaims today's full-width layout when the
    sidebar isn't needed ("hide to hamburger you can keep the original layout we have
-   now"). align-items: flex-start so the sidebar's height never stretches to match the
-   (much taller) scrolling table next to it. */
-.reports-with-sidebar { display: flex; align-items: flex-start; gap: 18px; }
+   now"). align-items: stretch (2026-08-07, was flex-start) so the shorter of the two
+   columns grows to match the taller one instead of leaving a block of dead page
+   underneath it — Kayee: "p&l can be longer too so that it can fill this white space
+   and be the same height was the bottom of non headcount items." */
+.reports-with-sidebar { display: flex; align-items: stretch; gap: 18px; }
 .reports-sidebar { flex: 0 0 30%; max-width: 30%; min-width: 280px; display: flex; flex-direction: column; gap: 18px; }
-.reports-main { flex: 1 1 0%; min-width: 0; }
+.reports-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
 .reports-sidebar-rail { display: flex; }
 .reports-sidebar-toggle { flex: none; }
+
+/* The P&L table card is the thing that actually needs to grow/shrink to match the
+   sidebar's stretched height (its .table-wrap already has a visible border/shadow, so
+   an unequal height reads as a real gap, unlike the plain unstyled .reports-main div
+   wrapping it) — max-height:none lets it grow past the app-wide 640px table cap, and
+   flex:1 makes it claim exactly the height align-items:stretch gives it. */
+.reports-with-sidebar .reports-main .table-wrap { flex: 1 1 auto; max-height: none; }
+
+/* Widen the whole two-column area into the gutter room .page-wide normally reserves,
+   ONLY while the sidebar is expanded (2026-08-07, Kayee: "when hamburger is open you
+   can use the space on the left and right") — collapsing back to the rail drops this
+   class (see ReportsPanel.jsx) and the view reverts to the standard .page-wide cap. */
+.page-wide-reports-open { max-width: 1880px; }
+@media (min-width: 1944px) {
+  .page-wide-reports-open { margin-left: calc(50% - 940px); margin-right: calc(50% - 940px); }
+}
 
 /* Revenue Assumptions fields stacked one per line (Kayee: "instead of horizontal make
    them vertical") — reuses the exact same .pr-assumption field component as the
    Payroll assumptions bar (app/globals.css `.pr-assumption` is already internally
    column-oriented: label above input), this container just stacks the fields
-   themselves in a column instead of wrapping them in a row. */
-.pr-assumption-sidebar-list { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; }
+   themselves in a column instead of wrapping them in a row. Tightened up (2026-08-07,
+   Kayee: "make the width of each line smaller") so the whole rates block reads as a
+   compact strip, not a series of loosely-spaced form fields. */
+.pr-assumption-sidebar-list { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px; }
+.pr-assumption-sidebar-list .pr-assumption { gap: 3px; }
+.pr-assumption-sidebar-list .pr-assumption-label { font-size: 10px; }
 .pr-assumption-sidebar-list .pr-assumption-input-wrap { justify-content: flex-end; }
-.pr-assumption-sidebar-list .pr-input-assumption { flex: 1; width: auto; }
+.pr-assumption-sidebar-list .pr-input-assumption { flex: 1; width: auto; padding: 5px 7px; font-size: 12px; }
+
+/* Non-Headcount Costs table, narrowed for the sidebar (2026-08-07) — the plain
+   table-layout:fixed default divides its 6 columns evenly, which in a ~300-360px
+   column left "$" amounts truncated mid-digit (Kayee's screenshot: "300" clipped to
+   "30("). Explicit widths give the name and $ columns the room they actually need;
+   Cadence/Category/Start On/remove only need to fit a short word or icon. Font-size
+   and padding also drop a notch so more rows show before the inner scrollbar kicks in. */
+.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 30%; }
+.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 16%; }
+.reports-sidebar .assump-cost-table th:nth-child(3), .reports-sidebar .assump-cost-table td:nth-child(3) { width: 16%; }
+.reports-sidebar .assump-cost-table th:nth-child(4), .reports-sidebar .assump-cost-table td:nth-child(4) { width: 16%; }
+.reports-sidebar .assump-cost-table th:nth-child(5), .reports-sidebar .assump-cost-table td:nth-child(5) { width: 14%; }
+.reports-sidebar .assump-cost-table th:nth-child(6), .reports-sidebar .assump-cost-table td:nth-child(6) { width: 8%; }
+.reports-sidebar .assump-cost-table th, .reports-sidebar .assump-cost-table td { padding: 5px 6px; font-size: 11px; }
+.reports-sidebar .assump-cost-table .pr-input { padding: 4px 5px; font-size: 11px; }
+.reports-sidebar .assump-cost-table .pr-select { font-size: 11px; padding: 3px 2px; }
+.reports-sidebar .assump-cost-table .icon-btn { width: 22px; height: 22px; }
+.reports-sidebar .assump-cost-table .icon-btn svg { width: 11px; height: 11px; }
+
+/* Lets the Non-Headcount Costs card (the taller of the sidebar's two cards) grow to
+   fill whatever extra height align-items:stretch above gives .reports-sidebar, with
+   its own table scrolling internally — the Revenue Assumptions card above it keeps
+   its natural content height instead of also stretching. */
+.reports-sidebar .payroll-card:last-of-type { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.reports-sidebar .payroll-card:last-of-type .payroll-table-wrap { flex: 1 1 auto; min-height: 0; max-height: none; }
+
+/* P&L line items, tightened the same notch as the sidebar's tables while this merged
+   view is open (2026-08-07) — scoped to .reports-with-sidebar so the plain CF/BS
+   StatementDoc (no sidebar) keeps its normal, slightly roomier row height. */
+.reports-with-sidebar .reports-main thead th { padding: 9px 12px; font-size: 9.5px; }
+.reports-with-sidebar .reports-main .report-year-row th { padding: 0 12px; height: 22px; }
+.reports-with-sidebar .reports-main tbody td { padding: 7px 12px; font-size: 11.5px; }
 
 /* A "driver" row embedded directly in the P&L (the # of Campaigns / # of Meetings
    inputs under Subscription/Transaction Revenue, 2026-08-06) — indented + muted +
    italic so it reads as a supporting input for the row above it, not another GL line. */
 tr.report-driver-row td:first-child { padding-left: 34px; font-style: italic; color: var(--muted); font-size: 11.5px; }
+.reports-with-sidebar .reports-main tr.report-driver-row td:first-child { font-size: 10.5px; }
 
 /* Year-band header row (2026 / 2027 / ...) always stays visible regardless of which
    range is selected — it carries every range class unconditionally so none of the
