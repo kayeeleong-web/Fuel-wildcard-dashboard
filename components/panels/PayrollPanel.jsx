@@ -27,13 +27,14 @@ export function PayrollPanel() {
   const { state, setState, hydrated } = usePayrollState();
   const todayIso = currentIsoMonth();
 
-  // Existing/Planned open by default (that's the day-to-day working area); Total Comp
-  // by Employee starts collapsed (Kayee, 2026-08-06: "it can stay collapsed only when
-  // people want to see it they can expand").
+  // All three sections start collapsed (Kayee, 2026-08-06: "keep the three sections
+  // collapsed when open up this page") — Payroll Summary at the top already shows the
+  // headline numbers, and each summary row jumps to + expands its matching section on
+  // click, so nothing below needs to be open by default just to land on the page.
   const [collapsedSections, setCollapsedSections] = useState({
     totalComp: true,
-    existing: false,
-    planned: false,
+    existing: true,
+    planned: true,
   });
 
   function toggleSection(key) {

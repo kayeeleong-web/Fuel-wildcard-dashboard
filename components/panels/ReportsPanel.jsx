@@ -472,6 +472,7 @@ function withNamedCostItemProjections(statementType, rows, costItems, months, la
  *  REAL raw section string (not the alias) so injected custom rows carry the exact
  *  value everything else groups by. */
 function findPresentSection(sectionsPresent, aliases) {
+  if (!Array.isArray(aliases)) return null;
   const upperAliases = aliases.map((a) => a.toUpperCase());
   for (const raw of sectionsPresent) {
     if (upperAliases.includes(String(raw).toUpperCase())) return raw;
@@ -514,7 +515,15 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
   const sectionsPresent = new Set(rows.map((r) => r.section));
   let next = rows;
 
-  for (const category of ['CoGS', 'OpEx']) {
+  // Iterate whatever categories actually HAVE an alias list — not a hardcoded
+  // ['CoGS', 'OpEx'] — so removing OpEx's alias list (2026-08-06, once it turned out
+  // OpEx isn't one flat section) can't silently pass `undefined` to
+  // findPresentSection's `.map` below and crash the whole app. This was the actual
+  // root cause of the "Cannot read properties of undefined (reading 'map')" error —
+  // every projection (including Revenue, which was never broken) got caught by the
+  // try/catch in StatementDoc and fell back to blank, which is why forecast numbers
+  // disappeared entirely rather than just the OpEx custom rows.
+  for (const category of Object.keys(CUSTOM_ACCOUNT_SECTION_ALIASES)) {
     const section = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES[category]);
     if (!section) continue;
     // Skip any item already merged onto an existing real row by
@@ -572,26 +581,35 @@ function StatementDoc({ statement, range }) {
   // Assumptions/Payroll localStorage — this Reports panel mounts unconditionally
   // alongside every other tab (design note at the top of DashboardApp.jsx), so an
   // uncaught error anywhere in this pipeline would crash the ENTIRE app on every page
-  // load for anyone whose saved data doesn't match what this code expects, not just
-  // Reports (the exact failure mode already hit and fixed once for Payroll, 2026-08-06:
-  // "Application error: a client-side exception has occurred"). Wrapped in try/catch so
-  // a computation bug here degrades to "forecast columns just show the real actual data
-  // unprojected" instead of taking down the whole site.
+  // load, not just Reports (already hit once, 2026-08-06). Each step is guarded
+  // SEPARATELY (not one big try/catch around all four) — a bug in the newer
+  // custom-account logic should never also wipe out Revenue's projection, which has
+  // worked correctly since 2026-08-04. This is exactly the regression that happened
+  // once already today: a bug in withCustomAccountRows made every step's result
+  // (including Revenue's) fall back to blank, because one shared try/catch treated a
+  // failure anywhere as a failure everywhere.
   let rows = statement.rows;
   try {
-    const revenueProjectedRows = withRevenueProjections(statement, months, lastActualIndex, revenue);
-    const costProjectedRows = withCostProjections(statement.type, revenueProjectedRows, months, lastActualIndex, costCtx);
+    rows = withRevenueProjections(statement, months, lastActualIndex, revenue);
+  } catch (err) {
+    console.warn('Revenue forecast projection failed, showing unprojected data:', err);
+  }
+  try {
+    rows = withCostProjections(statement.type, rows, months, lastActualIndex, costCtx);
+  } catch (err) {
+    console.warn('COGS/OpEx total forecast projection failed:', err);
+  }
+  try {
     const { rows: namedItemRows, matchedIds } = withNamedCostItemProjections(
       statement.type,
-      costProjectedRows,
+      rows,
       costCtx.costItems,
       months,
       lastActualIndex
     );
     rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex, matchedIds);
   } catch (err) {
-    console.warn('Reports forecast projection failed, showing unprojected data:', err);
-    rows = statement.rows;
+    console.warn('Custom cost-item row projection failed:', err);
   }
 
   return (
