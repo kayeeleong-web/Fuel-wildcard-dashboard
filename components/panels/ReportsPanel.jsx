@@ -16,6 +16,7 @@ import {
   costPerCampaignForMonth,
   costItemsTotalForMonth,
   costItemAmountForMonth,
+  prevMonth,
 } from '../../lib/assumptions/assumptionsData';
 
 // Which Reports section a custom cost item's category rolls up under — matched by the
@@ -29,6 +30,17 @@ import {
 const CUSTOM_ACCOUNT_SECTION_ALIASES = {
   CoGS: ['COGS'],
   OpEx: ['OPEX', 'OPERATING EXPENSES', 'OPERATING EXPENSE', 'OPEX & OTHER', 'SG&A', 'OPERATING COSTS', 'OPERATING EXPENSES (OPEX)'],
+};
+
+// Cost items that are the SAME cost as an existing real P&L row, just entered under a
+// different name on Assumptions — these feed that existing row directly instead of
+// getting their own new custom-account row (which would double it up on-screen).
+// Confirmed by Kayee (2026-08-06): "software projection in cogs should be at the same
+// line as software - cost of revenue... they are the same". Keyed by the Assumptions
+// cost item's stable `id` (see SEED_COST_ITEMS in assumptionsData.js) -> the real P&L
+// row's exact label.
+const COST_ITEM_ROW_LABEL_OVERRIDES = {
+  software: 'Software - Cost of Revenue',
 };
 
 /** Which PL rows get their projected (post-actual) months filled from the
@@ -84,6 +96,10 @@ function opexTotalForMonth(costItems, payrollState, iso) {
  *  plausible-looking-but-incomplete number there would be worse than the current blank
  *  (CLAUDE.md: "a wrong number that looks fine is worse than a visible error"). */
 const PL_COST_PROJECTIONS_BY_LABEL = {
+  // Confirmed by Kayee (2026-08-06): "cost for campaign in cogs is last month's # of
+  // campaign multiply by campaign cost of 250 in the assumption" — this row IS
+  // costPerCampaignForMonth, not a generic custom account.
+  'Cost of campaigns': (ctx, iso) => costPerCampaignForMonth(ctx.revenue, iso),
   'Total COGS': (ctx, iso) => cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
   'Total OpEx': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total OPEX': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
@@ -149,8 +165,10 @@ export function ReportsPanel({ statements, customReports }) {
   // Defaults to the full 2026 calendar year (Jan-Dec) rather than a trailing window off
   // the last actual month — per Kayee (2026-08-06): opening Reports used to always land
   // on old months, requiring the ∞ toggle + a scroll past 2024/2025 every single refresh
-  // just to see this year's forecast. "Historical" (6M/12M/24M/∞, all anchored to the
-  // last actual month like before) is still one click away in the same toggle group.
+  // just to see this year's forecast. 6M/12M/24M/∞ are one click away in the same toggle
+  // group — each is a window CENTERED on today (half real history, half forecast), not
+  // a historical-only look-back (2026-08-06 fix, Kayee: "12m or 24m it's only showing
+  // actual not projection").
   const [range, setRange] = useState('yr2026');
 
   return (
@@ -172,15 +190,13 @@ export function ReportsPanel({ statements, customReports }) {
         {reportType !== 'custom' && (
           <div className="seg right">
             {/* "2026" is the default landing view (full Jan-Dec 2026, actual + forecast
-                together) — everything after it is grouped under one "Historical" label
-                since they all anchor to trailing windows off the last actual month
-                instead of a fixed calendar year (Kayee, 2026-08-06: "default to the full
-                year of 2026 ... if I want to go to historical I click another toggle"). */}
+                together). 6M/12M/24M/∞ are windows centered on today — half actual
+                history, half forecast — not historical-only (2026-08-06 fix). */}
             <button className={range === 'yr2026' ? 'active' : undefined} onClick={() => setRange('yr2026')}>
               2026
             </button>
             <span className="seg-divider" />
-            <span className="seg-group-label">Historical</span>
+            <span className="seg-group-label">Other Ranges</span>
             {[
               { id: '6', label: '6M' },
               { id: '12', label: '12M' },
@@ -209,22 +225,22 @@ export function ReportsPanel({ statements, customReports }) {
   );
 }
 
-/** r6/r12/r24 must anchor to the last ACTUAL month, never to however far the blank
- *  2030 padding stretches — otherwise "6M" silently drifts to mean "the last 6
- *  padded/blank columns" the moment padding is added, which is exactly the bug Kayee
- *  hit (2026-08-04: switching to ∞ then back to 6M showed blank Dec-2030 columns
- *  instead of real recent months). fromEnd is 0 at the last actual month, negative
- *  for every padded month after it — negative values never satisfy any `< N` check
- *  below, so padded months correctly never carry r6/r12/r24, only r-all. */
+/** 6M/12M/24M are windows CENTERED on today (half the months back as real history,
+ *  half forward as forecast) — not a pure trailing/historical-only window (2026-08-06
+ *  fix, Kayee: "when I toggle over to 12m or 24m it's only showing actual not
+ *  projection"). `distance` is 0 at the last actual month ("today"), negative for
+ *  history, positive for forecast — using its absolute value (instead of only ever
+ *  checking the positive/history side, the old bug) is what lets these windows include
+ *  forecast columns at all now that forecast months carry real projected numbers. */
 function rangeClasses(monthIndex, lastActualIndex, month) {
-  const fromEnd = lastActualIndex - monthIndex;
+  const distance = monthIndex - lastActualIndex;
   const classes = ['r-all'];
-  if (fromEnd >= 0 && fromEnd < 24) classes.push('r24');
-  if (fromEnd >= 0 && fromEnd < 12) classes.push('r12');
-  if (fromEnd >= 0 && fromEnd < 6) classes.push('r6');
+  if (Math.abs(distance) <= 12) classes.push('r24');
+  if (Math.abs(distance) <= 6) classes.push('r12');
+  if (Math.abs(distance) <= 3) classes.push('r6');
   // Calendar-year tag (independent of how far back/forward this column is from the last
   // actual month) — what the "2026" default view's CSS actually filters on, since a
-  // fixed calendar year isn't expressible as a trailing window off lastActualIndex.
+  // fixed calendar year isn't expressible as a window off lastActualIndex.
   if (month) classes.push(`y${month.slice(0, 4)}`);
   return classes.join(' ');
 }
@@ -340,6 +356,22 @@ function costCalcExplanation(rowLabel, ctx, iso) {
       ],
     };
   }
+  if (rowLabel === 'Cost of campaigns') {
+    return {
+      calcNote: "Cost of campaigns = last month's # of Campaigns × Cost Per Campaign rate. Both editable on the Assumptions tab.",
+      components: [
+        { label: 'Campaigns (last month)', value: campaignsForMonth(ctx.revenue, prevMonth(iso, 1)).toLocaleString('en-US') },
+        { label: 'Cost Per Campaign Rate', value: fmt(Number(ctx.revenue.campaignCostRate) || 0) },
+      ],
+    };
+  }
+  if (rowLabel === COST_ITEM_ROW_LABEL_OVERRIDES.software) {
+    const item = ctx.costItems.find((i) => i.id === 'software');
+    return {
+      calcNote: 'Same figure as the "Software" cost item on the Assumptions tab (CoGS) — shown on this line since it\'s the same cost. Edit the amount there.',
+      components: item ? [{ label: 'Software (Assumptions)', value: fmt(costItemAmountForMonth(item, iso)) }] : [],
+    };
+  }
   return null;
 }
 
@@ -380,11 +412,38 @@ function withCostProjections(statementType, rows, months, lastActualIndex, ctx) 
   });
 }
 
+/** Patches a specific Assumptions cost item's forecast values directly onto an EXISTING
+ *  real P&L row (see COST_ITEM_ROW_LABEL_OVERRIDES) instead of adding a new one — for
+ *  cost items Kayee's confirmed are literally the same line as something already on
+ *  the sheet, just named differently on Assumptions (2026-08-06: Software). Same
+ *  forecast-only rule as everything else here; the matched row's item is excluded from
+ *  withCustomAccountRows below so it never ALSO shows up as a duplicate new row. */
+function withNamedCostItemProjections(statementType, rows, costItems, months, lastActualIndex) {
+  if (statementType !== 'PL' || !costItems || costItems.length === 0) return rows;
+  return rows.map((row) => {
+    const itemId = Object.keys(COST_ITEM_ROW_LABEL_OVERRIDES).find((id) => COST_ITEM_ROW_LABEL_OVERRIDES[id] === row.label);
+    const item = itemId && costItems.find((i) => i.id === itemId);
+    if (!item) return row;
+    const patchedValues = { ...row.values };
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      patchedValues[months[i]] = costItemAmountForMonth(item, months[i]);
+    }
+    return { ...row, values: patchedValues };
+  });
+}
+
 /** First matching section name that's actually present in this statement's real rows —
- *  never invents a section that isn't there. */
+ *  never invents a section that isn't there. Case-insensitive (2026-08-06 fix): section
+ *  band text always renders uppercase on screen via CSS (`tbody tr.section td {
+ *  text-transform: uppercase }`), which made it look like "OPERATING EXPENSES" should've
+ *  matched when it actually didn't — the underlying raw string from the sheet can be
+ *  any case, and the alias list was being compared exact-case against it. Returns the
+ *  REAL raw section string (not the alias) so injected custom rows carry the exact
+ *  value everything else groups by. */
 function findPresentSection(sectionsPresent, aliases) {
-  for (const alias of aliases) {
-    if (sectionsPresent.has(alias)) return alias;
+  const upperAliases = aliases.map((a) => a.toUpperCase());
+  for (const raw of sectionsPresent) {
+    if (upperAliases.includes(String(raw).toUpperCase())) return raw;
   }
   return null;
 }
@@ -426,7 +485,9 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
   for (const category of ['CoGS', 'OpEx']) {
     const section = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES[category]);
     if (!section) continue;
-    const items = costItems.filter((i) => i.category === category);
+    // Skip any item already handled by withNamedCostItemProjections (merged onto an
+    // existing real row instead) — otherwise it'd show up twice.
+    const items = costItems.filter((i) => i.category === category && !(i.id in COST_ITEM_ROW_LABEL_OVERRIDES));
     if (items.length === 0) continue;
 
     // Insert right before this section's Total row (so custom rows sit below the
@@ -477,7 +538,8 @@ function StatementDoc({ statement, range }) {
   };
   const revenueProjectedRows = withRevenueProjections(statement, months, lastActualIndex, revenue);
   const costProjectedRows = withCostProjections(statement.type, revenueProjectedRows, months, lastActualIndex, costCtx);
-  const rows = withCustomAccountRows(statement.type, costProjectedRows, costCtx.costItems, months, lastActualIndex);
+  const namedItemRows = withNamedCostItemProjections(statement.type, costProjectedRows, costCtx.costItems, months, lastActualIndex);
+  const rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex);
 
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
