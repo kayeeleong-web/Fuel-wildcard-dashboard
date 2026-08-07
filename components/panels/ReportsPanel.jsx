@@ -568,16 +568,31 @@ function StatementDoc({ statement, range }) {
     costItems: assumptionsHydrated ? assumptionsState?.costItems || [] : [],
     payrollState: payrollHydrated ? payrollState : null,
   };
-  const revenueProjectedRows = withRevenueProjections(statement, months, lastActualIndex, revenue);
-  const costProjectedRows = withCostProjections(statement.type, revenueProjectedRows, months, lastActualIndex, costCtx);
-  const { rows: namedItemRows, matchedIds } = withNamedCostItemProjections(
-    statement.type,
-    costProjectedRows,
-    costCtx.costItems,
-    months,
-    lastActualIndex
-  );
-  const rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex, matchedIds);
+  // Every projection step below is derived from whatever's saved in THIS browser's
+  // Assumptions/Payroll localStorage — this Reports panel mounts unconditionally
+  // alongside every other tab (design note at the top of DashboardApp.jsx), so an
+  // uncaught error anywhere in this pipeline would crash the ENTIRE app on every page
+  // load for anyone whose saved data doesn't match what this code expects, not just
+  // Reports (the exact failure mode already hit and fixed once for Payroll, 2026-08-06:
+  // "Application error: a client-side exception has occurred"). Wrapped in try/catch so
+  // a computation bug here degrades to "forecast columns just show the real actual data
+  // unprojected" instead of taking down the whole site.
+  let rows = statement.rows;
+  try {
+    const revenueProjectedRows = withRevenueProjections(statement, months, lastActualIndex, revenue);
+    const costProjectedRows = withCostProjections(statement.type, revenueProjectedRows, months, lastActualIndex, costCtx);
+    const { rows: namedItemRows, matchedIds } = withNamedCostItemProjections(
+      statement.type,
+      costProjectedRows,
+      costCtx.costItems,
+      months,
+      lastActualIndex
+    );
+    rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex, matchedIds);
+  } catch (err) {
+    console.warn('Reports forecast projection failed, showing unprojected data:', err);
+    rows = statement.rows;
+  }
 
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
@@ -659,11 +674,20 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           {months.map((m, i) => {
             const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
             const isForecast = i > lastActualIndex;
-            const calcInfo = isForecast
-              ? revenueCalcExplanation(row.key, revenue, m) ||
-                costCalcExplanation(row.label, costCtx, m) ||
-                (row.custom ? customAccountCalcExplanation(row) : null)
-              : null;
+            // Same defensive rule as the row pipeline above (StatementDoc) — a bad
+            // calc-note lookup should never crash the whole app, just fall back to
+            // plain cell text for that one cell.
+            let calcInfo = null;
+            if (isForecast) {
+              try {
+                calcInfo =
+                  revenueCalcExplanation(row.key, revenue, m) ||
+                  costCalcExplanation(row.label, costCtx, m) ||
+                  (row.custom ? customAccountCalcExplanation(row) : null);
+              } catch (err) {
+                console.warn('Reports calc-note lookup failed for a cell, showing plain value:', err);
+              }
+            }
             return (
               <td
                 key={m}
