@@ -415,16 +415,18 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .reports-sidebar-rail { display: flex; align-self: stretch; }
 
 /* Collapsed rail toggle (2026-08-07, Kayee: "make hamburger more obvious because user
-   might miss it") — full height of the row (align-self:stretch above), solid brand
-   green so it reads as a real, present control rather than a stray icon in empty
-   space, with a vertical text label so its purpose is legible without hovering. */
+   might miss it") — full height of the row (align-self:stretch above) so it reads as
+   a real, present control rather than a stray icon in empty space, with a vertical
+   text label so its purpose is legible without hovering. Solid black/white, same as
+   .btn.primary elsewhere in the app (2026-08-07 follow-up, Kayee: "i dont like the
+   green for the hide burger") rather than a color that implies a status/success state. */
 .reports-sidebar-toggle-rail {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   width: 40px; align-self: stretch; border: none; border-radius: 10px;
-  background: var(--green); color: #fff; cursor: pointer; padding: 16px 0;
+  background: var(--black); color: #fff; cursor: pointer; padding: 16px 0;
   transition: background .12s ease;
 }
-.reports-sidebar-toggle-rail:hover { background: var(--green-dark); }
+.reports-sidebar-toggle-rail:hover { background: #000; }
 .reports-sidebar-toggle-rail svg { width: 16px; height: 16px; flex: none; }
 .reports-sidebar-toggle-rail span {
   writing-mode: vertical-rl; transform: rotate(180deg);
@@ -433,13 +435,14 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 
 /* Expanded-state toggle, sitting in the Revenue Assumptions card's black header bar —
    paired with a "Hide" text label (2026-08-07) instead of a bare icon, so it doesn't
-   blend into the row of black-on-black chrome around it. */
+   blend into the row of black-on-black chrome around it. White-on-black keeps it
+   visible against that dark header without reading as a green "success" action. */
 .reports-sidebar-toggle-open {
-  display: flex; align-items: center; gap: 6px; border: none; border-radius: 7px;
-  background: var(--green); color: #fff; font-size: 11.5px; font-weight: 700;
+  display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.3); border-radius: 7px;
+  background: #fff; color: var(--text); font-size: 11.5px; font-weight: 700;
   padding: 6px 10px; cursor: pointer; transition: background .12s ease;
 }
-.reports-sidebar-toggle-open:hover { background: var(--green-dark); }
+.reports-sidebar-toggle-open:hover { background: var(--panel-2); }
 .reports-sidebar-toggle-open svg { width: 13px; height: 13px; }
 
 /* The P&L table card is the thing that actually needs to grow/shrink to match the
@@ -453,19 +456,13 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    ONLY while the sidebar is expanded (2026-08-07, Kayee: "when hamburger is open you
    can use the space on the left and right") — collapsing back to the rail drops this
    class (see ReportsPanel.jsx) and the view reverts to the standard .page-wide cap.
-   Below the 1664px breakpoint this inherits plain .page-wide's edge-to-edge behavior
-   unchanged (no separate rule needed here).
-   Above it: normal .page-wide keeps a full fixed 1600px cap, i.e. a gutter of
-   (100vw-1600)/2 = 50% - 800px on each side. Kayee's follow-up (2026-08-07: "leave
-   half of the half on each side") asked for only HALF that gutter to remain, with the
-   other half folded back into the content — so this halves both terms of that same
-   formula (50%→25%, 800px→400px) instead of hard-capping at a second fixed width, which
-   is what makes the reclaimed space scale smoothly with the window instead of topping
-   out at one arbitrary number. */
+   Went through two widenings on the same request: first cut the gutter Kayee saw in
+   half; she then circled how much dead margin was STILL left on both sides and asked
+   to push all the way out to that mark. That's edge-to-edge — the same 100vw/32px-
+   padding rule plain .page-wide already uses below its 1664px breakpoint — so this
+   simply drops the max-width cap and never re-applies a margin at any width, instead
+   of layering in another (smaller) fixed gutter. */
 .page-wide-reports-open { max-width: none; }
-@media (min-width: 1664px) {
-  .page-wide-reports-open { margin-left: calc(25% - 400px); margin-right: calc(25% - 400px); }
-}
 
 /* Revenue Assumptions fields stacked one per line (Kayee: "instead of horizontal make
    them vertical") — reuses the exact same .pr-assumption field component as the
