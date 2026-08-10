@@ -87,13 +87,10 @@ export function ScheduledRateField({ label, value, onCommit, suffix, revenue, sc
           <div className="pr-schedule-row">
             <label className="pr-schedule-field">
               <span>New Value{suffix ? ` (${suffix})` : ''}</span>
-              <input
-                type="number"
-                className="pr-input"
-                value={newValue}
-                onChange={(e) => setNewValue(e.target.value)}
-                placeholder={suffix === '$' ? '4500' : '12'}
-              />
+              {/* No placeholder (2026-08-07, Kayee: "the grey out 4500 in the box is
+                  confusing, keep it blank") — a sample number sitting in an otherwise-
+                  empty input read as an actual prefilled value rather than a hint. */}
+              <input type="number" className="pr-input" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
             </label>
             <button type="button" className="btn primary pr-schedule-apply" onClick={apply} disabled={!fromMonth || newValue === ''}>
               Apply

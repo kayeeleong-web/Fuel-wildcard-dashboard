@@ -302,7 +302,7 @@ a {
 /* Universal drill-down popover (functionality-spec.md §6) — hover-only, no click, no pinned state. */
 .drillable { position: relative; display: inline-block; cursor: help; border-bottom: 1px dashed var(--muted-2); }
 .drillable .drill-pop {
-  position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(4px);
+  position: absolute; z-index: 50; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(4px);
   width: 220px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
   box-shadow: 0 16px 40px rgba(17,17,17,.18); opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity .12s ease, transform .12s ease; z-index: 50; text-align: left;
@@ -314,19 +314,35 @@ a {
 .drill-pop .comp-row { font-size: 11.5px; }
 .kpi-card .drillable, .sum-card .drillable { border-bottom-color: var(--muted-2); }
 
-/* Row-label calc-note popovers (2026-08-07 fix) — the default popover centers itself
-   on its trigger (`left: 50%; transform: translateX(-50%)`), which is fine for a
-   trigger sitting mid-table but breaks for these: the label lives in the report's
-   sticky-left FIRST column, often close enough to the true left edge that a 220px-wide
-   box centered on it gets pushed half off-screen/off-container and clipped by
-   .table-wrap's overflow:auto (Kayee's screenshot: "some part of the text got covered
-   and the text is overflow from the box"). Anchoring the box's own left edge to the
-   trigger's left edge instead means it only ever grows rightward, into the table,
-   which always has room. */
-.report-doc td:first-child .drillable .drill-pop { left: 0; transform: translateY(4px); }
+/* Row-label calc-note popovers (2026-08-07, two fixes on the same trigger):
+   1) The default popover centers itself on its trigger (`left: 50%; transform:
+      translateX(-50%)`), which is fine mid-table but breaks for a label in the
+      report's sticky-left FIRST column — often close enough to the true left edge
+      that a 220px-wide centered box gets pushed half off-screen/off-container and
+      clipped by .table-wrap's overflow:auto ("some part of the text got covered and
+      the text is overflow from the box"). Anchoring the box's own left edge to the
+      trigger's left edge means it only ever grows rightward, into the table, which
+      always has room.
+   2) The default popover also opens UPWARD (`bottom: calc(100% + 10px)`) — fine for a
+      trigger with room above it, but a row-label trigger is very often the first row
+      right under the sticky black header, so the box collided with that header and
+      rendered BEHIND it (lower in the same stacking area), which is what actually
+      looked like "outside of the box" and "cut off" in Kayee's screenshot — it wasn't
+      unstyled, it was a real boxed popover with most of it hidden behind the header.
+      Opening downward instead avoids that collision entirely, matching the reference
+      screenshot Kayee sent (a clean, fully boxed tooltip below its trigger). */
+.report-doc td:first-child .drillable .drill-pop {
+  left: 0; top: calc(100% + 10px); bottom: auto; transform: translateY(-4px);
+}
 .report-doc td:first-child .drillable:hover .drill-pop { transform: translateY(0); }
+/* Arrow flips to the TOP of the box, pointing up at the trigger, since the box now
+   sits below it instead of above. */
 .report-doc td:first-child .drillable .drill-pop::before,
-.report-doc td:first-child .drillable .drill-pop::after { left: 18px; transform: none; }
+.report-doc td:first-child .drillable .drill-pop::after {
+  left: 18px; top: auto; bottom: 100%; transform: none; border-top-color: transparent;
+}
+.report-doc td:first-child .drillable .drill-pop::before { border-bottom-color: var(--border); }
+.report-doc td:first-child .drillable .drill-pop::after { bottom: calc(100% - 1px); border-bottom-color: #fff; }
 
 /* ==================== Executive Summary widget ==================== */
 .exec-summary { display: flex; gap: 16px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(17,17,17,.03); }
