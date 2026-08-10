@@ -314,6 +314,20 @@ a {
 .drill-pop .comp-row { font-size: 11.5px; }
 .kpi-card .drillable, .sum-card .drillable { border-bottom-color: var(--muted-2); }
 
+/* Row-label calc-note popovers (2026-08-07 fix) — the default popover centers itself
+   on its trigger (`left: 50%; transform: translateX(-50%)`), which is fine for a
+   trigger sitting mid-table but breaks for these: the label lives in the report's
+   sticky-left FIRST column, often close enough to the true left edge that a 220px-wide
+   box centered on it gets pushed half off-screen/off-container and clipped by
+   .table-wrap's overflow:auto (Kayee's screenshot: "some part of the text got covered
+   and the text is overflow from the box"). Anchoring the box's own left edge to the
+   trigger's left edge instead means it only ever grows rightward, into the table,
+   which always has room. */
+.report-doc td:first-child .drillable .drill-pop { left: 0; transform: translateY(4px); }
+.report-doc td:first-child .drillable:hover .drill-pop { transform: translateY(0); }
+.report-doc td:first-child .drillable .drill-pop::before,
+.report-doc td:first-child .drillable .drill-pop::after { left: 18px; transform: none; }
+
 /* ==================== Executive Summary widget ==================== */
 .exec-summary { display: flex; gap: 16px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(17,17,17,.03); }
 .exec-summary .icon { width: 38px; height: 38px; border-radius: 10px; background: var(--green-soft); flex: none; display: flex; align-items: center; justify-content: center; }
@@ -522,6 +536,19 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 tr.report-driver-row td:first-child { padding-left: 34px; font-style: italic; color: var(--muted); font-size: 11.5px; }
 .reports-with-sidebar .reports-main tr.report-driver-row td:first-child { font-size: 10.5px; }
 
+/* Actual-month driver cells (2026-08-07) — plain text, not an <input>, and styled to
+   match: right-aligned like every other numeric cell, but muted/italic like the rest
+   of the driver row, so it's visually obvious this one isn't editable the way the
+   blue boxes in the forecast columns are. */
+.report-driver-readonly { display: block; text-align: right; font-family: var(--font-num); color: var(--muted); font-style: italic; }
+
+/* Editable-cell legend (2026-08-07) — sits between the toolbar and the table itself. */
+.report-legend { display: flex; align-items: center; gap: 18px; margin: -6px 0 16px; font-size: 11.5px; color: var(--muted); }
+.report-legend-item { display: flex; align-items: center; gap: 7px; }
+.report-legend-swatch { width: 13px; height: 13px; border-radius: 4px; display: inline-block; flex: none; }
+.report-legend-swatch-editable { background: var(--blue-soft); border: 1px solid rgba(17,179,231,.5); }
+.report-legend-swatch-formula { background: var(--panel); border: 1px solid var(--border); }
+
 /* The driver row's editable <input> (MonthInput's .pr-input) came in taller than a
    plain text cell next to it — its own padding/border stack on top of the cell's
    padding, instead of replacing it (2026-08-07, Kayee: "the height of the # of meeting
@@ -675,13 +702,19 @@ td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
 thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 
 /* ---- Editable cells ---- */
+/* Blue, not green (2026-08-07, Kayee: "make editable boxes blue instead of green") —
+   green was already spoken for elsewhere in the app (the live-status dot on
+   .btn.primary, "good"/positive deltas), so an editable-input tint that also read as
+   green created a false "this is a positive number" association on ordinary form
+   fields. Blue is otherwise only used for forecast-column accents, which pairs fine
+   conceptually (forecast columns are exactly where these editable fields live). */
 .pr-input {
   width: 100%; font-family: inherit; font-size: 12.5px; color: var(--text);
-  background: var(--green-soft); border: 1px solid rgba(43,188,98,.35); border-radius: 6px;
+  background: var(--blue-soft); border: 1px solid rgba(17,179,231,.35); border-radius: 6px;
   padding: 6px 8px; transition: background .12s ease, border-color .12s ease;
 }
 .pr-input::placeholder { color: var(--muted-2); }
-.pr-input:focus { outline: none; background: #fff; border-color: var(--green-dark); box-shadow: 0 0 0 2px var(--green-soft); }
+.pr-input:focus { outline: none; background: #fff; border-color: var(--blue); box-shadow: 0 0 0 2px var(--blue-soft); }
 .pr-input-month, .pr-input-assumption { text-align: right; font-family: var(--font-num); }
 .pr-input-date { font-family: var(--font-num); font-size: 11.5px; padding: 5px 6px; }
 .pr-select { appearance: auto; cursor: pointer; }

@@ -20,7 +20,7 @@ import { CostItemsCard } from '../assumptions/CostItemsCard';
  */
 export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange }) {
   if (collapsed) {
-    // Full-height, brand-green rail (2026-08-07, Kayee: "make hamburger more obvious
+    // Full-height, black/white rail (2026-08-07, Kayee: "make hamburger more obvious
     // because user might miss it") — a lone 28px icon square floating in an otherwise
     // empty column read as decoration, not a control. This spans the sidebar's whole
     // stretched height and carries a vertical "ASSUMPTIONS" label alongside the icon,
@@ -109,25 +109,28 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
 
           <div className="pr-assumption-group">
             <div className="pr-assumption-group-label">Subscription Revenue</div>
-            <div className="pr-assumption-group-grid">
-              <AssumptionField label="Upfront Rate" value={revenue.upfrontRate} onCommit={(v) => setRate('upfrontRate', v)} suffix="$" />
-              <AssumptionField
-                label="Campaign Cost Rate"
-                value={revenue.campaignCostRate}
-                onCommit={(v) => setRate('campaignCostRate', v)}
-                suffix="$"
-              />
-            </div>
+            <AssumptionField label="Upfront Rate" value={revenue.upfrontRate} onCommit={(v) => setRate('upfrontRate', v)} suffix="$" />
           </div>
 
+          {/* Own group, separate from Subscription Revenue (2026-08-07, Kayee: "in
+              cost, we should have another COGS assumption there for Cost per
+              campaign") — Campaign Cost Rate feeds the "Cost of campaigns" COGS line,
+              not a revenue line, so it doesn't belong grouped with a revenue rate even
+              though it's driven by the same campaign count. */}
           <div className="pr-assumption-group">
-            <div className="pr-assumption-group-label">Total Revenue</div>
-            <AssumptionField label="Uncollectible" value={revenue.uncollectiblePct} onCommit={(v) => setRate('uncollectiblePct', v)} />
+            <div className="pr-assumption-group-label">COGS</div>
+            <AssumptionField
+              label="Cost Per Campaign Rate"
+              value={revenue.campaignCostRate}
+              onCommit={(v) => setRate('campaignCostRate', v)}
+              suffix="$"
+            />
           </div>
 
           <p className="pr-assumption-note" style={{ marginLeft: 0, maxWidth: 'none' }}>
             # of Campaigns and # of Meetings are now edited directly on the P&L, under Subscription Revenue and
-            Transaction Revenue.
+            Transaction Revenue. Uncollectible % moved off this P&L view (2026-08-07) — it's a cash-collection
+            adjustment, not an accrual one, so it belongs on Cash Flow instead; still editable on the Assumptions tab.
           </p>
         </div>
       </div>

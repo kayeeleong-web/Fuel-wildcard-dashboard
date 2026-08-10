@@ -12,7 +12,7 @@ import { headcountCostByCostType } from '../../lib/payroll/payrollData';
 import {
   upfrontRevenueForMonth,
   meetingRevenueForMonth,
-  netCollectedRevenueForMonth,
+  grossCollectedRevenueForMonth,
   campaignsForMonth,
   meetingsForMonth,
   costPerCampaignForMonth,
@@ -56,16 +56,20 @@ const COST_ITEM_ROW_LABEL_OVERRIDES = {
  *  (2026-08-04): "if I change something [in Assumptions] it should reflect in the
  *  P&L projection." Subscription Revenue = Upfront $ (campaigns x Upfront Rate),
  *  Transaction Revenue = Meeting $ (meetings x Per-Meeting Rate), Total Revenue = the
- *  Uncollectible-adjusted net (both streams already get the same haircut individually
- *  before summing, since (a x (1-r)) + (b x (1-r)) = (a+b) x (1-r) — mathematically
- *  identical either way). These exact key names are transcribed from Kayee's live PL
- *  sheet (2026-08-04 screenshots) — if the sheet's Key column for these rows ever
- *  changes, this silently stops projecting (the row just shows "—" again) rather than
- *  crashing, which is the safe failure mode for a keyed lookup like this. */
+ *  GROSS sum of both streams — no Uncollectible haircut (2026-08-07 fix, Kayee: "in
+ *  P&L is only accrual revenue, [Uncollectible] is not relevant to this... uncollectible
+ *  should be in cash flow"). The P&L books revenue as earned, not as collected — a
+ *  cash-collection risk adjustment belongs on the Cash Flow statement, not here; the
+ *  Uncollectible rate itself is left untouched in the data model
+ *  (lib/assumptions/assumptionsData.js) for exactly that future use. These exact key
+ *  names are transcribed from Kayee's live PL sheet (2026-08-04 screenshots) — if the
+ *  sheet's Key column for these rows ever changes, this silently stops projecting (the
+ *  row just shows "—" again) rather than crashing, which is the safe failure mode for a
+ *  keyed lookup like this. */
 const PL_REVENUE_PROJECTIONS = {
   revenue_subscription_revenue: (rev, iso) => upfrontRevenueForMonth(rev, iso),
   revenue_transaction_revenue: (rev, iso) => meetingRevenueForMonth(rev, iso),
-  total_revenue: (rev, iso) => netCollectedRevenueForMonth(rev, iso),
+  total_revenue: (rev, iso) => grossCollectedRevenueForMonth(rev, iso),
 };
 
 /** Total COGS = Cost Per Campaign + every Assumptions Cost Item tagged CoGS +
@@ -112,18 +116,18 @@ const PL_COST_PROJECTIONS_BY_LABEL = {
   'Total OpEx': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total OPEX': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total Operating Expenses': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
-  'Gross Profit': (ctx, iso) => netCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
-  'Gross Margin': (ctx, iso) => netCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  'Gross Profit': (ctx, iso) => grossCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  'Gross Margin': (ctx, iso) => grossCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
   'Operating Profit': (ctx, iso) =>
-    netCollectedRevenueForMonth(ctx.revenue, iso) -
+    grossCollectedRevenueForMonth(ctx.revenue, iso) -
     cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
     opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Operating Income': (ctx, iso) =>
-    netCollectedRevenueForMonth(ctx.revenue, iso) -
+    grossCollectedRevenueForMonth(ctx.revenue, iso) -
     cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
     opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Operating Margin': (ctx, iso) =>
-    netCollectedRevenueForMonth(ctx.revenue, iso) -
+    grossCollectedRevenueForMonth(ctx.revenue, iso) -
     cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
     opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
 };
@@ -217,6 +221,23 @@ export function ReportsPanel({ statements, customReports }) {
           </div>
         )}
       </div>
+
+      {/* Legend (2026-08-07, Kayee: "give user an indicator on what cell is
+          editable") — the blue box style is otherwise unexplained the first time
+          someone sees it; this makes explicit what's a real input vs. a computed or
+          booked figure. P&L-only, since CF/BS/Custom have no editable cells yet. */}
+      {reportType === 'PL' && (
+        <div className="report-legend">
+          <span className="report-legend-item">
+            <span className="report-legend-swatch report-legend-swatch-editable" />
+            Editable input
+          </span>
+          <span className="report-legend-item">
+            <span className="report-legend-swatch report-legend-swatch-formula" />
+            From formula / actuals
+          </span>
+        </div>
+      )}
 
       {/* Wide wrapper — same treatment as Payroll's tables (globals.css .page-wide),
           so every wide-table tab behaves consistently (Kayee, 2026-08-05: "all pages
@@ -318,7 +339,7 @@ function revenueCalcExplanation(rowKey, revenue) {
     };
   }
   if (rowKey === 'total_revenue') {
-    return { calcNote: 'Total Revenue = Subscription $ + Transaction $, net of the Uncollectible% rate. Editable on the Assumptions tab.' };
+    return { calcNote: 'Total Revenue = Subscription $ + Transaction $ (gross, accrual basis — no Uncollectible adjustment; that belongs on Cash Flow).' };
   }
   return null;
 }
@@ -529,25 +550,36 @@ function customAccountCalcExplanation(row) {
   };
 }
 
-function buildDriverRow(key, label, section, months, getValue, onCommit) {
+/** ACTUAL months render the driver as plain read-only text, not an editable input
+ *  (2026-08-07, Kayee: "in actual, the editable input boxes should not appear because
+ *  only the ones that's forecast that has input... actual will only has information
+ *  from actual, no editable input will affect the total numbers") — an actual month's
+ *  Subscription/Transaction Revenue already comes straight from the Google Sheet, so
+ *  editing its Campaigns/Meetings count here would silently do nothing to that row's
+ *  total, which is worse than just not offering the box at all. Forecast months keep
+ *  the real <MonthInput>, since those DO feed the projected revenue formulas above. */
+function buildDriverRow(key, label, section, months, lastActualIndex, getValue, onCommit) {
   const monthCells = {};
-  for (const iso of months) {
-    monthCells[iso] = <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />;
-  }
+  months.forEach((iso, i) => {
+    monthCells[iso] =
+      i > lastActualIndex ? (
+        <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />
+      ) : (
+        <span key={iso} className="report-driver-readonly">{Math.round(getValue(iso)).toLocaleString('en-US')}</span>
+      );
+  });
   return { key, label, section, isTotal: false, driver: true, values: {}, monthCells };
 }
 
 /** Embeds the # of Campaigns / # of Meetings inputs directly under Subscription
  *  Revenue / Transaction Revenue in the P&L itself — Kayee (2026-08-06): "put it
  *  inside of revenue so that as the user adjust it, it will show up directly in
- *  revenue... no need to switch between assumption and P&L." These are genuinely
- *  editable everywhere (not forecast-only like other projected rows) since they're
- *  drivers, not booked GL dollars — editing an earlier month still matters even after
- *  it's "actual" because Meetings' auto-suggestion looks back at Campaigns from N
- *  months ago. Always inserted right after their revenue row regardless of range
+ *  revenue... no need to switch between assumption and P&L." Forecast-only editing
+ *  (2026-08-07, see buildDriverRow) — actual months still show the same figure, just
+ *  as plain text. Always inserted right after their revenue row regardless of range
  *  toggle — the range CSS classes on rangeClasses() hide/show columns, this only
  *  controls which ROWS exist. */
-function withRevenueDriverRows(rows, months, revenue, onSetCampaign, onSetMeeting) {
+function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCampaign, onSetMeeting) {
   if (!revenue || !onSetCampaign || !onSetMeeting) return rows;
   let next = rows;
   const subRow = next.find((r) => r.key === 'revenue_subscription_revenue');
@@ -559,6 +591,7 @@ function withRevenueDriverRows(rows, months, revenue, onSetCampaign, onSetMeetin
       '↳ # of Campaigns',
       subRow.section,
       months,
+      lastActualIndex,
       (iso) => campaignsForMonth(revenue, iso),
       onSetCampaign
     );
@@ -571,6 +604,7 @@ function withRevenueDriverRows(rows, months, revenue, onSetCampaign, onSetMeetin
       '↳ # of Meetings',
       txRow.section,
       months,
+      lastActualIndex,
       (iso) => meetingsForMonth(revenue, iso),
       onSetMeeting
     );
@@ -633,6 +667,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withRevenueDriverRows(
         rows,
         months,
+        lastActualIndex,
         revenue,
         (iso, n) =>
           setAssumptionsState({
