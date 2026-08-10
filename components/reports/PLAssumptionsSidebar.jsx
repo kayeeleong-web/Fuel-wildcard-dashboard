@@ -74,31 +74,57 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         </div>
 
         <div className="pr-assumption-sidebar-list">
-          <AssumptionField label="Upfront Rate" value={revenue.upfrontRate} onCommit={(v) => setRate('upfrontRate', v)} suffix="$" />
-          <AssumptionField
-            label="Per Meeting Rate"
-            value={revenue.perMeetingRate}
-            onCommit={(v) => setRate('perMeetingRate', v)}
-            suffix="$"
-          />
-          <AssumptionField
-            label="Meeting Conversion"
-            value={revenue.meetingConversionPct}
-            onCommit={(v) => setRate('meetingConversionPct', v)}
-          />
-          <AssumptionField
-            label="Meeting Lag (months)"
-            value={revenue.meetingsLagMonths}
-            onCommit={(v) => setRate('meetingsLagMonths', v)}
-            suffix="mo"
-          />
-          <AssumptionField label="Uncollectible" value={revenue.uncollectiblePct} onCommit={(v) => setRate('uncollectiblePct', v)} />
-          <AssumptionField
-            label="Campaign Cost Rate"
-            value={revenue.campaignCostRate}
-            onCommit={(v) => setRate('campaignCostRate', v)}
-            suffix="$"
-          />
+          {/* Grouped + ordered to match the P&L itself (2026-08-07, Kayee: "arrange the
+              boxes of revenue assumptions so that it will align with what's on the
+              P&L... meeting rate should be next to transactional revenue... subscription
+              revenue is # of Campaigns × Upfront Rate"). Transaction Revenue sits above
+              Subscription Revenue on Kayee's sheet, so its rates come first here too —
+              true row-for-row pixel alignment isn't possible across two independent
+              layouts (unrelated P&L rows like Services Revenue sit between them), but
+              grouping-by-stream in the same top-to-bottom order gets the same result:
+              scroll to a group, and you're looking at the rates behind the matching P&L
+              line right above it. */}
+          <div className="pr-assumption-group">
+            <div className="pr-assumption-group-label">Transaction Revenue</div>
+            <div className="pr-assumption-group-grid">
+              <AssumptionField
+                label="Per Meeting Rate"
+                value={revenue.perMeetingRate}
+                onCommit={(v) => setRate('perMeetingRate', v)}
+                suffix="$"
+              />
+              <AssumptionField
+                label="Meeting Conversion"
+                value={revenue.meetingConversionPct}
+                onCommit={(v) => setRate('meetingConversionPct', v)}
+              />
+            </div>
+            <AssumptionField
+              label="Meeting Lag (months)"
+              value={revenue.meetingsLagMonths}
+              onCommit={(v) => setRate('meetingsLagMonths', v)}
+              suffix="mo"
+            />
+          </div>
+
+          <div className="pr-assumption-group">
+            <div className="pr-assumption-group-label">Subscription Revenue</div>
+            <div className="pr-assumption-group-grid">
+              <AssumptionField label="Upfront Rate" value={revenue.upfrontRate} onCommit={(v) => setRate('upfrontRate', v)} suffix="$" />
+              <AssumptionField
+                label="Campaign Cost Rate"
+                value={revenue.campaignCostRate}
+                onCommit={(v) => setRate('campaignCostRate', v)}
+                suffix="$"
+              />
+            </div>
+          </div>
+
+          <div className="pr-assumption-group">
+            <div className="pr-assumption-group-label">Total Revenue</div>
+            <AssumptionField label="Uncollectible" value={revenue.uncollectiblePct} onCommit={(v) => setRate('uncollectiblePct', v)} />
+          </div>
+
           <p className="pr-assumption-note" style={{ marginLeft: 0, maxWidth: 'none' }}>
             # of Campaigns and # of Meetings are now edited directly on the P&L, under Subscription Revenue and
             Transaction Revenue.

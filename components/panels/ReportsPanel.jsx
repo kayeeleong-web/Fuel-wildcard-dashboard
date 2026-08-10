@@ -18,7 +18,6 @@ import {
   costPerCampaignForMonth,
   costItemsTotalForMonth,
   costItemAmountForMonth,
-  prevMonth,
 } from '../../lib/assumptions/assumptionsData';
 
 // Which Reports section a NOT-YET-matched custom cost item's category rolls up under
@@ -161,24 +160,22 @@ function extendMonthsThrough(months, throughIso) {
 /**
  * Reports tab — design-rules.md §5 / functionality-spec.md §5.
  *
- * Range toggle (6M/12M/24M/∞) is CSS-driven, not a refetch: `statements` here already
- * holds the full actual range for each statement (fetched once, server-side) plus
- * blank padding columns through PROJECTION_HORIZON — switching range only changes the
- * `data-range` attribute, which globals.css uses to hide month columns tagged outside
- * that range. The always-visible label column never carries an r6/r12/r24 class, so
- * the design-rules.md "never hide row labels" rule holds by construction, not by
- * convention.
+ * Range toggle (2026-2028 default / Historical) is CSS-driven, not a refetch:
+ * `statements` here already holds the full actual range for each statement (fetched
+ * once, server-side) plus blank padding columns through PROJECTION_HORIZON —
+ * switching range only changes the `data-range` attribute, which globals.css uses to
+ * hide month columns tagged outside that range. The always-visible label column never
+ * carries a year class, so the design-rules.md "never hide row labels" rule holds by
+ * construction, not by convention.
  */
 export function ReportsPanel({ statements, customReports }) {
   const [reportType, setReportType] = useState('PL');
-  // Defaults to the full 2026 calendar year (Jan-Dec) rather than a trailing window off
-  // the last actual month — per Kayee (2026-08-06): opening Reports used to always land
-  // on old months, requiring the ∞ toggle + a scroll past 2024/2025 every single refresh
-  // just to see this year's forecast. 6M/12M/24M/∞ are one click away in the same toggle
-  // group — each is a window CENTERED on today (half real history, half forecast), not
-  // a historical-only look-back (2026-08-06 fix, Kayee: "12m or 24m it's only showing
-  // actual not projection").
-  const [range, setRange] = useState('yr2026');
+  // Defaults to Jan-2026 through Dec-2028 (2026-08-07 rewrite, Kayee: "show 2026 and up
+  // until end of 2028 as default... if I want to see historical let me select
+  // historical and it will show everything") — replaces the earlier 2026/6M/12M/24M/∞
+  // toggle group with just these two states. "default" is the 3-year forward-looking
+  // landing view; "all" shows every month, actual and projected, with nothing hidden.
+  const [range, setRange] = useState('default');
 
   // Lifted up from StatementDoc (2026-08-06) so the P&L Assumptions sidebar and the
   // table itself share ONE Assumptions state instead of each reading their own copy —
@@ -209,24 +206,14 @@ export function ReportsPanel({ statements, customReports }) {
         </div>
         {reportType !== 'custom' && (
           <div className="seg right">
-            {/* "2026" is the default landing view (full Jan-Dec 2026, actual + forecast
-                together). 6M/12M/24M/∞ are windows centered on today — half actual
-                history, half forecast — not historical-only (2026-08-06 fix). */}
-            <button className={range === 'yr2026' ? 'active' : undefined} onClick={() => setRange('yr2026')}>
-              2026
+            {/* Two states only (2026-08-07 rewrite): the 3-year default landing view,
+                and Historical — everything, actual and forecast alike, no filtering. */}
+            <button className={range === 'default' ? 'active' : undefined} onClick={() => setRange('default')}>
+              2026 – 2028
             </button>
-            <span className="seg-divider" />
-            <span className="seg-group-label">Other Ranges</span>
-            {[
-              { id: '6', label: '6M' },
-              { id: '12', label: '12M' },
-              { id: '24', label: '24M' },
-              { id: 'all', label: '∞' },
-            ].map((r) => (
-              <button key={r.id} className={range === r.id ? 'active' : undefined} onClick={() => setRange(r.id)}>
-                {r.label}
-              </button>
-            ))}
+            <button className={range === 'all' ? 'active' : undefined} onClick={() => setRange('all')}>
+              Historical
+            </button>
           </div>
         )}
       </div>
@@ -279,22 +266,14 @@ export function ReportsPanel({ statements, customReports }) {
   );
 }
 
-/** 6M/12M/24M are windows CENTERED on today (half the months back as real history,
- *  half forward as forecast) — not a pure trailing/historical-only window (2026-08-06
- *  fix, Kayee: "when I toggle over to 12m or 24m it's only showing actual not
- *  projection"). `distance` is 0 at the last actual month ("today"), negative for
- *  history, positive for forecast — using its absolute value (instead of only ever
- *  checking the positive/history side, the old bug) is what lets these windows include
- *  forecast columns at all now that forecast months carry real projected numbers. */
+/** Every column always carries `.r-all` (data-range="all"/Historical has no hide rule
+ *  at all, see globals.css) plus its own calendar-year tag `.y<year>` — what the
+ *  default 2026-2028 view's CSS actually filters on (2026-08-07 rewrite; the old
+ *  6M/12M/24M trailing-window classes off `lastActualIndex` are gone along with those
+ *  toggle buttons). `lastActualIndex`/`monthIndex` are unused now but left as params so
+ *  every call site below doesn't need touching. */
 function rangeClasses(monthIndex, lastActualIndex, month) {
-  const distance = monthIndex - lastActualIndex;
   const classes = ['r-all'];
-  if (Math.abs(distance) <= 12) classes.push('r24');
-  if (Math.abs(distance) <= 6) classes.push('r12');
-  if (Math.abs(distance) <= 3) classes.push('r6');
-  // Calendar-year tag (independent of how far back/forward this column is from the last
-  // actual month) — what the "2026" default view's CSS actually filters on, since a
-  // fixed calendar year isn't expressible as a window off lastActualIndex.
   if (month) classes.push(`y${month.slice(0, 4)}`);
   return classes.join(' ');
 }
@@ -317,114 +296,56 @@ function siblingValuesAtMonth(rows, row, month) {
  *  hover note Kayee showed from another Fuel dashboard build ("Coach Rate, $/session
  *  — entered directly each month... not derived from other rows"). Only meaningful
  *  for a FORECAST cell (an actual month is just whatever the Google Sheet says, no
- *  calc to explain) on one of the three Assumptions-driven rows — every other cell
- *  returns null and renders as plain text, same as before. */
-function revenueCalcExplanation(rowKey, revenue, iso) {
+ *  calc to explain) on one of the three Assumptions-driven rows — every other row
+ *  returns null and gets no popover at all, same as before.
+ *
+ *  2026-08-07: moved from a per-month-cell popover to a single popover on the row's
+ *  label (see FragmentRows) — Kayee: "the hover over explanation on the calculation
+ *  only needs to appear once at the account title." Also dropped the `components`
+ *  breakdown of actual computed $ figures entirely per the same follow-up ("the hover
+ *  over calculation explanation only show the formula, no need to show the real
+ *  numbers") — this is now pure formula text, independent of which month you're
+ *  looking at (no `iso` param anymore), not a per-cell calculation receipt. */
+function revenueCalcExplanation(rowKey, revenue) {
   if (!revenue) return null;
   if (rowKey === 'revenue_subscription_revenue') {
-    return {
-      calcNote: 'Subscription Revenue = # of Campaigns × Upfront Rate. Both editable on the Assumptions tab.',
-      components: [
-        { label: '# of Campaigns', value: campaignsForMonth(revenue, iso).toLocaleString('en-US') },
-        { label: 'Upfront Rate', value: `$${Number(revenue.upfrontRate).toLocaleString('en-US')}` },
-      ],
-    };
+    return { calcNote: 'Subscription Revenue = # of Campaigns × Upfront Rate. Both editable on the Assumptions tab.' };
   }
   if (rowKey === 'revenue_transaction_revenue') {
-    const hasManualEntry = revenue.meetingsByMonth[iso] != null;
     return {
-      calcNote: hasManualEntry
-        ? 'Transaction Revenue = # of Meetings × Per Meeting Rate. Meetings entered directly for this month — editable on the Assumptions tab.'
-        : `Transaction Revenue = # of Meetings × Per Meeting Rate. No Meetings figure entered for this month yet, so it's auto-suggested as round(Meeting Conversion% × Campaigns from ${revenue.meetingsLagMonths}mo ago) — editable on the Assumptions tab.`,
-      components: [
-        { label: '# of Meetings', value: meetingsForMonth(revenue, iso).toLocaleString('en-US') },
-        { label: 'Per Meeting Rate', value: `$${Number(revenue.perMeetingRate).toLocaleString('en-US')}` },
-      ],
+      calcNote:
+        'Transaction Revenue = # of Meetings × Per Meeting Rate. If Meetings isn\'t entered for a month, it\'s auto-suggested as round(Meeting Conversion% × Campaigns from N months ago) — editable on the Assumptions tab.',
     };
   }
   if (rowKey === 'total_revenue') {
-    return {
-      calcNote: `Total Revenue = Subscription $ + Transaction $, net of ${revenue.uncollectiblePct}% Uncollectible. Rates editable on the Assumptions tab.`,
-      components: [
-        { label: 'Subscription Revenue (gross)', value: `$${Math.round(upfrontRevenueForMonth(revenue, iso)).toLocaleString('en-US')}` },
-        { label: 'Transaction Revenue (gross)', value: `$${Math.round(meetingRevenueForMonth(revenue, iso)).toLocaleString('en-US')}` },
-      ],
-    };
+    return { calcNote: 'Total Revenue = Subscription $ + Transaction $, net of the Uncollectible% rate. Editable on the Assumptions tab.' };
   }
   return null;
 }
 
 /** Same idea as revenueCalcExplanation, for the label-matched COGS/OpEx/margin rows
- *  (see PL_COST_PROJECTIONS_BY_LABEL above) — shows what actually fed the number
- *  instead of the generic same-section-siblings popover, since those siblings (the
- *  individual GL-category COGS lines) aren't populated by this projection and would
- *  otherwise show as a confusing wall of "—" under a real total. */
-function costCalcExplanation(rowLabel, ctx, iso) {
+ *  (see PL_COST_PROJECTIONS_BY_LABEL above) — formula-only text on the row label, no
+ *  `iso` and no computed component numbers (2026-08-07, same follow-up as above). */
+function costCalcExplanation(rowLabel, ctx) {
   if (!ctx.revenue) return null;
-  const cogs = cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso);
-  const opex = opexTotalForMonth(ctx.costItems, ctx.payrollState, iso);
-  const totalRevenue = netCollectedRevenueForMonth(ctx.revenue, iso);
-  const headcountCogs = ctx.payrollState
-    ? headcountCostByCostType(ctx.payrollState.roster, ctx.payrollState.bonuses, ctx.payrollState.assumptions, 'CoGS', iso)
-    : 0;
-  const headcountOpex = ctx.payrollState
-    ? headcountCostByCostType(ctx.payrollState.roster, ctx.payrollState.bonuses, ctx.payrollState.assumptions, 'OpEx', iso)
-    : 0;
-  const fmt = (n) => `$${Math.round(n).toLocaleString('en-US')}`;
-
   if (rowLabel === 'Total COGS') {
-    return {
-      calcNote: 'Total COGS = Cost Per Campaign + Non-Headcount Cost items tagged CoGS + Payroll headcount tagged CoGS. Editable on the Assumptions and Payroll tabs.',
-      components: [
-        { label: 'Cost Per Campaign', value: fmt(costPerCampaignForMonth(ctx.revenue, iso)) },
-        { label: 'Non-Headcount Costs (CoGS)', value: fmt(costItemsTotalForMonth(ctx.costItems, 'CoGS', iso)) },
-        { label: 'Payroll Headcount (CoGS)', value: fmt(headcountCogs) },
-      ],
-    };
+    return { calcNote: 'Total COGS = Cost Per Campaign + Non-Headcount Cost items tagged CoGS + Payroll headcount tagged CoGS. Editable on the Assumptions and Payroll tabs.' };
   }
   if (['Total OpEx', 'Total OPEX', 'Total Operating Expenses'].includes(rowLabel)) {
-    return {
-      calcNote: 'Total OpEx = Non-Headcount Cost items tagged OpEx + Payroll headcount tagged OpEx. Editable on the Assumptions and Payroll tabs.',
-      components: [
-        { label: 'Non-Headcount Costs (OpEx)', value: fmt(costItemsTotalForMonth(ctx.costItems, 'OpEx', iso)) },
-        { label: 'Payroll Headcount (OpEx)', value: fmt(headcountOpex) },
-      ],
-    };
+    return { calcNote: 'Total OpEx = Non-Headcount Cost items tagged OpEx + Payroll headcount tagged OpEx. Editable on the Assumptions and Payroll tabs.' };
   }
   if (['Gross Profit', 'Gross Margin'].includes(rowLabel)) {
-    return {
-      calcNote: 'Gross Profit = Total Revenue − Total COGS.',
-      components: [
-        { label: 'Total Revenue', value: fmt(totalRevenue) },
-        { label: 'Total COGS', value: fmt(cogs) },
-      ],
-    };
+    return { calcNote: 'Gross Profit = Total Revenue − Total COGS.' };
   }
   if (['Operating Profit', 'Operating Income', 'Operating Margin'].includes(rowLabel)) {
-    return {
-      calcNote: 'Operating Profit = Total Revenue − Total COGS − Total OpEx.',
-      components: [
-        { label: 'Total Revenue', value: fmt(totalRevenue) },
-        { label: 'Total COGS', value: fmt(cogs) },
-        { label: 'Total OpEx', value: fmt(opex) },
-      ],
-    };
+    return { calcNote: 'Operating Profit = Total Revenue − Total COGS − Total OpEx.' };
   }
   if (rowLabel === 'Cost of campaigns') {
-    return {
-      calcNote: "Cost of campaigns = last month's # of Campaigns × Cost Per Campaign rate. Both editable on the Assumptions tab.",
-      components: [
-        { label: 'Campaigns (last month)', value: campaignsForMonth(ctx.revenue, prevMonth(iso, 1)).toLocaleString('en-US') },
-        { label: 'Cost Per Campaign Rate', value: fmt(Number(ctx.revenue.campaignCostRate) || 0) },
-      ],
-    };
+    return { calcNote: "Cost of campaigns = last month's # of Campaigns × Cost Per Campaign rate. Both editable on the Assumptions tab." };
   }
   const matchedItem = matchCostItemToRowLabel(rowLabel, ctx.costItems);
   if (matchedItem) {
-    return {
-      calcNote: `Same figure as the "${matchedItem.name}" cost item on the Assumptions tab (${matchedItem.category}) — shown on this line since it's the same cost. Edit the amount there.`,
-      components: [{ label: `${matchedItem.name} (Assumptions)`, value: fmt(costItemAmountForMonth(matchedItem, iso)) }],
-    };
+    return { calcNote: `Same figure as the "${matchedItem.name}" cost item on the Assumptions tab (${matchedItem.category}) — shown on this line since it's the same cost. Edit the amount there.` };
   }
   return null;
 }
@@ -732,7 +653,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
     // targets (`#reports[data-range] .report-doc:not([data-doc="custom"])`) — without it
-    // the 6M/12M/24M/∞ buttons change `data-range` but nothing was ever selected by it.
+    // the 2026-2028/Historical buttons change `data-range` but nothing was ever selected by it.
     <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
       <table>
         <thead>
@@ -803,59 +724,66 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         <td>{section}</td>
         <td colSpan={months.length}></td>
       </tr>
-      {rows.map((row) => (
-        <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
-          <td>{row.label}</td>
-          {months.map((m, i) => {
-            // A "driver" row (e.g. the embedded # of Campaigns / # of Meetings inputs,
-            // 2026-08-06) supplies its own editable cell content directly instead of a
-            // computed $ value — same monthCells-override pattern PayrollTable already
-            // uses, so this table can hold a real <input>, not just formatted text.
-            if (row.monthCells && row.monthCells[m] !== undefined) {
+      {rows.map((row) => {
+        // Calc-note lookup now runs ONCE per row, not once per month cell (2026-08-07,
+        // Kayee: "the hover over explanation on the calculation only needs to appear
+        // once at the account title") — the popover moves from every forecast $ cell
+        // onto the row's own label, and it's pure formula text with no `iso` dependence
+        // any more (see revenueCalcExplanation/costCalcExplanation), so computing it
+        // once outside the month loop is strictly correct, not just faster. Same
+        // defensive try/catch as the row pipeline above — a bad calc-note lookup should
+        // never crash the whole app, just fall back to a plain, non-hoverable label.
+        let rowCalcInfo = null;
+        try {
+          rowCalcInfo =
+            revenueCalcExplanation(row.key, revenue) ||
+            costCalcExplanation(row.label, costCtx) ||
+            (row.custom ? customAccountCalcExplanation(row) : null);
+        } catch (err) {
+          console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
+        }
+        return (
+          <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
+            <td>
+              {rowCalcInfo ? (
+                <DrillPopover label={row.label} value={row.label} calcNote={rowCalcInfo.calcNote} />
+              ) : (
+                row.label
+              )}
+            </td>
+            {months.map((m, i) => {
+              // A "driver" row (e.g. the embedded # of Campaigns / # of Meetings inputs,
+              // 2026-08-06) supplies its own editable cell content directly instead of a
+              // computed $ value — same monthCells-override pattern PayrollTable already
+              // uses, so this table can hold a real <input>, not just formatted text.
+              if (row.monthCells && row.monthCells[m] !== undefined) {
+                return (
+                  <td key={m} className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}`}>
+                    {row.monthCells[m]}
+                  </td>
+                );
+              }
+              const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
+              const isForecast = i > lastActualIndex;
               return (
-                <td key={m} className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}`}>
-                  {row.monthCells[m]}
+                <td
+                  key={m}
+                  className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                >
+                  {/* A Total row's per-month breakdown (what real line items sum to it
+                      THIS month) is a separate feature from the calc-note above — it's
+                      inherently monthly, real numbers, so it stays exactly where it was. */}
+                  {row.isTotal && row.values[m] != null ? (
+                    <DrillPopover label={row.label} value={cellText} components={siblingValuesAtMonth(rows, row, m)} />
+                  ) : (
+                    cellText
+                  )}
                 </td>
               );
-            }
-            const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
-            const isForecast = i > lastActualIndex;
-            // Same defensive rule as the row pipeline above (StatementDoc) — a bad
-            // calc-note lookup should never crash the whole app, just fall back to
-            // plain cell text for that one cell.
-            let calcInfo = null;
-            if (isForecast) {
-              try {
-                calcInfo =
-                  revenueCalcExplanation(row.key, revenue, m) ||
-                  costCalcExplanation(row.label, costCtx, m) ||
-                  (row.custom ? customAccountCalcExplanation(row) : null);
-              } catch (err) {
-                console.warn('Reports calc-note lookup failed for a cell, showing plain value:', err);
-              }
-            }
-            return (
-              <td
-                key={m}
-                className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
-              >
-                {calcInfo ? (
-                  <DrillPopover
-                    label={row.label}
-                    value={cellText}
-                    components={calcInfo.components}
-                    calcNote={calcInfo.calcNote}
-                  />
-                ) : row.isTotal && row.values[m] != null ? (
-                  <DrillPopover label={row.label} value={cellText} components={siblingValuesAtMonth(rows, row, m)} />
-                ) : (
-                  cellText
-                )}
-              </td>
-            );
-          })}
-        </tr>
-      ))}
+            })}
+          </tr>
+        );
+      })}
     </>
   );
 }

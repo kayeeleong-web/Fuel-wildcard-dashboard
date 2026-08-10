@@ -371,31 +371,21 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .table-wrap table tbody tr.section td:first-child { background: var(--green-soft); }
 .table-wrap table tbody tr.total td:first-child { background: var(--black); }
 
-/* Reports tab range toggle: hide month columns outside the selected range, but ONLY on
-   tagged data cells. The always-visible label column never carries an .r6/.r12/.r24
-   class, so it needs the explicit :not(:first-child) too — a class-less th otherwise
-   still matches ":not(.r6)" like any other untagged cell and gets hidden right along
-   with the months it's supposed to stay visible next to (design-rules.md §5). */
-/* #reports and .report-doc land on the SAME element here (one statement rendered at a
-   time, not several .report-doc siblings inside a shared #reports wrapper) — no space
-   between the two compound selectors below, or this never matches anything at all. */
-#reports[data-range="6"].report-doc:not([data-doc="custom"]) th:not(.r6):not(:first-child),
-#reports[data-range="6"].report-doc:not([data-doc="custom"]) td:not(.r6):not(:first-child) { display: none; }
-#reports[data-range="12"].report-doc:not([data-doc="custom"]) th:not(.r12):not(:first-child),
-#reports[data-range="12"].report-doc:not([data-doc="custom"]) td:not(.r12):not(:first-child) { display: none; }
-#reports[data-range="24"].report-doc:not([data-doc="custom"]) th:not(.r24):not(:first-child),
-#reports[data-range="24"].report-doc:not([data-doc="custom"]) td:not(.r24):not(:first-child) { display: none; }
-/* data-range="all" (the ∞ toggle) shows every column, including the blank
-   projection-padding months through PROJECTION_HORIZON — every cell carries .r-all
-   unconditionally, so no hide rule is needed for it. */
-
-/* data-range="yr2026" — the default landing view (Kayee, 2026-08-06): full calendar
-   year Jan-Dec 2026 regardless of how far that is from the last actual month, so
-   opening Reports doesn't require the ∞ toggle + a scroll past 2024/2025 every time.
-   Every month cell always carries its own .y<year> class (see rangeClasses() in
-   ReportsPanel.jsx), independent of the r6/r12/r24 trailing-window classes above. */
-#reports[data-range="yr2026"].report-doc:not([data-doc="custom"]) th:not(.y2026):not(:first-child),
-#reports[data-range="yr2026"].report-doc:not([data-doc="custom"]) td:not(.y2026):not(:first-child) { display: none; }
+/* Reports tab range toggle (2026-08-07 rewrite, Kayee: "show 2026 and up until end of
+   2028 as default... if I want to see historical let me select historical and it will
+   show everything") — down to just two states, replacing the old 2026/6M/12M/24M/∞
+   segmented group entirely:
+     - data-range="default": Jan-2026 through Dec-2028 (3 calendar years), landing view.
+     - data-range="all": every column, actual and projected-padding alike (was the old
+       ∞ toggle's behavior) — every cell already carries .r-all unconditionally, so no
+       hide rule is needed for this state.
+   Hides ONLY tagged data cells, never the always-visible label column — a class-less
+   th would otherwise match ":not(.y2026)" like any other untagged cell and get hidden
+   right along with the months it's supposed to stay visible next to (design-rules.md
+   §5). #reports and .report-doc land on the SAME element here (one statement rendered
+   at a time), so there's no space between the two compound selectors below. */
+#reports[data-range="default"].report-doc:not([data-doc="custom"]) th:not(.y2026):not(.y2027):not(.y2028):not(:first-child),
+#reports[data-range="default"].report-doc:not([data-doc="custom"]) td:not(.y2026):not(.y2027):not(.y2028):not(:first-child) { display: none; }
 
 .seg-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
 .seg-group-label { font-size: 10px; font-weight: 700; color: var(--muted-2); text-transform: uppercase; letter-spacing: .5px; padding: 0 2px; white-space: nowrap; }
@@ -421,9 +411,14 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    .btn.primary elsewhere in the app (2026-08-07 follow-up, Kayee: "i dont like the
    green for the hide burger") rather than a color that implies a status/success state. */
 .reports-sidebar-toggle-rail {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  /* justify-content: flex-start (was center) — 2026-08-07, Kayee: "the text is in the
+     middle so the user won't see it since it's so long, make it at the top." A long
+     vertical label centered on a tall, page-height rail could land well below the fold;
+     pinning it near the top means it's visible in the same first glance as the rest of
+     the toolbar above, with no scrolling required to notice it's there. */
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px;
   width: 40px; align-self: stretch; border: none; border-radius: 10px;
-  background: var(--black); color: #fff; cursor: pointer; padding: 16px 0;
+  background: var(--black); color: #fff; cursor: pointer; padding: 20px 0;
   transition: background .12s ease;
 }
 .reports-sidebar-toggle-rail:hover { background: #000; }
@@ -462,7 +457,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    padding rule plain .page-wide already uses below its 1664px breakpoint — so this
    simply drops the max-width cap and never re-applies a margin at any width, instead
    of layering in another (smaller) fixed gutter. */
-.page-wide-reports-open { max-width: none; }
+.page-wide-reports-open { max-width: none; padding-left: 16px; padding-right: 16px; }
 
 /* Revenue Assumptions fields stacked one per line (Kayee: "instead of horizontal make
    them vertical") — reuses the exact same .pr-assumption field component as the
@@ -471,11 +466,23 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    themselves in a column instead of wrapping them in a row. Tightened up (2026-08-07,
    Kayee: "make the width of each line smaller") so the whole rates block reads as a
    compact strip, not a series of loosely-spaced form fields. */
-.pr-assumption-sidebar-list { display: flex; flex-direction: column; gap: 9px; padding: 12px 16px; }
+.pr-assumption-sidebar-list { display: flex; flex-direction: column; gap: 14px; padding: 12px 16px; }
 .pr-assumption-sidebar-list .pr-assumption { gap: 3px; }
 .pr-assumption-sidebar-list .pr-assumption-label { font-size: 10px; }
 .pr-assumption-sidebar-list .pr-assumption-input-wrap { justify-content: flex-end; }
 .pr-assumption-sidebar-list .pr-input-assumption { flex: 1; width: auto; padding: 5px 7px; font-size: 12px; }
+
+/* One group per revenue stream (2026-08-07) — a small caption naming the exact P&L
+   account it feeds (Kayee: "align with what's on the P&L"), then its rate field(s).
+   Two fields in a group sit side by side (Kayee: "upfront rate on the left and per
+   meeting rate is on the right" — applied within each stream's own group rather than
+   pairing Upfront with Per Meeting directly, since those two feed different P&L rows). */
+.pr-assumption-group { display: flex; flex-direction: column; gap: 8px; }
+.pr-assumption-group-label {
+  font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase;
+  letter-spacing: .4px; border-bottom: 1px solid var(--border); padding-bottom: 5px;
+}
+.pr-assumption-group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
 
 /* Non-Headcount Costs table, narrowed for the sidebar (2026-08-07) — the plain
    table-layout:fixed default divides its 6 columns evenly, which in a ~300-360px
@@ -514,6 +521,16 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    italic so it reads as a supporting input for the row above it, not another GL line. */
 tr.report-driver-row td:first-child { padding-left: 34px; font-style: italic; color: var(--muted); font-size: 11.5px; }
 .reports-with-sidebar .reports-main tr.report-driver-row td:first-child { font-size: 10.5px; }
+
+/* The driver row's editable <input> (MonthInput's .pr-input) came in taller than a
+   plain text cell next to it — its own padding/border stack on top of the cell's
+   padding, instead of replacing it (2026-08-07, Kayee: "the height of the # of meeting
+   is bigger than transaction revenue, make them the same"). Tightening the input's own
+   padding/font down to match the surrounding text rows' effective line height closes
+   that gap without having to touch MonthInput itself (which is shared with Payroll and
+   Assumptions, where the taller size is still correct). */
+tr.report-driver-row td:not(:first-child) { padding-top: 3px; padding-bottom: 3px; }
+tr.report-driver-row .pr-input { padding: 4px 6px; font-size: 11px; }
 
 /* Year-band header row (2026 / 2027 / ...) always stays visible regardless of which
    range is selected — it carries every range class unconditionally so none of the
