@@ -550,37 +550,50 @@ function customAccountCalcExplanation(row) {
   };
 }
 
-/** ACTUAL months render the driver as plain read-only text, not an editable input
- *  (2026-08-07, Kayee: "in actual, the editable input boxes should not appear because
- *  only the ones that's forecast that has input... actual will only has information
- *  from actual, no editable input will affect the total numbers") — an actual month's
- *  Subscription/Transaction Revenue already comes straight from the Google Sheet, so
- *  editing its Campaigns/Meetings count here would silently do nothing to that row's
- *  total, which is worse than just not offering the box at all. Forecast months keep
- *  the real <MonthInput>, since those DO feed the projected revenue formulas above. */
+/** ACTUAL months show NOTHING for the driver row (2026-08-07, Kayee: "where did you
+ *  get these numbers, if it's not from actual don't show" — spotted on a screenshot of
+ *  Jan-May 2026, all ACT columns). campaignsByMonth/meetingsByMonth are Assumptions-tab
+ *  seed/what-if data (lib/assumptions/assumptionsData.js SEED_CAMPAIGNS_BY_MONTH/
+ *  SEED_MEETINGS_BY_MONTH), NOT the real Google Sheet-sourced actuals this Reports tab
+ *  otherwise shows — there's no live GL-backed campaign/meeting count for actual
+ *  months, so showing one here read as real data when it was actually a made-up
+ *  forecast seed. A plain "—", the same "no data" convention every other actual-only
+ *  gap uses, is the honest answer (CLAUDE.md: "a wrong number that looks fine is worse
+ *  than a visible error").
+ *
+ *  `onCommit` is optional (2026-08-07, Kayee's real-sheet screenshot: "Total # of
+ *  Meetings shouldn't be in a blue box if it's a calculation field... it is a
+ *  calculation of =round(T9*$R$3)") — Campaigns is the one genuine manual driver on
+ *  Kayee's sheet, so it still gets an editable <MonthInput> for forecast months; when
+ *  `onCommit` isn't passed (Meetings), forecast months render the SAME computed value
+ *  as plain text instead, matching the "From formula / actuals" legend rather than
+ *  the "Editable input" one — because on the real sheet, Meetings is always a formula
+ *  (Conversion% × Campaigns from N months back), never typed in directly. */
 function buildDriverRow(key, label, section, months, lastActualIndex, getValue, onCommit) {
   const monthCells = {};
   months.forEach((iso, i) => {
-    monthCells[iso] =
-      i > lastActualIndex ? (
-        <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />
-      ) : (
-        <span key={iso} className="report-driver-readonly">{Math.round(getValue(iso)).toLocaleString('en-US')}</span>
-      );
+    if (i <= lastActualIndex) {
+      monthCells[iso] = <span key={iso} className="report-driver-readonly">—</span>;
+    } else if (onCommit) {
+      monthCells[iso] = <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />;
+    } else {
+      monthCells[iso] = <span key={iso} className="report-driver-readonly">{Math.round(getValue(iso)).toLocaleString('en-US')}</span>;
+    }
   });
   return { key, label, section, isTotal: false, driver: true, values: {}, monthCells };
 }
 
-/** Embeds the # of Campaigns / # of Meetings inputs directly under Subscription
- *  Revenue / Transaction Revenue in the P&L itself — Kayee (2026-08-06): "put it
- *  inside of revenue so that as the user adjust it, it will show up directly in
- *  revenue... no need to switch between assumption and P&L." Forecast-only editing
- *  (2026-08-07, see buildDriverRow) — actual months still show the same figure, just
- *  as plain text. Always inserted right after their revenue row regardless of range
- *  toggle — the range CSS classes on rangeClasses() hide/show columns, this only
- *  controls which ROWS exist. */
-function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCampaign, onSetMeeting) {
-  if (!revenue || !onSetCampaign || !onSetMeeting) return rows;
+/** Embeds # of Campaigns (editable) and # of Meetings (computed, read-only) directly
+ *  under Subscription Revenue / Transaction Revenue in the P&L itself — Kayee
+ *  (2026-08-06): "put it inside of revenue so that as the user adjust it, it will
+ *  show up directly in revenue... no need to switch between assumption and P&L."
+ *  Campaigns is the true manual driver; Meetings is always derived from it (see
+ *  buildDriverRow above) — `onSetMeeting` is gone entirely, there's nothing to commit.
+ *  Always inserted right after their revenue row regardless of range toggle — the
+ *  range CSS classes on rangeClasses() hide/show columns, this only controls which
+ *  ROWS exist. */
+function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCampaign) {
+  if (!revenue || !onSetCampaign) return rows;
   let next = rows;
   const subRow = next.find((r) => r.key === 'revenue_subscription_revenue');
   const txRow = next.find((r) => r.key === 'revenue_transaction_revenue');
@@ -606,7 +619,7 @@ function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCamp
       months,
       lastActualIndex,
       (iso) => meetingsForMonth(revenue, iso),
-      onSetMeeting
+      null
     );
     next = [...next.slice(0, idx + 1), driverRow, ...next.slice(idx + 1)];
   }
@@ -673,11 +686,6 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
           setAssumptionsState({
             ...assumptionsState,
             revenue: { ...assumptionsState.revenue, campaignsByMonth: { ...assumptionsState.revenue.campaignsByMonth, [iso]: n } },
-          }),
-        (iso, n) =>
-          setAssumptionsState({
-            ...assumptionsState,
-            revenue: { ...assumptionsState.revenue, meetingsByMonth: { ...assumptionsState.revenue.meetingsByMonth, [iso]: n } },
           })
       );
     } catch (err) {

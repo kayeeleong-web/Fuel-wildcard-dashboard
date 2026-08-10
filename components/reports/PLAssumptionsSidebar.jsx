@@ -123,8 +123,13 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
                     onCommit={(v) => setRate('meetingConversionPct', v)}
                   />
                 </div>
+                {/* "Meeting Conversion Time" (2026-08-07, Kayee: "it's not called a
+                    meeting lag, the client sheet has it as Meeting Conversion Time") —
+                    same underlying `meetingsLagMonths` field, this is just the
+                    client-facing label correction; internal name is unchanged since
+                    nothing else about the calc changed. */}
                 <AssumptionField
-                  label="Meeting Lag (months)"
+                  label="Meeting Conversion Time"
                   value={revenue.meetingsLagMonths}
                   onCommit={(v) => setRate('meetingsLagMonths', v)}
                   suffix="mo"

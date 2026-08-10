@@ -122,7 +122,7 @@ export function RevenueAssumptionsCard({ revenue, onChange }) {
           onCommit={(v) => setRate('meetingConversionPct', v)}
         />
         <AssumptionField
-          label="Meeting Lag (months)"
+          label="Meeting Conversion Time"
           value={revenue.meetingsLagMonths}
           onCommit={(v) => setRate('meetingsLagMonths', v)}
           suffix="mo"

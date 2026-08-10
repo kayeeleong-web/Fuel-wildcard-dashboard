@@ -568,10 +568,11 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 tr.report-driver-row td:first-child { padding-left: 34px; font-style: italic; color: var(--muted); font-size: 11.5px; }
 .reports-with-sidebar .reports-main tr.report-driver-row td:first-child { font-size: 10.5px; }
 
-/* Actual-month driver cells (2026-08-07) — plain text, not an <input>, and styled to
-   match: right-aligned like every other numeric cell, but muted/italic like the rest
-   of the driver row, so it's visually obvious this one isn't editable the way the
-   blue boxes in the forecast columns are. */
+/* Actual-month driver cells (2026-08-07, updated same day) — first shipped as plain
+   read-only text showing the Assumptions seed data's count; corrected to a plain "—"
+   once Kayee flagged that seed data isn't a real actual-month source (see
+   buildDriverRow in ReportsPanel.jsx). Styling kept: right-aligned like every other
+   numeric cell, muted/italic like the rest of the driver row. */
 .report-driver-readonly { display: block; text-align: right; font-family: var(--font-num); color: var(--muted); font-style: italic; }
 
 /* Editable-cell legend (2026-08-07) — sits between the toolbar and the table itself. */
