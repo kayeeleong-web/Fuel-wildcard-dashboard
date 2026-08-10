@@ -487,48 +487,53 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .pr-assumption-sidebar-list .pr-input-assumption { flex: 1; width: auto; padding: 5px 7px; font-size: 12px; }
 
 /* One group per revenue stream (2026-08-07) — a small caption naming the exact P&L
-   account it feeds (Kayee: "align with what's on the P&L"), then its rate field(s).
-   Two fields in a group sit side by side (Kayee: "upfront rate on the left and per
-   meeting rate is on the right" — applied within each stream's own group rather than
-   pairing Upfront with Per Meeting directly, since those two feed different P&L rows). */
-.pr-assumption-group { display: flex; flex-direction: column; gap: 8px; }
+   account it feeds (Kayee: "align with what's on the P&L"), then its rate field(s). */
+.pr-assumption-group { display: flex; flex-direction: column; gap: 10px; }
 .pr-assumption-group-label {
   font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase;
   letter-spacing: .4px; border-bottom: 1px solid var(--border); padding-bottom: 5px;
 }
-.pr-assumption-group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
 
-/* Three-section group layout (2026-08-07, Kayee: "the apply one can be the third
-   section, on the right") — base rate field(s) on the left, the "Apply a rate change"
-   schedule panel on the right. flex-wrap lets the apply panel drop below the fields on
-   a narrower sidebar instead of squeezing both into an unreadable width. */
-.pr-assumption-group-body { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
-.pr-assumption-group-fields { flex: 1 1 180px; display: flex; flex-direction: column; gap: 8px; min-width: 160px; }
+/* A single rate field + its optional schedule (2026-08-07 redesign, replacing an
+   always-open Apply panel — see RateScheduleControl.jsx's file header for the full
+   "this is covering what's behind" reasoning). The field itself is untouched
+   (.pr-assumption); only what's below it is new. */
+.pr-scheduled-field { display: flex; flex-direction: column; gap: 5px; }
 
-/* The schedule panel itself — a slightly recessed sub-card so it visually reads as a
-   distinct "action" area rather than another plain field. */
-.pr-schedule-panel {
-  flex: 1 1 200px; min-width: 190px; background: var(--panel-2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 7px;
+/* Quiet, ALWAYS-visible one-liner for a change that's already scheduled — this is the
+   answer to "do I already have next year's number queued?" without opening anything. */
+.pr-schedule-summary { display: flex; flex-direction: column; gap: 3px; }
+.pr-schedule-summary-line {
+  display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted);
+  font-family: var(--font-num); padding-left: 2px;
 }
-.pr-schedule-panel-label { font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
-.pr-schedule-field-select { width: 100%; padding: 5px 6px; font-size: 11px; }
+.pr-schedule-summary-line button {
+  border: none; background: none; cursor: pointer; color: var(--muted-2); font-size: 13px; line-height: 1;
+  width: 15px; height: 15px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.pr-schedule-summary-line button:hover { background: var(--pink-soft, rgba(236,72,98,.12)); color: var(--pink); }
+
+/* Collapsed state's only affordance — plain text link, not a button, so it reads as
+   "more options here" rather than competing visually with the real editable input
+   right above it. */
+.pr-schedule-add-link {
+  align-self: flex-start; border: none; background: none; padding: 0; cursor: pointer;
+  font-size: 10.5px; color: var(--blue); font-weight: 600; text-decoration: underline; text-underline-offset: 2px;
+}
+.pr-schedule-add-link:hover { color: var(--black); }
+
+/* Expanded state — the actual From/To/Value/Apply form, a slightly recessed sub-card
+   so it reads as a temporary "action" area, not a permanent part of the field. */
+.pr-schedule-inline-form {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; display: flex; flex-direction: column; gap: 7px; margin-top: 2px;
+}
 .pr-schedule-row { display: flex; gap: 6px; align-items: flex-end; }
 .pr-schedule-field { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .pr-schedule-field span { font-size: 9px; color: var(--muted-2); text-transform: uppercase; letter-spacing: .3px; }
 .pr-schedule-field .pr-input { padding: 5px 6px; font-size: 11px; }
-.pr-schedule-apply { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
+.pr-schedule-apply, .pr-schedule-cancel { padding: 6px 10px; font-size: 11px; white-space: nowrap; }
 .pr-schedule-apply:disabled { opacity: .45; cursor: not-allowed; }
-.pr-schedule-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
-.pr-schedule-chip {
-  display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: var(--font-num);
-  background: #fff; border: 1px solid var(--border); border-radius: 20px; padding: 3px 4px 3px 9px; color: var(--text);
-}
-.pr-schedule-chip button {
-  border: none; background: none; cursor: pointer; color: var(--muted-2); font-size: 13px; line-height: 1;
-  width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-}
-.pr-schedule-chip button:hover { background: var(--pink-soft, rgba(255,90,90,.15)); color: var(--pink, #E5484D); }
 
 /* Non-Headcount Costs table, narrowed for the sidebar (2026-08-07) — the plain
    table-layout:fixed default divides its 6 columns evenly, which in a ~300-360px

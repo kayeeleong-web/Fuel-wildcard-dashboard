@@ -557,9 +557,9 @@ function customAccountCalcExplanation(row) {
  *  SEED_MEETINGS_BY_MONTH), NOT the real Google Sheet-sourced actuals this Reports tab
  *  otherwise shows — there's no live GL-backed campaign/meeting count for actual
  *  months, so showing one here read as real data when it was actually a made-up
- *  forecast seed. A plain "—", the same "no data" convention every other actual-only
- *  gap uses, is the honest answer (CLAUDE.md: "a wrong number that looks fine is worse
- *  than a visible error").
+ *  forecast seed. A blank cell (2026-08-07 follow-up: dropped the "—" placeholder too,
+ *  per Kayee: "if it's zero or blank, just return blank") is the honest answer
+ *  (CLAUDE.md: "a wrong number that looks fine is worse than a visible error").
  *
  *  `onCommit` is optional (2026-08-07, Kayee's real-sheet screenshot: "Total # of
  *  Meetings shouldn't be in a blue box if it's a calculation field... it is a
@@ -573,11 +573,14 @@ function buildDriverRow(key, label, section, months, lastActualIndex, getValue, 
   const monthCells = {};
   months.forEach((iso, i) => {
     if (i <= lastActualIndex) {
-      monthCells[iso] = <span key={iso} className="report-driver-readonly">—</span>;
+      // Blank, not "—" (2026-08-07, Kayee: "if it's zero or blank, just return blank")
+      // — same "no fake indicator character" rule as the rest of the table now.
+      monthCells[iso] = <span key={iso} className="report-driver-readonly"></span>;
     } else if (onCommit) {
       monthCells[iso] = <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />;
     } else {
-      monthCells[iso] = <span key={iso} className="report-driver-readonly">{Math.round(getValue(iso)).toLocaleString('en-US')}</span>;
+      const rounded = Math.round(getValue(iso));
+      monthCells[iso] = <span key={iso} className="report-driver-readonly">{rounded ? rounded.toLocaleString('en-US') : ''}</span>;
     }
   });
   return { key, label, section, isTotal: false, driver: true, values: {}, monthCells };
@@ -624,6 +627,25 @@ function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCamp
     next = [...next.slice(0, idx + 1), driverRow, ...next.slice(idx + 1)];
   }
   return next;
+}
+
+/** Moves "Services Revenue" to the bottom of the Revenue section, right before that
+ *  section's Total row — Kayee (2026-08-07): "I don't like that it's between
+ *  Transactional Revenue and Subscription Revenue." Runs LAST, after driver rows are
+ *  already inserted, so Services Revenue lands after Subscription's own "↳ # of
+ *  Campaigns" row too — genuinely at the bottom of the revenue block, not just above
+ *  Subscription Revenue. Purely a display reorder: it moves the row object as-is
+ *  (same values, same key), so it can't change any total — only where one real GL line
+ *  appears on screen. A safe no-op if the label or a matching Total row isn't found
+ *  (e.g. a different client's sheet doesn't have a "Services Revenue" line at all). */
+function withReorderedRevenueRows(rows) {
+  const idx = rows.findIndex((r) => r.label === 'Services Revenue');
+  if (idx === -1) return rows;
+  const servicesRow = rows[idx];
+  const withoutServices = [...rows.slice(0, idx), ...rows.slice(idx + 1)];
+  const totalIdx = withoutServices.findIndex((r) => r.isTotal && r.section === servicesRow.section);
+  if (totalIdx === -1) return rows;
+  return [...withoutServices.slice(0, totalIdx), servicesRow, ...withoutServices.slice(totalIdx)];
 }
 
 function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated }) {
@@ -690,6 +712,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       );
     } catch (err) {
       console.warn('Revenue driver row injection failed:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
+      rows = withReorderedRevenueRows(rows);
+    } catch (err) {
+      console.warn('Revenue row reorder failed, showing sheet order:', err);
     }
   }
 
@@ -806,7 +835,14 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                   </td>
                 );
               }
-              const cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '—';
+              // Zero AND missing both render as a plain blank cell now (2026-08-07,
+              // Kayee: "if it's zero or blank, just return blank, don't know it so the
+              // report look more clean") — a page of "$0"/"—" everywhere a real GL
+              // month simply had no activity in that account was noise, not
+              // information; an actually-missing figure and a genuine zero now read
+              // identically (empty), which is the tradeoff Kayee explicitly asked for.
+              const rounded = row.values[m] != null ? Math.round(row.values[m]) : 0;
+              const cellText = rounded ? `$${rounded.toLocaleString('en-US')}` : '';
               const isForecast = i > lastActualIndex;
               return (
                 <td
@@ -815,8 +851,9 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                 >
                   {/* A Total row's per-month breakdown (what real line items sum to it
                       THIS month) is a separate feature from the calc-note above — it's
-                      inherently monthly, real numbers, so it stays exactly where it was. */}
-                  {row.isTotal && row.values[m] != null ? (
+                      inherently monthly, real numbers, so it stays exactly where it was.
+                      Skipped for a blank cell — nothing to break down. */}
+                  {row.isTotal && cellText !== '' ? (
                     <DrillPopover label={row.label} value={cellText} components={siblingValuesAtMonth(rows, row, m)} />
                   ) : (
                     cellText

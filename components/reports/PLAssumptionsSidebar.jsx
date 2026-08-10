@@ -2,22 +2,7 @@
 
 import { AssumptionField } from '../payroll/AssumptionsBar';
 import { CostItemsCard } from '../assumptions/CostItemsCard';
-import { RateScheduleControl } from './RateScheduleControl';
-
-// Which rates each group lets you schedule a future change for (2026-08-07, Kayee:
-// "if they want to switch from 3500 to 4500 in 2027... apply it and it will show up
-// on a monthly basis"). Keyed to the exact revenue field + its companion `*Schedule`
-// map in lib/assumptions/assumptionsData.js. Meeting Lag isn't here — it's a lag
-// COUNT (months to look back), not a $ or % rate, so "schedule a change" doesn't
-// apply to it the same way.
-const TRANSACTION_SCHEDULE_FIELDS = [
-  { key: 'perMeetingRate', scheduleKey: 'perMeetingRateSchedule', label: 'Per Meeting Rate', suffix: '$' },
-  { key: 'meetingConversionPct', scheduleKey: 'meetingConversionPctSchedule', label: 'Meeting Conversion', suffix: '%' },
-];
-const SUBSCRIPTION_SCHEDULE_FIELDS = [
-  { key: 'upfrontRate', scheduleKey: 'upfrontRateSchedule', label: 'Upfront Rate', suffix: '$' },
-];
-const COGS_SCHEDULE_FIELDS = [{ key: 'campaignCostRate', scheduleKey: 'campaignCostRateSchedule', label: 'Cost Per Campaign Rate', suffix: '$' }];
+import { ScheduledRateField } from './RateScheduleControl';
 
 /**
  * P&L Assumptions sidebar (2026-08-06) — the Assumptions tab's Revenue Assumptions
@@ -100,53 +85,58 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
               grouping-by-stream in the same top-to-bottom order gets the same result:
               scroll to a group, and you're looking at the rates behind the matching P&L
               line right above it. */}
-          {/* Each group is now 3 sections across (2026-08-07, Kayee: "you can arrange
-              it so that the section fit... the apply one can be the third section, on
-              the right"): the base rate field(s) on the left/middle, and a "schedule a
-              future change" panel on the right — the base field still sets the rate
-              used everywhere with no override; the panel on the right layers a
-              date-ranged override on top of it (see RateScheduleControl). */}
+          {/* Redesigned 2026-08-07 after Kayee's UX/FP&A framing question ("this is
+              covering what's behind... maybe the apply a rate change can be hidden,
+              only show up when I want it") — each schedulable field now uses
+              <ScheduledRateField>, which keeps the CURRENT value front and center,
+              shows any already-scheduled future change as one quiet line (no clicking
+              needed to see it), and hides the actual add-a-change form behind a
+              "+ Schedule a future change" link until it's wanted. See
+              RateScheduleControl.jsx for the full reasoning. */}
           <div className="pr-assumption-group">
             <div className="pr-assumption-group-label">Transaction Revenue</div>
-            <div className="pr-assumption-group-body">
-              <div className="pr-assumption-group-fields">
-                <div className="pr-assumption-group-grid">
-                  <AssumptionField
-                    label="Per Meeting Rate"
-                    value={revenue.perMeetingRate}
-                    onCommit={(v) => setRate('perMeetingRate', v)}
-                    suffix="$"
-                  />
-                  <AssumptionField
-                    label="Meeting Conversion"
-                    value={revenue.meetingConversionPct}
-                    onCommit={(v) => setRate('meetingConversionPct', v)}
-                  />
-                </div>
-                {/* "Meeting Conversion Time" (2026-08-07, Kayee: "it's not called a
-                    meeting lag, the client sheet has it as Meeting Conversion Time") —
-                    same underlying `meetingsLagMonths` field, this is just the
-                    client-facing label correction; internal name is unchanged since
-                    nothing else about the calc changed. */}
-                <AssumptionField
-                  label="Meeting Conversion Time"
-                  value={revenue.meetingsLagMonths}
-                  onCommit={(v) => setRate('meetingsLagMonths', v)}
-                  suffix="mo"
-                />
-              </div>
-              <RateScheduleControl fields={TRANSACTION_SCHEDULE_FIELDS} revenue={revenue} onChange={onRevenueChange} />
-            </div>
+            <ScheduledRateField
+              label="Per Meeting Rate"
+              value={revenue.perMeetingRate}
+              onCommit={(v) => setRate('perMeetingRate', v)}
+              suffix="$"
+              revenue={revenue}
+              scheduleKey="perMeetingRateSchedule"
+              onChange={onRevenueChange}
+            />
+            <ScheduledRateField
+              label="Meeting Conversion"
+              value={revenue.meetingConversionPct}
+              onCommit={(v) => setRate('meetingConversionPct', v)}
+              suffix="%"
+              revenue={revenue}
+              scheduleKey="meetingConversionPctSchedule"
+              onChange={onRevenueChange}
+            />
+            {/* "Meeting Conversion Time" (2026-08-07, Kayee: "it's not called a
+                meeting lag, the client sheet has it as Meeting Conversion Time") —
+                same underlying `meetingsLagMonths` field, this is just the
+                client-facing label correction. Not schedulable — it's a lag COUNT
+                (months to look back), not a $ or % rate. */}
+            <AssumptionField
+              label="Meeting Conversion Time"
+              value={revenue.meetingsLagMonths}
+              onCommit={(v) => setRate('meetingsLagMonths', v)}
+              suffix="mo"
+            />
           </div>
 
           <div className="pr-assumption-group">
             <div className="pr-assumption-group-label">Subscription Revenue</div>
-            <div className="pr-assumption-group-body">
-              <div className="pr-assumption-group-fields">
-                <AssumptionField label="Upfront Rate" value={revenue.upfrontRate} onCommit={(v) => setRate('upfrontRate', v)} suffix="$" />
-              </div>
-              <RateScheduleControl fields={SUBSCRIPTION_SCHEDULE_FIELDS} revenue={revenue} onChange={onRevenueChange} />
-            </div>
+            <ScheduledRateField
+              label="Upfront Rate"
+              value={revenue.upfrontRate}
+              onCommit={(v) => setRate('upfrontRate', v)}
+              suffix="$"
+              revenue={revenue}
+              scheduleKey="upfrontRateSchedule"
+              onChange={onRevenueChange}
+            />
           </div>
 
           {/* Own group, separate from Subscription Revenue (2026-08-07, Kayee: "in
@@ -156,17 +146,15 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
               though it's driven by the same campaign count. */}
           <div className="pr-assumption-group">
             <div className="pr-assumption-group-label">COGS</div>
-            <div className="pr-assumption-group-body">
-              <div className="pr-assumption-group-fields">
-                <AssumptionField
-                  label="Cost Per Campaign Rate"
-                  value={revenue.campaignCostRate}
-                  onCommit={(v) => setRate('campaignCostRate', v)}
-                  suffix="$"
-                />
-              </div>
-              <RateScheduleControl fields={COGS_SCHEDULE_FIELDS} revenue={revenue} onChange={onRevenueChange} />
-            </div>
+            <ScheduledRateField
+              label="Cost Per Campaign Rate"
+              value={revenue.campaignCostRate}
+              onCommit={(v) => setRate('campaignCostRate', v)}
+              suffix="$"
+              revenue={revenue}
+              scheduleKey="campaignCostRateSchedule"
+              onChange={onRevenueChange}
+            />
           </div>
 
           <p className="pr-assumption-note" style={{ marginLeft: 0, maxWidth: 'none' }}>

@@ -1,104 +1,107 @@
 'use client';
 
 import { useState } from 'react';
+import { AssumptionField } from '../payroll/AssumptionsBar';
 import { buildScheduleRangePatch } from '../../lib/assumptions/assumptionsData';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 
 /**
- * "Apply a rate change for a date range" panel (2026-08-07, Kayee: "if they want to
- * switch from 3500 to 4500 in 2027 there will be an apply button that let them do
- * this... start date for jan 2026 to dec 2026 is 3500 then I apply it and it will
- * show up on a monthly basis"). Sits as its own section next to a group's rate
- * field(s) in PLAssumptionsSidebar — the group's existing <AssumptionField> is still
- * the BASE rate (applies everywhere with no override); this panel layers effective-
- * dated overrides on top of it via the `*Schedule` maps in lib/assumptions/
- * assumptionsData.js, which every revenue formula (upfrontRevenueForMonth,
- * meetingRevenueForMonth, meetingsForMonth, costPerCampaignForMonth) already reads.
+ * A single rate field (Per Meeting Rate, Upfront Rate, etc.) plus its optional future
+ * rate schedule, redesigned 2026-08-07 after Kayee's UX/FP&A framing question: "this
+ * is covering what's behind... what should we still show at the meantime? like 3000
+ * for now but I know if I already have 4000 for the next year... maybe the apply a
+ * rate change can be hidden, only show up when I want it."
  *
- * `fields` is the list of this group's schedulable rates — one dropdown when there's
- * more than one (e.g. Transaction Revenue's Per Meeting Rate AND Meeting Conversion),
- * no dropdown needed when there's only one (Subscription Revenue's Upfront Rate,
- * COGS's Cost Per Campaign Rate).
+ * v1 (same day, superseded) put a whole From/To/Value/Apply form permanently open as
+ * a third section next to every group's fields — correct data model, wrong amount of
+ * screen real estate for something you set once and rarely touch. This version:
+ *   - Always shows the field's CURRENT value (the number in effect right now) exactly
+ *     like before — that's the thing that should stay visually dominant.
+ *   - If a future change is already scheduled, shows it as a single quiet line
+ *     ("→ $4,500 from Jan 2027") right under the field — always visible, no clicking
+ *     required, so "do I already have next year's number queued?" never requires
+ *     opening anything to answer.
+ *   - The actual add-a-change FORM is collapsed behind a plain text link ("+ Schedule
+ *     a future change") and only appears inline when clicked, collapsing again once
+ *     applied — so the heavy editing UI is only on screen when it's actually wanted.
  */
-export function RateScheduleControl({ fields, revenue, onChange }) {
-  const [selectedKey, setSelectedKey] = useState(fields[0].key);
+export function ScheduledRateField({ label, value, onCommit, suffix, revenue, scheduleKey, onChange }) {
+  const [expanded, setExpanded] = useState(false);
   const [fromMonth, setFromMonth] = useState('');
   const [toMonth, setToMonth] = useState('');
-  const [value, setValue] = useState('');
+  const [newValue, setNewValue] = useState('');
 
-  const field = fields.find((f) => f.key === selectedKey) || fields[0];
-  const schedule = revenue[field.scheduleKey] || {};
+  const schedule = revenue[scheduleKey] || {};
   const entries = Object.keys(schedule).sort();
 
   function apply() {
-    if (!fromMonth || value === '') return;
-    const patch = buildScheduleRangePatch(schedule, fromMonth, toMonth || null, value);
-    onChange({ ...revenue, [field.scheduleKey]: patch });
+    if (!fromMonth || newValue === '') return;
+    const patch = buildScheduleRangePatch(schedule, fromMonth, toMonth || null, newValue);
+    onChange({ ...revenue, [scheduleKey]: patch });
     setFromMonth('');
     setToMonth('');
-    setValue('');
+    setNewValue('');
+    setExpanded(false);
   }
 
   function removeEntry(iso) {
     const patch = { ...schedule };
     delete patch[iso];
-    onChange({ ...revenue, [field.scheduleKey]: patch });
+    onChange({ ...revenue, [scheduleKey]: patch });
   }
 
   return (
-    <div className="pr-schedule-panel">
-      <div className="pr-schedule-panel-label">Apply a rate change</div>
-
-      {fields.length > 1 && (
-        <select
-          className="pr-input pr-select pr-schedule-field-select"
-          value={selectedKey}
-          onChange={(e) => setSelectedKey(e.target.value)}
-        >
-          {fields.map((f) => (
-            <option key={f.key} value={f.key}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-      )}
-
-      <div className="pr-schedule-row">
-        <label className="pr-schedule-field">
-          <span>From</span>
-          <input type="month" className="pr-input" value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} />
-        </label>
-        <label className="pr-schedule-field">
-          <span>To (optional)</span>
-          <input type="month" className="pr-input" value={toMonth} onChange={(e) => setToMonth(e.target.value)} />
-        </label>
-      </div>
-      <div className="pr-schedule-row">
-        <label className="pr-schedule-field">
-          <span>New Value{field.suffix ? ` (${field.suffix})` : ''}</span>
-          <input
-            type="number"
-            className="pr-input"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={field.suffix === '$' ? '4500' : '12'}
-          />
-        </label>
-        <button type="button" className="btn primary pr-schedule-apply" onClick={apply} disabled={!fromMonth || value === ''}>
-          Apply
-        </button>
-      </div>
+    <div className="pr-scheduled-field">
+      <AssumptionField label={label} value={value} onCommit={onCommit} suffix={suffix} />
 
       {entries.length > 0 && (
-        <div className="pr-schedule-chips">
+        <div className="pr-schedule-summary">
           {entries.map((iso) => (
-            <span key={iso} className="pr-schedule-chip">
-              {formatMonthLabel(iso)}: {schedule[iso] === null ? 'base rate' : `${field.suffix === '$' ? '$' : ''}${schedule[iso]}${field.suffix === '%' ? '%' : ''}`}
-              <button type="button" onClick={() => removeEntry(iso)} title="Remove this override">
+            <span key={iso} className="pr-schedule-summary-line">
+              → {schedule[iso] === null ? 'base rate' : `${suffix === '$' ? '$' : ''}${schedule[iso]}${suffix === '%' ? '%' : ''}`} from{' '}
+              {formatMonthLabel(iso)}
+              <button type="button" onClick={() => removeEntry(iso)} title="Remove this scheduled change">
                 ×
               </button>
             </span>
           ))}
+        </div>
+      )}
+
+      {!expanded ? (
+        <button type="button" className="pr-schedule-add-link" onClick={() => setExpanded(true)}>
+          + Schedule a future change
+        </button>
+      ) : (
+        <div className="pr-schedule-inline-form">
+          <div className="pr-schedule-row">
+            <label className="pr-schedule-field">
+              <span>From</span>
+              <input type="month" className="pr-input" value={fromMonth} onChange={(e) => setFromMonth(e.target.value)} />
+            </label>
+            <label className="pr-schedule-field">
+              <span>To (optional)</span>
+              <input type="month" className="pr-input" value={toMonth} onChange={(e) => setToMonth(e.target.value)} />
+            </label>
+          </div>
+          <div className="pr-schedule-row">
+            <label className="pr-schedule-field">
+              <span>New Value{suffix ? ` (${suffix})` : ''}</span>
+              <input
+                type="number"
+                className="pr-input"
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                placeholder={suffix === '$' ? '4500' : '12'}
+              />
+            </label>
+            <button type="button" className="btn primary pr-schedule-apply" onClick={apply} disabled={!fromMonth || newValue === ''}>
+              Apply
+            </button>
+            <button type="button" className="btn pr-schedule-cancel" onClick={() => setExpanded(false)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
