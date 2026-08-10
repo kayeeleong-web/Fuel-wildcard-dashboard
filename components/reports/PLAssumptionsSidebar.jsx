@@ -19,7 +19,7 @@ import { ScheduledRateField } from './RateScheduleControl';
  * table can reclaim the full page width when the sidebar isn't needed (Kayee: "like a
  * lot of major websites... if I click a button you can hide it into a hamburger").
  */
-export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange }) {
+export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange, costItemOrder }) {
   if (collapsed) {
     // Full-height, black/white rail (2026-08-07, Kayee: "make hamburger more obvious
     // because user might miss it") — a lone 28px icon square floating in an otherwise
@@ -165,7 +165,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         </div>
       </div>
 
-      <CostItemsCard costItems={costItems} onChange={onCostItemsChange} />
+      <CostItemsCard costItems={costItems} onChange={onCostItemsChange} itemOrder={costItemOrder} />
     </div>
   );
 }

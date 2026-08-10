@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
 import { MonthInput } from '../payroll/PayrollTable';
@@ -18,6 +18,7 @@ import {
   costPerCampaignForMonth,
   costItemsTotalForMonth,
   costItemAmountForMonth,
+  toggleCampaignActualOverride,
 } from '../../lib/assumptions/assumptionsData';
 
 // Which Reports section a NOT-YET-matched custom cost item's category rolls up under
@@ -192,6 +193,15 @@ export function ReportsPanel({ statements, customReports }) {
 
   const showSidebar = reportType === 'PL';
 
+  // Non-Headcount Costs display order, matching their real P&L row positions
+  // (2026-08-07, Kayee: "make this align with what they actually are"). Recomputed
+  // whenever the P&L statement or cost items change; null (fall back to stored order)
+  // until both are actually available.
+  const costItemOrder = useMemo(
+    () => computeCostItemOrder(statements?.PL, assumptionsHydrated ? assumptionsState?.costItems : null),
+    [statements, assumptionsState, assumptionsHydrated]
+  );
+
   return (
     <>
       <PageHead title="Reports" subtitle="P&L, Cash Flow, Balance Sheet, and saved custom reports" />
@@ -262,6 +272,7 @@ export function ReportsPanel({ statements, customReports }) {
               costItems={assumptionsHydrated ? assumptionsState?.costItems : null}
               onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
               onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
+              costItemOrder={costItemOrder}
             />
             <div className="reports-main">
               <StatementDoc
@@ -341,6 +352,23 @@ function revenueCalcExplanation(rowKey, revenue) {
   if (rowKey === 'total_revenue') {
     return { calcNote: 'Total Revenue = Subscription $ + Transaction $ (gross, accrual basis — no Uncollectible adjustment; that belongs on Cash Flow).' };
   }
+  // The embedded driver rows (2026-08-07, Kayee: "# of meeting should also show how
+  // the calculation come about as well the meeting conversion time and stuff") — same
+  // formula-only convention as every other calc-note here (see file header note on
+  // 2026-08-07: no live numbers, just the formula), just attached to these two rows
+  // too now that they sit in the P&L instead of only on the Assumptions tab.
+  if (rowKey === '__driver_meetings') {
+    return {
+      calcNote:
+        '# of Meetings = round(Meeting Conversion% × # of Campaigns from Meeting Conversion Time months ago) — always a formula for forecast months, never typed in directly. Both rates editable on the Assumptions tab.',
+    };
+  }
+  if (rowKey === '__driver_campaigns') {
+    return {
+      calcNote:
+        '# of Campaigns is the one manual driver here — type a forecast month\'s count directly into its blue box. An actual month has a hamburger toggle to switch it to projection too, so a real count can replace a hardcoded default that\'s feeding # of Meetings\' lag calculation.',
+    };
+  }
   return null;
 }
 
@@ -384,6 +412,60 @@ function matchCostItemToRowLabel(rowLabel, costItems) {
   if (overrideId) return costItems.find((i) => i.id === overrideId) || null;
   const target = rowLabel.trim().toLowerCase();
   return costItems.find((i) => (i.name || '').trim().toLowerCase() === target) || null;
+}
+
+/** Orders the Non-Headcount Costs list to match where each item actually lands on the
+ *  P&L (2026-08-07, Kayee: "can you make this align with what they actually are? like
+ *  rent should be next to the line right"). Returns an array of cost-item ids in
+ *  display order, or null when there's nothing to sort by (no statement yet, wrong
+ *  statement type, or no cost items) — CostItemsCard falls back to stored order in
+ *  that case.
+ *
+ *  Two kinds of items land on the P&L, at two different points, so this walks the
+ *  real rendered rows once and records both:
+ *   1. Items that matched an existing named GL row (matchCostItemToRowLabel) — these
+ *      sit exactly where that row sits.
+ *   2. Items with no matching row of their own (withCustomAccountRows injects these
+ *      right before their section's Total row) — mirrored here the same way, so a
+ *      "Vetric" custom row sorts into the same slot it actually renders in.
+ *  Anything left over (a section that isn't present in this statement at all) is
+ *  appended at the end in its original order rather than dropped. */
+function computeCostItemOrder(statement, costItems) {
+  if (!statement || statement.type !== 'PL' || !costItems || costItems.length === 0) return null;
+
+  const sectionsPresent = new Set(statement.rows.map((r) => r.section));
+  const customSectionByCategory = {};
+  for (const category of Object.keys(CUSTOM_ACCOUNT_SECTION_ALIASES)) {
+    customSectionByCategory[category] = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES[category]);
+  }
+
+  const order = [];
+  const seen = new Set();
+
+  for (const row of statement.rows) {
+    const matchedItem = matchCostItemToRowLabel(row.label, costItems);
+    if (matchedItem && !seen.has(matchedItem.id)) {
+      order.push(matchedItem.id);
+      seen.add(matchedItem.id);
+    }
+    if (row.isTotal) {
+      for (const category of Object.keys(customSectionByCategory)) {
+        if (customSectionByCategory[category] !== row.section) continue;
+        for (const item of costItems) {
+          if (item.category === category && !seen.has(item.id)) {
+            order.push(item.id);
+            seen.add(item.id);
+          }
+        }
+      }
+    }
+  }
+
+  for (const item of costItems) {
+    if (!seen.has(item.id)) order.push(item.id);
+  }
+
+  return order;
 }
 
 /** Returns `statement.rows` unchanged, except any row in PL_REVENUE_PROJECTIONS gets
@@ -568,16 +650,60 @@ function customAccountCalcExplanation(row) {
  *  `onCommit` isn't passed (Meetings), forecast months render the SAME computed value
  *  as plain text instead, matching the "From formula / actuals" legend rather than
  *  the "Editable input" one — because on the real sheet, Meetings is always a formula
- *  (Conversion% × Campaigns from N months back), never typed in directly. */
-function buildDriverRow(key, label, section, months, lastActualIndex, getValue, onCommit) {
+ *  (Conversion% × Campaigns from N months back), never typed in directly.
+ *
+ *  `overrides`/`onToggleOverride` (2026-08-10, Kayee, citing the Hampton
+ *  act-fcst-snapshot-pattern doc: "I want to be able to switch actual month to
+ *  projection so that I can input those # of campaign in the earlier month") — only
+ *  meaningful for the Campaigns row (the one with a real `onCommit`). An actual month
+ *  that's been switched on renders exactly like a forecast month (editable box); every
+ *  actual month gets a small toggle button so switching is always one click away, in
+ *  either direction. Meetings never gets these two params — it has nothing to switch,
+ *  it's a formula, always. */
+function buildDriverRow(key, label, section, months, lastActualIndex, getValue, onCommit, overrides, onToggleOverride) {
   const monthCells = {};
   months.forEach((iso, i) => {
-    if (i <= lastActualIndex) {
+    const isActual = i <= lastActualIndex;
+    const isOverridden = overrides && overrides[iso];
+    if (isActual && !isOverridden) {
       // Blank, not "—" (2026-08-07, Kayee: "if it's zero or blank, just return blank")
-      // — same "no fake indicator character" rule as the rest of the table now.
-      monthCells[iso] = <span key={iso} className="report-driver-readonly"></span>;
+      // — same "no fake indicator character" rule as the rest of the table now. The
+      // toggle (when this row supports one) is the only way to change that.
+      monthCells[iso] = (
+        <span key={iso} className="report-driver-readonly-cell">
+          <span className="report-driver-readonly"></span>
+          {onCommit && onToggleOverride && (
+            <button
+              type="button"
+              className="report-driver-override-toggle"
+              title="Switch this actual month to projection so you can type a real count"
+              onClick={() => onToggleOverride(iso)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            </button>
+          )}
+        </span>
+      );
     } else if (onCommit) {
-      monthCells[iso] = <MonthInput key={iso} value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />;
+      monthCells[iso] = (
+        <span key={iso} className="report-driver-editable-cell">
+          <MonthInput value={getValue(iso)} onCommit={(n) => onCommit(iso, n)} />
+          {isActual && isOverridden && onToggleOverride && (
+            <button
+              type="button"
+              className="report-driver-override-toggle is-active"
+              title="Switch this month back to actual (hides the box again)"
+              onClick={() => onToggleOverride(iso)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          )}
+        </span>
+      );
     } else {
       const rounded = Math.round(getValue(iso));
       monthCells[iso] = <span key={iso} className="report-driver-readonly">{rounded ? rounded.toLocaleString('en-US') : ''}</span>;
@@ -595,7 +721,7 @@ function buildDriverRow(key, label, section, months, lastActualIndex, getValue, 
  *  Always inserted right after their revenue row regardless of range toggle — the
  *  range CSS classes on rangeClasses() hide/show columns, this only controls which
  *  ROWS exist. */
-function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCampaign) {
+function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCampaign, onToggleCampaignOverride) {
   if (!revenue || !onSetCampaign) return rows;
   let next = rows;
   const subRow = next.find((r) => r.key === 'revenue_subscription_revenue');
@@ -609,7 +735,9 @@ function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCamp
       months,
       lastActualIndex,
       (iso) => campaignsForMonth(revenue, iso),
-      onSetCampaign
+      onSetCampaign,
+      revenue.campaignActualOverrides,
+      onToggleCampaignOverride
     );
     next = [...next.slice(0, idx + 1), driverRow, ...next.slice(idx + 1)];
   }
@@ -708,6 +836,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
           setAssumptionsState({
             ...assumptionsState,
             revenue: { ...assumptionsState.revenue, campaignsByMonth: { ...assumptionsState.revenue.campaignsByMonth, [iso]: n } },
+          }),
+        (iso) =>
+          setAssumptionsState({
+            ...assumptionsState,
+            revenue: toggleCampaignActualOverride(assumptionsState.revenue, iso),
           })
       );
     } catch (err) {
