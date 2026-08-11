@@ -13,6 +13,7 @@ import {
   upfrontRevenueForMonth,
   meetingRevenueForMonth,
   grossCollectedRevenueForMonth,
+  netCollectedRevenueForMonth,
   campaignsForMonth,
   meetingsForMonth,
   costPerCampaignForMonth,
@@ -58,20 +59,22 @@ const COST_ITEM_ROW_LABEL_OVERRIDES = {
  *  (2026-08-04): "if I change something [in Assumptions] it should reflect in the
  *  P&L projection." Subscription Revenue = Upfront $ (campaigns x Upfront Rate),
  *  Transaction Revenue = Meeting $ (meetings x Per-Meeting Rate), Total Revenue = the
- *  GROSS sum of both streams — no Uncollectible haircut (2026-08-07 fix, Kayee: "in
- *  P&L is only accrual revenue, [Uncollectible] is not relevant to this... uncollectible
- *  should be in cash flow"). The P&L books revenue as earned, not as collected — a
- *  cash-collection risk adjustment belongs on the Cash Flow statement, not here; the
- *  Uncollectible rate itself is left untouched in the data model
- *  (lib/assumptions/assumptionsData.js) for exactly that future use. These exact key
- *  names are transcribed from Kayee's live PL sheet (2026-08-04 screenshots) — if the
- *  sheet's Key column for these rows ever changes, this silently stops projecting (the
- *  row just shows "—" again) rather than crashing, which is the safe failure mode for a
- *  keyed lookup like this. */
+ *  sum of both streams, net of the Risk Buffer % (2026-08-10 reinstated, reversing the
+ *  2026-08-07 "accrual only" cut — Kayee's real sheet screenshot showed the actual
+ *  formula: `=(Upfront$+Meeting$) - ((Upfront$+Meeting$)*RiskBuffer%)`, i.e. Gross
+ *  Collected Revenue on the sheet already nets this out, it isn't a separate
+ *  Cash-Flow-only adjustment the way the earlier correction assumed. Renamed
+ *  Uncollectible % -> Risk Buffer per Kayee's own naming, same day). This is exactly
+ *  `netCollectedRevenueForMonth` in assumptionsData.js; `grossCollectedRevenueForMonth`
+ *  (pre-haircut) is kept only as an internal building block now, not used directly by
+ *  any P&L row. These exact key names are transcribed from Kayee's live PL sheet
+ *  (2026-08-04 screenshots) — if the sheet's Key column for these rows ever changes,
+ *  this silently stops projecting (the row just shows "—" again) rather than
+ *  crashing, which is the safe failure mode for a keyed lookup like this. */
 const PL_REVENUE_PROJECTIONS = {
   revenue_subscription_revenue: (rev, iso) => upfrontRevenueForMonth(rev, iso),
   revenue_transaction_revenue: (rev, iso) => meetingRevenueForMonth(rev, iso),
-  total_revenue: (rev, iso) => grossCollectedRevenueForMonth(rev, iso),
+  total_revenue: (rev, iso) => netCollectedRevenueForMonth(rev, iso),
 };
 
 /** Total COGS = Cost Per Campaign + every Assumptions Cost Item tagged CoGS +
@@ -118,18 +121,22 @@ const PL_COST_PROJECTIONS_BY_LABEL = {
   'Total OpEx': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total OPEX': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total Operating Expenses': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
-  'Gross Profit': (ctx, iso) => grossCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
-  'Gross Margin': (ctx, iso) => grossCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  // Net of Risk Buffer % now (2026-08-10 reinstated — see PL_REVENUE_PROJECTIONS'
+  // header comment for the full story), matching every downstream margin/profit line
+  // on Kayee's real sheet, all of which build on top of the SAME net-of-risk-buffer
+  // "Gross Collected Revenue" figure.
+  'Gross Profit': (ctx, iso) => netCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
+  'Gross Margin': (ctx, iso) => netCollectedRevenueForMonth(ctx.revenue, iso) - cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
   'Operating Profit': (ctx, iso) =>
-    grossCollectedRevenueForMonth(ctx.revenue, iso) -
+    netCollectedRevenueForMonth(ctx.revenue, iso) -
     cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
     opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Operating Income': (ctx, iso) =>
-    grossCollectedRevenueForMonth(ctx.revenue, iso) -
+    netCollectedRevenueForMonth(ctx.revenue, iso) -
     cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
     opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Operating Margin': (ctx, iso) =>
-    grossCollectedRevenueForMonth(ctx.revenue, iso) -
+    netCollectedRevenueForMonth(ctx.revenue, iso) -
     cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso) -
     opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
 };
@@ -351,7 +358,10 @@ function revenueCalcExplanation(rowKey, revenue) {
     };
   }
   if (rowKey === 'total_revenue') {
-    return { calcNote: 'Total Revenue = Subscription $ + Transaction $ (gross, accrual basis — no Uncollectible adjustment; that belongs on Cash Flow).' };
+    return {
+      calcNote:
+        'Total Revenue = (Subscription $ + Transaction $) − Risk Buffer % of that sum — same net-of-risk figure as "Gross Collected Revenue" on the real sheet. Risk Buffer % editable on the Assumptions tab.',
+    };
   }
   // The embedded driver rows (2026-08-07, Kayee: "# of meeting should also show how
   // the calculation come about as well the meeting conversion time and stuff") — same

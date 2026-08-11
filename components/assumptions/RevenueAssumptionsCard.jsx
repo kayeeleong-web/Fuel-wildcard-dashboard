@@ -127,7 +127,13 @@ export function RevenueAssumptionsCard({ revenue, onChange }) {
           onCommit={(v) => setRate('meetingsLagMonths', v)}
           suffix="mo"
         />
-        <AssumptionField label="Uncollectible" value={revenue.uncollectiblePct} onCommit={(v) => setRate('uncollectiblePct', v)} />
+        {/* Renamed from "Uncollectible" (2026-08-10, Kayee's own naming: "name it risk
+            buffer") — same underlying `uncollectiblePct` field, this is only the
+            client-facing label. It nets out of Total Revenue on the P&L now too (see
+            netCollectedRevenueForMonth / PL_REVENUE_PROJECTIONS in ReportsPanel.jsx) —
+            Kayee's real sheet formula confirmed this is part of "Gross Collected
+            Revenue" itself, not a Cash-Flow-only adjustment as first assumed. */}
+        <AssumptionField label="Risk Buffer" value={revenue.uncollectiblePct} onCommit={(v) => setRate('uncollectiblePct', v)} />
         <AssumptionField
           label="Campaign Cost Rate"
           value={revenue.campaignCostRate}
@@ -167,7 +173,7 @@ export function RevenueAssumptionsCard({ revenue, onChange }) {
           <b>{formatPayrollAmount(grossCollectedRevenueForMonth(revenue, todayIso)) || '$0'}</b>
         </div>
         <div className="assump-preview-row">
-          <span>Net of Uncollectible</span>
+          <span>Net of Risk Buffer</span>
           <b>{formatPayrollAmount(netCollectedRevenueForMonth(revenue, todayIso)) || '$0'}</b>
         </div>
       </div>

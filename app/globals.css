@@ -615,8 +615,16 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 
 /* Stacked name+link-badge cell (2026-08-10) — see the matching comment in
    CostItemsCard.jsx for why this has to be its own column layout, not two inline
-   siblings, to stop the badge from overflowing into the $ column next to it. */
-.assump-cost-name-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+   siblings, to stop the badge from overflowing into the $ column next to it.
+   `display: flex` lives on the inner `.assump-cost-name-cell` <div>, NOT on the <td>
+   itself (`.assump-cost-name-td`) — a flex-displayed table cell can stop honoring
+   table-layout:fixed's declared column width in some browsers, which is exactly why
+   the name input was rendering narrower than its actual column (Kayee's screenshot:
+   "why don't you use this space here... make the box for travel, team lunch and
+   other longer"). The plain <td> always stretches its block-level <div> child to the
+   cell's full width with zero special-casing needed. */
+.assump-cost-name-td { width: 100%; }
+.assump-cost-name-cell { display: flex; flex-direction: column; gap: 4px; width: 100%; min-width: 0; }
 .assump-cost-name-cell .pr-input { width: 100%; box-sizing: border-box; }
 .reports-sidebar .assump-cost-table .assump-cost-name-cell .pr-input { font-size: 11.5px; }
 

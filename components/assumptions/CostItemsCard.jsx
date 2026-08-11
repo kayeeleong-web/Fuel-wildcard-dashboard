@@ -253,16 +253,29 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
                         this cell into its own column layout guarantees the badge
                         always renders on its own line, clipped to this cell's width,
                         never bleeding into a neighbor. */}
-                    <td className="assump-cost-name-cell">
-                      <TextInput value={item.name} onCommit={(v) => updateItem(item.id, { name: v })} placeholder="Cost name" />
-                      {item.linkedRowLabel && (
-                        <span className="assump-cost-link-badge" title={`Forecasts feed the "${item.linkedRowLabel}" P&L row directly`}>
-                          ↳ {item.linkedRowLabel}
-                          <button type="button" onClick={() => unlinkItem(item.id)} title="Unlink from this P&L row">
-                            ×
-                          </button>
-                        </span>
-                      )}
+                    <td className="assump-cost-name-td">
+                      {/* The flex-column wrapper is a plain inner <div>, not the <td>
+                          itself (2026-08-10 fix, Kayee: "why don't you use this space
+                          here... just make the box for travel, team lunch and other
+                          longer") — putting `display: flex` directly on a table cell
+                          can make table-layout:fixed's declared column width stop
+                          being honored by that cell's content in some browsers, which
+                          is exactly why the name input was rendering narrower than
+                          its real ~42%-wide column instead of filling it. A normal
+                          block-level <div> inside an ordinary table-cell always
+                          stretches to the cell's full width automatically — no such
+                          quirk. */}
+                      <div className="assump-cost-name-cell">
+                        <TextInput value={item.name} onCommit={(v) => updateItem(item.id, { name: v })} placeholder="Cost name" />
+                        {item.linkedRowLabel && (
+                          <span className="assump-cost-link-badge" title={`Forecasts feed the "${item.linkedRowLabel}" P&L row directly`}>
+                            ↳ {item.linkedRowLabel}
+                            <button type="button" onClick={() => unlinkItem(item.id)} title="Unlink from this P&L row">
+                              ×
+                            </button>
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'right' }} className="assump-cost-amount-td">
                       <div className="assump-cost-amount-cell">

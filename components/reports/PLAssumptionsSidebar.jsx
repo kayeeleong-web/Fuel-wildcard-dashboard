@@ -139,6 +139,25 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
             />
           </div>
 
+          {/* Reinstated 2026-08-10 (Kayee, quoting her real sheet's actual formula:
+              "=(Upfront$+Meeting$) - ((Upfront$+Meeting$)*RiskBuffer%)") — this WAS
+              removed from the P&L view entirely on 2026-08-07 on the theory that an
+              uncollectible-cash adjustment belongs on Cash Flow, not an accrual P&L.
+              Kayee's own sheet proved that assumption wrong: the risk-buffer haircut
+              is baked directly into "Gross Collected Revenue," which IS what feeds
+              this P&L's Total Revenue line. Renamed "Uncollectible" -> "Risk Buffer"
+              per Kayee's preference, same underlying `uncollectiblePct` field. Own
+              group since it applies to the revenue TOTAL, not one stream. */}
+          <div className="pr-assumption-group">
+            <div className="pr-assumption-group-label">Total Revenue</div>
+            <AssumptionField
+              label="Risk Buffer"
+              value={revenue.uncollectiblePct}
+              onCommit={(v) => setRate('uncollectiblePct', v)}
+              suffix="%"
+            />
+          </div>
+
           {/* Own group, separate from Subscription Revenue (2026-08-07, Kayee: "in
               cost, we should have another COGS assumption there for Cost per
               campaign") — Campaign Cost Rate feeds the "Cost of campaigns" COGS line,
