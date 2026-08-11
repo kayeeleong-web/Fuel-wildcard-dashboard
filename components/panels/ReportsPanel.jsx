@@ -1093,19 +1093,32 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         } catch (err) {
           console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
         }
-        // A cost item's own custom row, the Campaigns/Meetings driver rows, and any
-        // Revenue-section row aren't valid drop targets at all. Everything else —
-        // including Total rows, same as the existing COST_ITEM_ROW_LABEL_OVERRIDES
-        // precedent (Travel -> "Total Travel") — is fair game, but ONLY for a cost
-        // item whose own category matches this row's section (2026-08-10, Kayee: "if
-        // i add the cost in cogs it will only be allow to get sync to any items in
-        // cogs"). `onDragOver` only calls preventDefault (which is what permits a
-        // drop at all) when the dragged item's encoded category type matches — for a
+        // The Campaigns/Meetings driver rows and any Revenue-section row aren't valid
+        // drop targets at all. Everything else — including Total rows (same as the
+        // existing COST_ITEM_ROW_LABEL_OVERRIDES precedent, Travel -> "Total Travel")
+        // AND a cost item's own already-auto-matched custom row — is fair game, but
+        // ONLY for a cost item whose own category matches this row's section
+        // (2026-08-10, Kayee: "if i add the cost in cogs it will only be allow to get
+        // sync to any items in cogs").
+        //
+        // `row.custom` used to be excluded here on the theory that dropping onto an
+        // item's own auto-generated row was redundant — but that's exactly what made
+        // Vetric/Misc (both CoGS items with no real GL row, only ever shown via their
+        // own auto-inserted custom row) permanently NOT draggable at all: their only
+        // possible drop target WAS their own custom row, and that was the one thing
+        // blocked (2026-08-10, Kayee: "i dont drag vetric to cogs or misc to misc in
+        // cogs, everything should be draggable"). Dropping an item onto its own
+        // already-matching row is harmless — it just makes the existing implicit
+        // name-match explicit (a real `linkedRowLabel`, immune to the kind of name
+        // drift that broke "Rent" earlier) instead of leaving anything unreachable.
+        //
+        // `onDragOver` only calls preventDefault (which is what permits a drop at
+        // all) when the dragged item's encoded category type matches — for a
         // mismatched category, the browser shows its native "not allowed" cursor and
         // a drop is simply impossible, no separate error state needed. The `onDrop`
         // check against `costCtx.costItems` is a second, authoritative guard for any
         // browser that doesn't expose dataTransfer.types during dragover consistently.
-        const isDropTarget = !!onLinkCostItem && !row.custom && !row.driver && !!sectionCategory;
+        const isDropTarget = !!onLinkCostItem && !row.driver && !!sectionCategory;
         return (
           <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
             <td

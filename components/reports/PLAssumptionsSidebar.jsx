@@ -173,7 +173,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         onChange={onCostItemsChange}
         itemOrder={costItemOrder}
         category="CoGS"
-        title="CoGS Costs"
+        title="Non-Headcount Cost - CoGS"
         addLabel="+ Add CoGS Cost"
       />
       <CostItemsCard
@@ -181,7 +181,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         onChange={onCostItemsChange}
         itemOrder={costItemOrder}
         category="OpEx"
-        title="OpEx Costs"
+        title="Non-Headcount Cost - OpEx"
         addLabel="+ Add OpEx Cost"
       />
       {costItems.some((i) => i.category === 'Other') && (
@@ -190,7 +190,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           onChange={onCostItemsChange}
           itemOrder={costItemOrder}
           category="Other"
-          title="Other (Non-Operating)"
+          title="Non-Headcount Cost - Other"
           addLabel="+ Add Cost"
         />
       )}

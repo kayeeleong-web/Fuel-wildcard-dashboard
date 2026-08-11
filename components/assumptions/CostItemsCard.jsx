@@ -132,15 +132,17 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
  * a CoGS-section P&L row, an OpEx item's only on an OpEx-section row, so there's no way
  * to accidentally cross-wire a cost into the wrong statement bucket.
  *
- * Start On and the effective-dated amount schedule both live behind the clock/Schedule
+ * Start On and the effective-dated amount schedule both live behind the "Period"
  * button — Kayee: "why do i need start on if the clock icon will take care of it."
  * Whatever schedule IS set always shows as a quiet "→ $X from [month]" line under the
  * $ box regardless of whether the panel is open (Kayee: "like in revenue assumption
  * you need to show which period is how much so that the user know") — nothing about an
  * item's timing is ever hidden, only the form used to CHANGE it is collapsed by
- * default. The button itself is now a labeled "Schedule" pill, not a bare icon (Kayee:
- * "make it more obvious that this button is so that they apply for the period") —
- * an unlabeled circle read as decoration, not a control.
+ * default. The button itself is a labeled pill, not a bare icon (Kayee: "make it more
+ * obvious that this button is so that they apply for the period") — an unlabeled
+ * circle read as decoration, not a control. Labeled "Period" rather than "Schedule"
+ * per Kayee's own naming preference (2026-08-10: "i dont like the word schedule...
+ * maybe period").
  *
  * `itemOrder` (2026-08-07, optional) — a list of item ids in the order they actually
  * appear on the P&L, computed in ReportsPanel.jsx from the real matched/injected row
@@ -268,14 +270,14 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
                         <button
                           type="button"
                           className={`assump-cost-schedule-toggle${hasSchedule || item.startOn ? ' has-schedule' : ''}`}
-                          title="Schedule a future amount change, or set a start date, for this cost"
+                          title="Set a different amount for a future period, or a start date, for this cost"
                           onClick={() => setScheduleOpenId(isOpen ? null : item.id)}
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <circle cx="12" cy="12" r="9" />
                             <path d="M12 7v5l3 3" />
                           </svg>
-                          Schedule
+                          Period
                         </button>
                       </div>
                       <CostItemScheduleSummary item={item} onRemoveEntry={(iso) => {
@@ -320,10 +322,7 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
       </div>
 
       <div className="payroll-card-footer assump-cost-note">
-        Monthly items show their full $ every month; Quarterly items show their total ÷ 3 every month (spread
-        evenly, not billed as a lump sum once a quarter). Drag a row onto its matching line on the P&L (in the table
-        on the right) to link it directly — no need to worry about the name matching exactly; a linked item always
-        feeds that exact P&L line, and shows an "↳ [line name]" tag once it's set.
+        Quarterly items spread their total ÷ 3 across each month. Drag a row onto its P&L line to link it.
       </div>
     </div>
   );
