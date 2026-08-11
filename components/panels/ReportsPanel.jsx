@@ -399,15 +399,28 @@ function costCalcExplanation(rowLabel, ctx) {
   return null;
 }
 
-/** Finds the Assumptions cost item (if any) that feeds a given real P&L row — an
- *  explicit COST_ITEM_ROW_LABEL_OVERRIDES entry always wins (for confirmed name
- *  mismatches like Travel -> "Total Travel"); otherwise falls back to an exact,
- *  case-insensitive name match (e.g. a "Rent" cost item auto-matches a real "Rent"
- *  row with zero extra config) — a safe default since an exact name match is about as
- *  strong a "these are the same thing" signal as this data model can give without a
- *  dedicated GL-account-id field on either side. */
+/** Finds the Assumptions cost item (if any) that feeds a given real P&L row.
+ *
+ *  Priority order, highest first:
+ *   1. `linkedRowLabel` — an explicit drag-and-drop link Kayee made by hand on the
+ *      Reports tab (2026-08-10: "give me the option to drag and drop to match thing
+ *      so that you dont have to worry about mapping and if the users want to do it
+ *      they could"). Deterministic and immune to text drift — the root cause traced
+ *      down that same day was that the "Rent" cost item silently stopped
+ *      case-insensitive-matching its real "Rent" row (a stray character or a raw
+ *      sheet-label quirk that plain `.trim().toLowerCase()` can't fix), and there was
+ *      no way to just tell the app "this one, that one" directly. This link always
+ *      wins over any guess below, once it exists.
+ *   2. COST_ITEM_ROW_LABEL_OVERRIDES — confirmed name mismatches (Travel -> "Total
+ *      Travel", etc.) baked into the code.
+ *   3. An exact, case-insensitive name match (e.g. a "Rent" cost item auto-matches a
+ *      real "Rent" row with zero extra config) — a reasonable default, but per the
+ *      above, not bulletproof; #1 exists specifically so a person can route around a
+ *      case where this guess turns out to be wrong or fragile. */
 function matchCostItemToRowLabel(rowLabel, costItems) {
   if (!costItems || !rowLabel) return null;
+  const linked = costItems.find((i) => i.linkedRowLabel === rowLabel);
+  if (linked) return linked;
   const overrideId = Object.keys(COST_ITEM_ROW_LABEL_OVERRIDES).find((id) => COST_ITEM_ROW_LABEL_OVERRIDES[id] === rowLabel);
   if (overrideId) return costItems.find((i) => i.id === overrideId) || null;
   const target = rowLabel.trim().toLowerCase();
@@ -855,6 +868,24 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     }
   }
 
+  // Drag-a-cost-item-onto-its-P&L-row linking (2026-08-10, Kayee: "give me the option
+  // to drag and drop to match thing so that you dont have to worry about mapping...
+  // if it said rent it will allow me to add rent to P&L for projections"). Sets an
+  // explicit, un-guessable `linkedRowLabel` on the dropped item — see
+  // matchCostItemToRowLabel's priority-order comment for why this exists alongside
+  // the automatic name-matching it now overrides. Clears the same rowLabel off any
+  // OTHER item first, so exactly one cost item ever feeds a given real P&L row at a
+  // time (dropping a second item onto the same row re-points it, it doesn't stack).
+  function handleLinkCostItem(itemId, rowLabel) {
+    if (!assumptionsState?.costItems) return;
+    const nextCostItems = assumptionsState.costItems.map((item) => {
+      if (item.id === itemId) return { ...item, linkedRowLabel: rowLabel };
+      if (item.linkedRowLabel === rowLabel) return { ...item, linkedRowLabel: null };
+      return item;
+    });
+    setAssumptionsState({ ...assumptionsState, costItems: nextCostItems });
+  }
+
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
     // targets (`#reports[data-range] .report-doc:not([data-doc="custom"])`) — without it
@@ -910,6 +941,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               lastActualIndex={lastActualIndex}
               revenue={revenue}
               costCtx={costCtx}
+              onLinkCostItem={statement.type === 'PL' ? handleLinkCostItem : null}
             />
           ))}
         </tbody>
@@ -918,7 +950,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   );
 }
 
-function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx }) {
+function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem }) {
+  // Which row (by key) currently has a cost item dragged over it — purely visual
+  // feedback for the drag-and-drop cost-item-to-P&L-row linking feature (2026-08-10,
+  // see handleLinkCostItem in StatementDoc for the full reasoning). Local to this
+  // section's row group; nothing here is persisted, it just paints a highlight while
+  // a drag is in progress.
+  const [dragOverKey, setDragOverKey] = useState(null);
   return (
     <>
       {/* Two cells, not one colSpan cell — position:sticky on a <td> with colspan doesn't
@@ -947,9 +985,38 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         } catch (err) {
           console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
         }
+        // A cost item's own custom row, and the Campaigns/Meetings driver rows, aren't
+        // valid drop targets — dropping a cost item onto its OWN already-generated row
+        // (or onto a row that isn't a real GL line at all) doesn't mean anything.
+        // Everything else — including Total rows, same as the existing
+        // COST_ITEM_ROW_LABEL_OVERRIDES precedent (Travel -> "Total Travel") — is fair
+        // game (2026-08-10, Kayee: "give me the option to drag and drop to match
+        // thing... if it said rent it will allow me to add rent to P&L").
+        const isDropTarget = !!onLinkCostItem && !row.custom && !row.driver;
         return (
           <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
-            <td>
+            <td
+              className={isDropTarget && dragOverKey === row.key ? 'report-cost-drop-target is-drag-over' : isDropTarget ? 'report-cost-drop-target' : undefined}
+              onDragOver={
+                isDropTarget
+                  ? (e) => {
+                      e.preventDefault();
+                      if (dragOverKey !== row.key) setDragOverKey(row.key);
+                    }
+                  : undefined
+              }
+              onDragLeave={isDropTarget ? () => setDragOverKey((k) => (k === row.key ? null : k)) : undefined}
+              onDrop={
+                isDropTarget
+                  ? (e) => {
+                      e.preventDefault();
+                      setDragOverKey(null);
+                      const itemId = e.dataTransfer.getData('text/plain');
+                      if (itemId) onLinkCostItem(itemId, row.label);
+                    }
+                  : undefined
+              }
+            >
               {rowCalcInfo ? (
                 <DrillPopover label={row.label} value={row.label} calcNote={rowCalcInfo.calcNote} />
               ) : (

@@ -884,6 +884,27 @@ tr.pr-dragging { opacity: .4; }
   font-size: 11px; color: var(--muted-2); line-height: 1.5; padding: 12px 18px;
 }
 
+/* Drag-a-cost-item-onto-its-P&L-row linking (2026-08-10, Kayee: "give me the option to
+   drag and drop to match thing... if it said rent it will allow me to add rent to
+   P&L for projections") — replaces having to trust automatic name-matching, which
+   turned out to silently break for a real "Rent" item/row pair that day. */
+.assump-cost-draggable-row { cursor: grab; }
+.assump-cost-draggable-row:active { cursor: grabbing; }
+.assump-cost-link-badge {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 7px;
+  font-size: 10px; font-weight: 600; color: var(--blue); background: var(--blue-soft);
+  border-radius: 999px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+}
+.assump-cost-link-badge button {
+  border: none; background: none; color: inherit; cursor: pointer; padding: 0; line-height: 1; font-size: 12px;
+}
+
+/* The matching drop target on the P&L side (FragmentRows in ReportsPanel.jsx) — every
+   real GL row's label cell accepts a drop; highlighted only while a drag is actually
+   hovering over that specific row, so the whole table doesn't light up at once. */
+.report-cost-drop-target { position: relative; }
+.report-cost-drop-target.is-drag-over { background: var(--blue-soft); outline: 2px dashed var(--blue); outline-offset: -2px; }
+
 /* ==================== Payroll — outer grouping sections ==================== */
 /* Existing / Planned each roll their Base + Bonus cards up into one outer collapsible
    box (Kayee, 2026-08-06: "make existing into one box... that way if I want to

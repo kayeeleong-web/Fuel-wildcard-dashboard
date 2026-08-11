@@ -130,8 +130,12 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
   function addItem() {
     onChange([
       ...costItems,
-      { id: generateId('cost'), name: '', amount: 0, cadence: 'Monthly', category: 'OpEx', startOn: '', amountSchedule: {} },
+      { id: generateId('cost'), name: '', amount: 0, cadence: 'Monthly', category: 'OpEx', startOn: '', amountSchedule: {}, linkedRowLabel: null },
     ]);
+  }
+
+  function unlinkItem(id) {
+    updateItem(id, { linkedRowLabel: null });
   }
 
   const displayItems = itemOrder
@@ -177,9 +181,26 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
               const isOpen = scheduleOpenId === item.id;
               return (
                 <Fragment key={item.id}>
-                  <tr>
+                  {/* draggable (2026-08-10, Kayee: "give me the option to drag and drop
+                      to match thing so that you dont have to worry about mapping...
+                      if it said rent it will allow me to add rent to P&L for
+                      projections") — dropping this row onto a real P&L line (see
+                      FragmentRows in ReportsPanel.jsx) sets an explicit linkedRowLabel
+                      that always wins over the automatic (and, per Kayee's real "Rent"
+                      example, occasionally fragile) name-matching. This card doesn't
+                      know what row it landed on until it's dropped — that's read back
+                      via `item.linkedRowLabel` below, set from the P&L side. */}
+                  <tr className="assump-cost-draggable-row" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)}>
                     <td>
                       <TextInput value={item.name} onCommit={(v) => updateItem(item.id, { name: v })} placeholder="Cost name" />
+                      {item.linkedRowLabel && (
+                        <span className="assump-cost-link-badge" title={`Forecasts feed the "${item.linkedRowLabel}" P&L row directly`}>
+                          ↳ {item.linkedRowLabel}
+                          <button type="button" onClick={() => unlinkItem(item.id)} title="Unlink from this P&L row">
+                            ×
+                          </button>
+                        </span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="assump-cost-amount-cell">
@@ -249,7 +270,9 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
       <div className="payroll-card-footer assump-cost-note">
         Whether a row counts toward projected COGS, OPEX, or Other from {FIRST_PROJECTED_MONTH} onward depends only
         on its Category — Monthly items show their full $ every month; Quarterly items show their total ÷ 3 every
-        month (spread evenly, not billed as a lump sum once a quarter).
+        month (spread evenly, not billed as a lump sum once a quarter). Drag a row over here onto its matching line
+        on the P&L (in the table on the right) to link it directly — no need to worry about the name matching
+        exactly; a linked item always feeds that exact P&L line, and shows an "↳ [line name]" tag once it's set.
       </div>
     </div>
   );
