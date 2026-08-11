@@ -299,7 +299,7 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
                         updateItem(item.id, { amountSchedule: patch });
                       }} />
                     </td>
-                    <td>
+                    <td className="assump-cost-cadence-td">
                       <Picker
                         value={item.cadence}
                         options={COST_CADENCES}

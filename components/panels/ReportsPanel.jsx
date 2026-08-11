@@ -798,26 +798,36 @@ function withPayrollHeadcountRows(statementType, rows, payrollState, months, las
     { key: 'payroll_bonus_opex', label: 'Bonuses (Payroll)', kind: 'bonus', anchorLabels: ['bonuses', 'bonus'], calc: headcountBonusByCostType },
   ];
   for (const line of OPEX_PAYROLL_LINES) {
-    // Prefer sitting directly under this line's own real anchor row (e.g. "Salaries
-    // (Payroll)" right after the real "Salaries" row) — falls back to right above the
-    // "Salaries & Benefits" sub-section's own Total (or the grand Total OpEx, if that
-    // sub-section itself can't be found either) when no matching anchor row exists.
-    let anchorIdx =
+    // PATCH the real anchor row's own forecast cells directly (2026-08-10, Kayee,
+    // looking at "Salaries (Payroll)" sitting as its own separate line right under
+    // the real "Salaries" row: "NO! Salaries is the SAME LINE as Salaries (Payroll)
+    // and the others too!") — same live-row-patching convention
+    // withNamedCostItemProjections already uses for a linked cost item, just applied
+    // to Payroll's own math instead. No new row gets added when a real anchor row
+    // exists; only falls back to inserting a genuinely NEW "X (Payroll)" line (right
+    // above the "Salaries & Benefits" sub-section's own Total, or the grand Total
+    // OpEx) when there's truly no matching real row to patch — so the figures are
+    // never silently dropped if Kayee's sheet doesn't have, say, a "Bonuses" row.
+    const anchorIdx =
       sbSection != null
         ? next.findIndex((r) => !r.isTotal && r.section === sbSection && line.anchorLabels.includes(String(r.label).trim().toLowerCase()))
         : -1;
-    let insertAt;
-    let section;
     if (anchorIdx !== -1) {
-      insertAt = anchorIdx + 1;
-      section = next[anchorIdx].section;
-    } else {
-      insertAt =
-        sbSection != null
-          ? next.findIndex((r) => r.section === sbSection && r.isTotal)
-          : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
-      section = insertAt !== -1 ? next[insertAt].section : null;
+      const anchorRow = next[anchorIdx];
+      const patchedValues = { ...anchorRow.values };
+      for (let i = lastActualIndex + 1; i < months.length; i++) {
+        const iso = months[i];
+        patchedValues[iso] = payrollState ? line.calc(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso) : 0;
+      }
+      const patchedRow = { ...anchorRow, values: patchedValues, payrollHeadcount: true, costType: 'OpEx', payrollLineKind: line.kind };
+      next = [...next.slice(0, anchorIdx), patchedRow, ...next.slice(anchorIdx + 1)];
+      continue;
     }
+    const insertAt =
+      sbSection != null
+        ? next.findIndex((r) => r.section === sbSection && r.isTotal)
+        : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
+    const section = insertAt !== -1 ? next[insertAt].section : null;
     if (insertAt === -1 || !section) continue;
     const values = {};
     for (let i = lastActualIndex + 1; i < months.length; i++) {
@@ -1191,9 +1201,15 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     // one it used to be linked to) — with `matchedCostItemsForRowLabel` now ONLY
     // matching an explicit `linkedRowLabel` (see its own comment above), a cost item
     // with no link should show NOTHING on the P&L at all, not fall back to an
-    // auto-generated row of its own. `withNamedCostItemProjections` alone still
-    // handles the case that DOES matter — an item's $ patching onto whatever real row
-    // it's explicitly linked to.
+    // auto-generated row of its own. Confirmed again the same day, phrased as a
+    // COGS-specific ask: "for cogs assumption you need to apply the same logic as
+    // opex assumption. do not auto create account when an account is created in
+    // assumption cogs. just let me drag and link them" — this single change already
+    // covers both COGS and OpEx identically (COGS was previously the ONLY category
+    // with an alias in CUSTOM_ACCOUNT_SECTION_ALIASES, so it was the only one that
+    // ever got an auto-row in the first place; OpEx never did). `withNamedCostItemProjections`
+    // alone still handles the case that DOES matter — an item's $ patching onto
+    // whatever real row it's explicitly linked to, CoGS or OpEx alike.
     const { rows: namedItemRows } = withNamedCostItemProjections(statement.type, rows, costCtx.costItems, months, lastActualIndex);
     rows = namedItemRows;
   } catch (err) {

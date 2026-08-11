@@ -695,6 +695,13 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 /* $ column: input + Schedule button side by side, schedule summary stacked below both
    (2026-08-10) — same always-visible-summary convention as the Revenue side. */
 .assump-cost-amount-td { vertical-align: top; }
+/* Cadence column (2026-08-10, Kayee: "this is misaligned, like the monthly is lower
+   than the other items") — the Name and $ columns both explicitly top-align their
+   content (they're two lines tall: input + badge/Period button underneath), but a
+   plain <td> defaults to vertical-align:middle, so the Cadence dropdown — always just
+   ONE line — sat vertically centered in that same taller row, reading a few pixels
+   lower than the inputs beside it. Top-aligning it matches the other two columns. */
+.assump-cost-cadence-td { vertical-align: top; }
 .assump-cost-amount-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .assump-cost-amount-cell .pr-input-month { min-width: 0; flex: 1 1 auto; }
 .assump-cost-schedule-summary { margin-top: 4px; align-items: flex-end; }
