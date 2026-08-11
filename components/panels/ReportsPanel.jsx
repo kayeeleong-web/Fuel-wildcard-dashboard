@@ -13,6 +13,7 @@ import {
   headcountSalariesByCostType,
   headcountPayrollTaxesByCostType,
   headcountBenefitsByCostType,
+  headcountBonusByCostType,
 } from '../../lib/payroll/payrollData';
 import {
   upfrontRevenueForMonth,
@@ -42,28 +43,21 @@ const CUSTOM_ACCOUNT_SECTION_ALIASES = {
   CoGS: ['COGS'],
 };
 
-// Cost items that are the SAME cost as an existing real P&L row, just named
-// differently on Assumptions than the row's actual label — these feed that existing
-// row directly instead of getting their own new custom-account row (which would
-// double it up on-screen). Exact-name matches (e.g. the "Rent" cost item -> a real
-// "Rent" row) are handled automatically below (matchCostItemToExistingRow) and don't
-// need an entry here — this map is only for name MISMATCHES Kayee's confirmed by hand:
-//   - software -> 'Software - Cost of Revenue' (2026-08-06: "they are the same")
-//   - team-lunches -> 'Meals (Office)' (2026-08-06: "Team Lunches is Meals (Office)")
-// Keyed by the Assumptions cost item's stable `id` (see SEED_COST_ITEMS in
-// assumptionsData.js) -> the real P&L row's exact label.
-//
-// `travel -> 'Total Travel'` REMOVED (2026-08-10, Kayee: "why total travel has 500? it
-// shouldn't think [link] travel already before i drag it") — with drag-and-drop
-// linking now built (linkedRowLabel), a hardcoded automatic match like this silently
-// pre-populated "Total Travel" before Kayee ever dragged anything there herself, which
-// read as a bug (a total showing a number none of its visible detail rows accounted
-// for) rather than the confirmed convenience it was meant to be. Travel now behaves
-// like every other cost item: blank until explicitly dragged onto a row.
-const COST_ITEM_ROW_LABEL_OVERRIDES = {
-  software: 'Software - Cost of Revenue',
-  'team-lunches': 'Meals (Office)',
-};
+// ALL automatic cost-item-to-row matching REMOVED (2026-08-10) — this used to hold
+// hardcoded name-mismatch overrides (software -> 'Software - Cost of Revenue',
+// team-lunches -> 'Meals (Office)') and, before that, an exact-name-match fallback,
+// on top of the explicit drag-and-drop `linkedRowLabel`. Kayee flagged both as the
+// same underlying bug from two angles on 2026-08-10: first "why total travel has 500?
+// it shouldn't think [link] travel already before i drag it" (the travel entry was
+// removed that same day), then "when i remove the link for vetric and misc and
+// software in cogs the amount is still there. the logic is wrong. the amount should
+// be removed if i remove the link in assumption and when i drag over it should get
+// added" — i.e. ANY automatic match that isn't the explicit link she set herself is
+// the bug, not just Travel's. `linkedRowLabel` (set only by actually dragging a cost
+// item onto a P&L row, cleared only by actually unlinking or deleting it) is now the
+// ONLY thing that puts a cost item's $ on the P&L at all — see
+// matchedCostItemsForRowLabel below, which no longer falls back to anything else.
+const COST_ITEM_ROW_LABEL_OVERRIDES = {};
 
 /** Which PL rows get their projected (post-actual) months filled from the
  *  Assumptions tab, and which Assumptions calculation feeds each one — per Kayee
@@ -475,29 +469,22 @@ function costCalcExplanation(rowLabel, ctx) {
  *      case-insensitive-matching its real "Rent" row (a stray character or a raw
  *      sheet-label quirk that plain `.trim().toLowerCase()` can't fix), and there was
  *      no way to just tell the app "this one, that one" directly. ALL items linked to
- *      this exact label are returned together — this always wins over any guess
- *      below, once at least one exists.
- *   2. COST_ITEM_ROW_LABEL_OVERRIDES — confirmed name mismatches (Travel -> "Total
- *      Travel", etc.) baked into the code. Single-item by construction (one override
- *      entry per item id).
- *   3. An exact, case-insensitive name match (e.g. a "Rent" cost item auto-matches a
- *      real "Rent" row with zero extra config) — a reasonable default, but per the
- *      above, not bulletproof; #1 exists specifically so a person can route around a
- *      case where this guess turns out to be wrong or fragile. Also single-item —
- *      two cost items can't legitimately share the exact same name AND both
- *      auto-match the same row without an explicit link disambiguating them. */
+ *      this exact label are returned together.
+ *
+ *  This is now the ONLY way a cost item's $ ever lands on a P&L row — the earlier
+ *  fallbacks (COST_ITEM_ROW_LABEL_OVERRIDES' hardcoded name-mismatch map, and before
+ *  that a plain exact-name match) were both removed the same day, 2026-08-10, after
+ *  Kayee flagged the same bug twice from two angles: first Travel showing $500 before
+ *  she'd ever dragged it anywhere ("it shouldn't think [link] travel already before i
+ *  drag it"), then Vetric/Misc/Software's $ persisting right after she explicitly
+ *  removed their link badge ("the amount should be removed if i remove the link in
+ *  assumption and when i drag over it should get added") — any automatic match that
+ *  isn't the explicit link she set herself is the same bug, not a convenience worth
+ *  keeping. `linkedRowLabel` set/cleared only by CostItemsCard's drag-and-drop /
+ *  unlink button is now the single source of truth. */
 function matchedCostItemsForRowLabel(rowLabel, costItems) {
   if (!costItems || !rowLabel) return [];
-  const linked = costItems.filter((i) => i.linkedRowLabel === rowLabel);
-  if (linked.length > 0) return linked;
-  const overrideId = Object.keys(COST_ITEM_ROW_LABEL_OVERRIDES).find((id) => COST_ITEM_ROW_LABEL_OVERRIDES[id] === rowLabel);
-  if (overrideId) {
-    const item = costItems.find((i) => i.id === overrideId);
-    return item ? [item] : [];
-  }
-  const target = rowLabel.trim().toLowerCase();
-  const nameMatch = costItems.find((i) => (i.name || '').trim().toLowerCase() === target);
-  return nameMatch ? [nameMatch] : [];
+  return costItems.filter((i) => i.linkedRowLabel === rowLabel);
 }
 
 /** Single-item convenience wrapper over matchedCostItemsForRowLabel, for the handful
@@ -796,37 +783,49 @@ function withPayrollHeadcountRows(statementType, rows, payrollState, months, las
     next = [...next.slice(0, cogsTotalIdx), row, ...next.slice(cogsTotalIdx)];
   }
 
-  // --- OpEx: 3-way split, inside the real "Salaries & Benefits" sub-section (recomputed
-  // against the just-updated `next`, so the COGS insertion above can never leave this
-  // looking at stale row indices) ---
+  // --- OpEx: 4 lines, each aligned directly under ITS OWN matching real row inside the
+  // "Salaries & Benefits" sub-section (2026-08-10, Kayee, pointing at her real sheet's
+  // Salaries/Payroll Taxes/Benefits/Bonuses rows with arrows: "this is how it should
+  // get match up and also divide out bonus then") — rather than grouping all of them
+  // together in one block. Each line is searched for and inserted independently, in
+  // its own loop iteration, always against the just-updated `next` — so an earlier
+  // insertion in this same loop can never leave a later one looking at a stale index. */
   const sbSection = findSalariesBenefitsSection(next);
-  let opexInsertAt = sbSection != null ? next.findIndex((r) => r.section === sbSection && r.isTotal) : -1;
-  if (opexInsertAt === -1) {
-    opexInsertAt = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
-  }
-  const opexSection = opexInsertAt !== -1 ? next[opexInsertAt].section : null;
-  if (opexSection) {
-    const salariesValues = {};
-    const taxValues = {};
-    const benefitsValues = {};
+  const OPEX_PAYROLL_LINES = [
+    { key: 'payroll_salaries_opex', label: 'Salaries (Payroll)', kind: 'salaries', anchorLabels: ['salaries'], calc: headcountSalariesByCostType },
+    { key: 'payroll_taxes_opex', label: 'Payroll Taxes (Payroll)', kind: 'taxes', anchorLabels: ['payroll taxes', 'taxes'], calc: headcountPayrollTaxesByCostType },
+    { key: 'payroll_benefits_opex', label: 'Benefits (Payroll)', kind: 'benefits', anchorLabels: ['benefits'], calc: headcountBenefitsByCostType },
+    { key: 'payroll_bonus_opex', label: 'Bonuses (Payroll)', kind: 'bonus', anchorLabels: ['bonuses', 'bonus'], calc: headcountBonusByCostType },
+  ];
+  for (const line of OPEX_PAYROLL_LINES) {
+    // Prefer sitting directly under this line's own real anchor row (e.g. "Salaries
+    // (Payroll)" right after the real "Salaries" row) — falls back to right above the
+    // "Salaries & Benefits" sub-section's own Total (or the grand Total OpEx, if that
+    // sub-section itself can't be found either) when no matching anchor row exists.
+    let anchorIdx =
+      sbSection != null
+        ? next.findIndex((r) => !r.isTotal && r.section === sbSection && line.anchorLabels.includes(String(r.label).trim().toLowerCase()))
+        : -1;
+    let insertAt;
+    let section;
+    if (anchorIdx !== -1) {
+      insertAt = anchorIdx + 1;
+      section = next[anchorIdx].section;
+    } else {
+      insertAt =
+        sbSection != null
+          ? next.findIndex((r) => r.section === sbSection && r.isTotal)
+          : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
+      section = insertAt !== -1 ? next[insertAt].section : null;
+    }
+    if (insertAt === -1 || !section) continue;
+    const values = {};
     for (let i = lastActualIndex + 1; i < months.length; i++) {
       const iso = months[i];
-      salariesValues[iso] = payrollState
-        ? headcountSalariesByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso)
-        : 0;
-      taxValues[iso] = payrollState
-        ? headcountPayrollTaxesByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso)
-        : 0;
-      benefitsValues[iso] = payrollState
-        ? headcountBenefitsByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso)
-        : 0;
+      values[iso] = payrollState ? line.calc(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso) : 0;
     }
-    const newRows = [
-      buildPayrollLineRow('payroll_salaries_opex', 'Salaries (Payroll)', opexSection, 'OpEx', 'salaries', salariesValues),
-      buildPayrollLineRow('payroll_taxes_opex', 'Payroll Taxes (Payroll)', opexSection, 'OpEx', 'taxes', taxValues),
-      buildPayrollLineRow('payroll_benefits_opex', 'Benefits (Payroll)', opexSection, 'OpEx', 'benefits', benefitsValues),
-    ];
-    next = [...next.slice(0, opexInsertAt), ...newRows, ...next.slice(opexInsertAt)];
+    const row = buildPayrollLineRow(line.key, line.label, section, 'OpEx', line.kind, values);
+    next = [...next.slice(0, insertAt), row, ...next.slice(insertAt)];
   }
 
   return next;
@@ -1064,6 +1063,50 @@ function withReorderedRevenueRows(rows) {
   return [...withoutServices.slice(0, totalIdx), servicesRow, ...withoutServices.slice(totalIdx)];
 }
 
+/** Generic fallback so every fine-grained section Total (e.g. "Total Meals &
+ *  Entertainment", "Total Professional Services") also projects forward, not just the
+ *  handful of labels PL_COST_PROJECTIONS_BY_LABEL knows a bespoke formula for (Total
+ *  COGS/Total OpEx/Gross Profit/etc.). Kayee, 2026-08-10, pointing at a screenshot
+ *  where "Tax and Accounting" (linked to a cost item) showed $1,550 for July 2026 but
+ *  "Total Professional Services" right below it showed blank: "all of these total
+ *  should add up the total for projection too, like total professional services
+ *  should be 1550 for july 2026." Nothing in the pipeline before this ever computed a
+ *  forecast value for a Total row like this one — it simply isn't one of the labels
+ *  PL_COST_PROJECTIONS_BY_LABEL matches, so it stayed blank even once its own visible
+ *  children had real numbers.
+ *
+ *  Runs LAST (after every other row transform — named cost items, custom accounts,
+ *  payroll rows, manual accounts), summing whatever's ALREADY on screen for every
+ *  other (non-Total) row sharing this Total row's exact `.section`, for every forecast
+ *  month only (an actual/booked month is never touched). A Total row that ALREADY has
+ *  a real number here (Total COGS, Total OpEx — both computed by their own dedicated
+ *  formula above, which by construction already equals the sum of their own section's
+ *  rows) is left completely alone; this only ever fills a genuinely blank cell, never
+ *  overwrites one, so it can't clash with or double up on an existing formula. */
+function withSectionTotalRollups(statementType, rows, months, lastActualIndex) {
+  if (statementType !== 'PL') return rows;
+  return rows.map((row) => {
+    if (!row.isTotal) return row;
+    const siblings = rows.filter((r) => !r.isTotal && r.section === row.section);
+    if (siblings.length === 0) return row;
+    const patchedValues = { ...row.values };
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      const iso = months[i];
+      if (patchedValues[iso] != null) continue;
+      let sum = 0;
+      let sawAny = false;
+      for (const sib of siblings) {
+        if (sib.values[iso] != null) {
+          sum += sib.values[iso];
+          sawAny = true;
+        }
+      }
+      if (sawAny) patchedValues[iso] = sum;
+    }
+    return { ...row, values: patchedValues };
+  });
+}
+
 const TOTAL_REVENUE_ROW_LABELS = ['Total Revenue', 'TOTAL REVENUE'];
 const GROSS_PROFIT_ROW_LABELS = ['Gross Profit'];
 
@@ -1139,14 +1182,20 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     console.warn('COGS/OpEx total forecast projection failed:', err);
   }
   try {
-    const { rows: namedItemRows, matchedIds } = withNamedCostItemProjections(
-      statement.type,
-      rows,
-      costCtx.costItems,
-      months,
-      lastActualIndex
-    );
-    rows = withCustomAccountRows(statement.type, namedItemRows, costCtx.costItems, months, lastActualIndex, matchedIds);
+    // withCustomAccountRows (auto-inserting a new row for any CoGS cost item with no
+    // real GL row match, e.g. Vetric/Misc) is DISABLED as of 2026-08-10 — Kayee: "when
+    // i remove the link for vetric and misc and software in cogs the amount is still
+    // there. the amount should be removed if i remove the link in assumption and when
+    // i drag over it should get added." That auto-insert is exactly what made an
+    // unlinked item's $ reappear right away (just as its own new row instead of the
+    // one it used to be linked to) — with `matchedCostItemsForRowLabel` now ONLY
+    // matching an explicit `linkedRowLabel` (see its own comment above), a cost item
+    // with no link should show NOTHING on the P&L at all, not fall back to an
+    // auto-generated row of its own. `withNamedCostItemProjections` alone still
+    // handles the case that DOES matter — an item's $ patching onto whatever real row
+    // it's explicitly linked to.
+    const { rows: namedItemRows } = withNamedCostItemProjections(statement.type, rows, costCtx.costItems, months, lastActualIndex);
+    rows = namedItemRows;
   } catch (err) {
     console.warn('Custom cost-item row projection failed:', err);
   }
@@ -1160,6 +1209,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withManualAccountRows(statement.type, rows, assumptionsState?.customPLAccounts, costCtx.costItems, months, lastActualIndex);
     } catch (err) {
       console.warn('Manual account row injection failed:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
+      rows = withSectionTotalRollups(statement.type, rows, months, lastActualIndex);
+    } catch (err) {
+      console.warn('Section Total rollup failed:', err);
     }
   }
   if (statement.type === 'PL' && revenue && setAssumptionsState) {
@@ -1418,11 +1474,8 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
         }
         // The Campaigns/Meetings driver rows and any Revenue-section row aren't valid
-        // drop targets at all. Everything else — including Total rows (same as the
-        // existing COST_ITEM_ROW_LABEL_OVERRIDES precedent, Software -> "Software -
-        // Cost of Revenue")
-        // AND a cost item's own already-auto-matched custom row — is fair game, but
-        // ONLY for a cost item whose own category matches this row's section
+        // drop targets at all. Everything else — including Total rows — is fair game,
+        // but ONLY for a cost item whose own category matches this row's section
         // (2026-08-10, Kayee: "if i add the cost in cogs it will only be allow to get
         // sync to any items in cogs").
         //
