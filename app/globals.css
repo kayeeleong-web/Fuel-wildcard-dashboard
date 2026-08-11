@@ -459,11 +459,13 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    and be the same height was the bottom of non headcount items." */
 .reports-with-sidebar { display: flex; align-items: stretch; gap: 18px; }
 /* Widened 2026-08-10 (Kayee: "the non headcount cost is too narrow, everything kinda
-   get mushed up... maybe it needs to be a wider width, then you increase the width for
-   the entire hamburger section") — 30% was fine for a plain rate list but the
-   Non-Headcount Costs table needs room for a name + $ + cadence + category + date +
-   delete, all on one row, without crowding. */
-.reports-sidebar { flex: 0 0 38%; max-width: 38%; min-width: 360px; display: flex; flex-direction: column; gap: 18px; }
+   get mushed up") from the original 30%, then eased back down the same day once the
+   Category column and Start On column were both removed (Kayee: "now that we make
+   more space for other things... increase the width for p&l and reduce it slightly
+   for assumption") — a 4-column table (Name/$/Cadence/Delete) split across two cards
+   needs less raw width than the old single 6-column table did, so the P&L can take
+   that room back instead. */
+.reports-sidebar { flex: 0 0 34%; max-width: 34%; min-width: 340px; display: flex; flex-direction: column; gap: 18px; }
 .reports-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
 .reports-sidebar-rail { display: flex; align-self: stretch; }
@@ -597,18 +599,15 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    "30("). Explicit widths give the name and $ columns the room they actually need;
    Cadence/Category/Start On/remove only need to fit a short word or icon. Font-size
    and padding also drop a notch so more rows show before the inner scrollbar kicks in. */
-/* Column widths rebalanced again 2026-08-10, this time to just 5 columns — Start On
-   moved off its own column entirely (folded into the clock-icon panel, see
-   CostItemsCard.jsx), and that freed-up room goes to Name (still truncating, per
-   Kayee's screenshot: "the text box is too narrow and the text got covered") and to
-   the $ column (needs to fit the amount input, the clock icon, AND the schedule
-   summary line, per Kayee: "the clock icon need more space too, it's now covering
-   some part of the monthly box"). */
-.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 38%; }
-.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 26%; }
-.reports-sidebar .assump-cost-table th:nth-child(3), .reports-sidebar .assump-cost-table td:nth-child(3) { width: 17%; }
-.reports-sidebar .assump-cost-table th:nth-child(4), .reports-sidebar .assump-cost-table td:nth-child(4) { width: 11%; }
-.reports-sidebar .assump-cost-table th:nth-child(5), .reports-sidebar .assump-cost-table td:nth-child(5) { width: 8%; }
+/* Column widths rebalanced a third time 2026-08-10, down to just 4 columns now that
+   Category is gone too (split into separate CoGS/OpEx cards instead, see
+   CostItemsCard.jsx) — all of that freed width goes to Name and $, the two columns
+   that were actually cramped (Kayee: "increase the width of what is it blue box...
+   now that we have more space might as well use it"). */
+.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 46%; }
+.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 32%; }
+.reports-sidebar .assump-cost-table th:nth-child(3), .reports-sidebar .assump-cost-table td:nth-child(3) { width: 13%; }
+.reports-sidebar .assump-cost-table th:nth-child(4), .reports-sidebar .assump-cost-table td:nth-child(4) { width: 9%; }
 .reports-sidebar .assump-cost-table th, .reports-sidebar .assump-cost-table td { padding: 6px 7px; font-size: 11.5px; }
 .reports-sidebar .assump-cost-table .pr-input { padding: 5px 6px; font-size: 11.5px; }
 .reports-sidebar .assump-cost-table .pr-select { font-size: 11.5px; padding: 4px 3px; }
@@ -622,13 +621,30 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .assump-cost-name-cell .pr-input { width: 100%; box-sizing: border-box; }
 .reports-sidebar .assump-cost-table .assump-cost-name-cell .pr-input { font-size: 11.5px; }
 
-/* $ column: input + clock icon side by side, schedule summary stacked below both
+/* $ column: input + Schedule button side by side, schedule summary stacked below both
    (2026-08-10) — same always-visible-summary convention as the Revenue side. */
 .assump-cost-amount-td { vertical-align: top; }
-.assump-cost-amount-cell { display: flex; align-items: center; gap: 5px; justify-content: flex-end; }
+.assump-cost-amount-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
 .assump-cost-amount-cell .pr-input-month { min-width: 0; flex: 1 1 auto; }
 .assump-cost-schedule-summary { margin-top: 4px; align-items: flex-end; }
 .assump-cost-schedule-summary .pr-schedule-summary-line { font-size: 9.5px; max-width: 100%; }
+
+/* Schedule button, redesigned 2026-08-10 from a bare unlabeled icon into a labeled
+   pill (Kayee: "make it more obvious that this button is so that they apply for the
+   period") — a plain gray circle with a clock glyph and no text read as decoration,
+   not a control, especially once it was sitting right next to a real $ input that
+   looked far more "clickable." Blue like every other schedulable control on this tab
+   (the Revenue side's own "+ Schedule a future change" link), and it visibly changes
+   color/weight once something's actually scheduled (`.has-schedule`) instead of
+   relying only on the always-visible summary line to signal that. */
+.assump-cost-schedule-toggle {
+  display: inline-flex; align-items: center; gap: 3px; flex: none; white-space: nowrap;
+  border: 1px solid rgba(17,179,231,.35); background: var(--blue-soft); color: var(--blue);
+  border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 700; cursor: pointer;
+}
+.assump-cost-schedule-toggle svg { width: 11px; height: 11px; flex: none; }
+.assump-cost-schedule-toggle:hover { background: rgba(17,179,231,.2); }
+.assump-cost-schedule-toggle.has-schedule { background: var(--blue); color: #fff; border-color: var(--blue); }
 
 /* Lets the Non-Headcount Costs card (the taller of the sidebar's two cards) grow to
    fill whatever extra height align-items:stretch above gives .reports-sidebar, with

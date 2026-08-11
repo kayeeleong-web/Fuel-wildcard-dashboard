@@ -3,17 +3,15 @@
 import { useState, Fragment } from 'react';
 import { TextInput, DateInput, MonthInput } from '../payroll/PayrollTable';
 import {
-  COST_CATEGORIES,
   COST_CADENCES,
-  FIRST_PROJECTED_MONTH,
   generateId,
   isCostItemDue,
   buildScheduleRangePatch,
 } from '../../lib/assumptions/assumptionsData';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 
-/** Plain select for Category/Cadence — same visual convention as PayrollTable's
- *  PickerInput, but without the "+ Add new…" escape hatch (this list is fixed). */
+/** Plain select for Cadence — same visual convention as PayrollTable's PickerInput,
+ *  but without the "+ Add new…" escape hatch (this list is fixed). */
 function Picker({ value, options, onCommit }) {
   return (
     <select className="pr-input pr-select" value={value} onChange={(e) => onCommit(e.target.value)}>
@@ -85,7 +83,7 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
 
   return (
     <tr className="assump-cost-schedule-row">
-      <td colSpan={5}>
+      <td colSpan={4}>
         <div className="pr-schedule-inline-form pr-schedule-inline-form-table">
           <CostItemScheduleSummary item={item} onRemoveEntry={removeEntry} />
           <div className="pr-schedule-row">
@@ -121,32 +119,44 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
 }
 
 /**
- * Non-Headcount Costs table — one flat list matching Kayee's real sheet (What is it? /
- * $ / Cadence / Category), rather than splitting into separate COGS/OPEX tables. The
- * Category column is what determines whether a row counts toward projected COGS,
- * OPEX, or Other (Non-Operating) each month — see ProjectionSummaryCard. Monthly items
- * show their full $ every active month; Quarterly items show their total / 3 every
- * active month (spread evenly — e.g. Vetric's $5,250/quarter shows as $1,750 every
- * month, per Kayee 2026-08-05).
+ * Non-Headcount Costs — split 2026-08-10 into one card per Category (Kayee: "can you
+ * divide non headcount cost to cogs and opex? so that user no longer need to select
+ * those... if i add the cost in cogs it will only be allow to get sync to any items
+ * in cogs"). `category` is now fixed per card instead of a per-row picker — which cost
+ * item a row card belongs to is you decided by which "+ Add Cost" button you used, not
+ * a dropdown you have to remember to set correctly. That also means the Category
+ * column is gone entirely, and the freed width goes to Name and $ (Kayee: "increase
+ * the width of what is it blue box... now that we have more space might as well use
+ * it"). The category boundary is enforced on the P&L side too now (see
+ * FragmentRows/isDropTarget in ReportsPanel.jsx) — a CoGS item's drag can only land on
+ * a CoGS-section P&L row, an OpEx item's only on an OpEx-section row, so there's no way
+ * to accidentally cross-wire a cost into the wrong statement bucket.
  *
- * Start On (2026-08-10, moved off its own column) and the effective-dated amount
- * schedule both live behind the clock icon now — Kayee: "why do i need start on if the
- * clock icon will take care of it." Whatever schedule IS set always shows as a quiet
- * "→ $X from [month]" line under the $ box regardless of whether the panel is open
- * (Kayee: "like in revenue assumption you need to show which period is how much so
- * that the user know") — nothing about an item's timing is ever hidden, only the form
- * used to CHANGE it is collapsed by default.
+ * Start On and the effective-dated amount schedule both live behind the clock/Schedule
+ * button — Kayee: "why do i need start on if the clock icon will take care of it."
+ * Whatever schedule IS set always shows as a quiet "→ $X from [month]" line under the
+ * $ box regardless of whether the panel is open (Kayee: "like in revenue assumption
+ * you need to show which period is how much so that the user know") — nothing about an
+ * item's timing is ever hidden, only the form used to CHANGE it is collapsed by
+ * default. The button itself is now a labeled "Schedule" pill, not a bare icon (Kayee:
+ * "make it more obvious that this button is so that they apply for the period") —
+ * an unlabeled circle read as decoration, not a control.
  *
  * `itemOrder` (2026-08-07, optional) — a list of item ids in the order they actually
  * appear on the P&L, computed in ReportsPanel.jsx from the real matched/injected row
  * positions (Kayee: "make this align with what they actually are... rent should be
  * next to the line"). Purely a DISPLAY sort — `costItems`/`onChange` are untouched, so
  * removing/reordering doesn't corrupt anything, and this table falls back to the
- * items' own stored order when no hint is passed in (the standalone Assumptions tab
- * has no P&L row context to build one from).
+ * items' own stored order when no hint is passed in.
+ *
+ * `costItems`/`onChange` here are always the FULL list across every category — this
+ * component filters to its own `category` purely for display, so saving never drops
+ * another card's items.
  */
-export function CostItemsCard({ costItems, onChange, itemOrder }) {
+export function CostItemsCard({ costItems, onChange, itemOrder, category, title, addLabel }) {
   const [scheduleOpenId, setScheduleOpenId] = useState(null);
+
+  const items = costItems.filter((i) => i.category === category);
 
   function updateItem(id, patch) {
     onChange(costItems.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -160,7 +170,7 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
   function addItem() {
     onChange([
       ...costItems,
-      { id: generateId('cost'), name: '', amount: 0, cadence: 'Monthly', category: 'OpEx', startOn: '', amountSchedule: {}, linkedRowLabel: null },
+      { id: generateId('cost'), name: '', amount: 0, cadence: 'Monthly', category, startOn: '', amountSchedule: {}, linkedRowLabel: null },
     ]);
   }
 
@@ -169,7 +179,7 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
   }
 
   const displayItems = itemOrder
-    ? [...costItems].sort((a, b) => {
+    ? [...items].sort((a, b) => {
         const ai = itemOrder.indexOf(a.id);
         const bi = itemOrder.indexOf(b.id);
         if (ai === -1 && bi === -1) return 0;
@@ -177,18 +187,18 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
         if (bi === -1) return -1;
         return ai - bi;
       })
-    : costItems;
+    : items;
 
   return (
     <div className="payroll-card">
       <div className="payroll-card-head">
         <span className="payroll-card-title-btn" style={{ cursor: 'default' }}>
-          Non-Headcount Costs
+          {title}
         </span>
-        <span className="payroll-card-sub">{costItems.length} items</span>
+        <span className="payroll-card-sub">{items.length} items</span>
         <span className="payroll-card-actions">
           <button type="button" className="btn primary" onClick={addItem}>
-            + Add Cost
+            {addLabel || '+ Add Cost'}
           </button>
         </span>
       </div>
@@ -200,7 +210,6 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
               <th style={{ textAlign: 'left' }}>What is it?</th>
               <th style={{ textAlign: 'right' }}>$</th>
               <th>Cadence</th>
-              <th>Category</th>
               <th></th>
             </tr>
           </thead>
@@ -218,8 +227,21 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                       that always wins over the automatic (and, per Kayee's real "Rent"
                       example, occasionally fragile) name-matching. This card doesn't
                       know what row it landed on until it's dropped — that's read back
-                      via `item.linkedRowLabel` below, set from the P&L side. */}
-                  <tr className="assump-cost-draggable-row" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)}>
+                      via `item.linkedRowLabel` below, set from the P&L side.
+                      A second custom MIME type encodes THIS item's category directly
+                      in its name (e.g. "application/x-cost-item-cogs") — dataTransfer
+                      values can't be read during dragover in any browser (a security
+                      restriction), but the list of available TYPES can, which is what
+                      lets the P&L side show a real "not allowed" cursor over a
+                      mismatched-category row instead of only rejecting it after drop. */}
+                  <tr
+                    className="assump-cost-draggable-row"
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', item.id);
+                      e.dataTransfer.setData(`application/x-cost-item-${category.toLowerCase()}`, item.id);
+                    }}
+                  >
                     {/* Stacked flex column, not two inline siblings (2026-08-10 fix,
                         Kayee: "it created these funny watermark like a blue thing but
                         overlap with other text") — the link badge is long text
@@ -243,21 +265,17 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                     <td style={{ textAlign: 'right' }} className="assump-cost-amount-td">
                       <div className="assump-cost-amount-cell">
                         <MonthInput value={item.amount} onCommit={(n) => updateItem(item.id, { amount: n })} />
-                        {/* Schedule toggle (2026-08-07) — a filled dot marks an item that
-                            already has a future change queued, so that's visible even
-                            while collapsed, same "don't hide what's already there"
-                            principle as the Revenue rate fields. Also covers Start On
-                            now (2026-08-10) — the dot lights up for either one. */}
                         <button
                           type="button"
-                          className={`icon-btn assump-cost-schedule-toggle${hasSchedule || item.startOn ? ' has-schedule' : ''}`}
-                          title="Schedule a future amount change or set a start date"
+                          className={`assump-cost-schedule-toggle${hasSchedule || item.startOn ? ' has-schedule' : ''}`}
+                          title="Schedule a future amount change, or set a start date, for this cost"
                           onClick={() => setScheduleOpenId(isOpen ? null : item.id)}
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <circle cx="12" cy="12" r="9" />
                             <path d="M12 7v5l3 3" />
                           </svg>
+                          Schedule
                         </button>
                       </div>
                       <CostItemScheduleSummary item={item} onRemoveEntry={(iso) => {
@@ -271,13 +289,6 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                         value={item.cadence}
                         options={COST_CADENCES}
                         onCommit={(v) => updateItem(item.id, { cadence: v })}
-                      />
-                    </td>
-                    <td>
-                      <Picker
-                        value={item.category}
-                        options={COST_CATEGORIES}
-                        onCommit={(v) => updateItem(item.id, { category: v })}
                       />
                     </td>
                     <td>
@@ -309,11 +320,10 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
       </div>
 
       <div className="payroll-card-footer assump-cost-note">
-        Whether a row counts toward projected COGS, OPEX, or Other from {FIRST_PROJECTED_MONTH} onward depends only
-        on its Category — Monthly items show their full $ every month; Quarterly items show their total ÷ 3 every
-        month (spread evenly, not billed as a lump sum once a quarter). Drag a row over here onto its matching line
-        on the P&L (in the table on the right) to link it directly — no need to worry about the name matching
-        exactly; a linked item always feeds that exact P&L line, and shows an "↳ [line name]" tag once it's set.
+        Monthly items show their full $ every month; Quarterly items show their total ÷ 3 every month (spread
+        evenly, not billed as a lump sum once a quarter). Drag a row onto its matching line on the P&L (in the table
+        on the right) to link it directly — no need to worry about the name matching exactly; a linked item always
+        feeds that exact P&L line, and shows an "↳ [line name]" tag once it's set.
       </div>
     </div>
   );

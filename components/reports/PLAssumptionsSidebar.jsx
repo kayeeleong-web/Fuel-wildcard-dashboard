@@ -160,7 +160,40 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         </div>
       </div>
 
-      <CostItemsCard costItems={costItems} onChange={onCostItemsChange} itemOrder={costItemOrder} />
+      {/* Split into one card per Category (2026-08-10, Kayee: "can you divide non
+          headcount cost to cogs and opex? so that user no longer need to select
+          those") — which card's "+ Add Cost" you use IS the category now, instead of a
+          per-row picker. `costItems`/`onCostItemsChange` are the full list in both
+          cases; each card just filters to its own category for display (see
+          CostItemsCard's own doc comment). An "Other Costs" card only shows up if
+          there's actually a non-operating item to show — most clients will never see
+          it, so it doesn't compete for attention with the two real categories. */}
+      <CostItemsCard
+        costItems={costItems}
+        onChange={onCostItemsChange}
+        itemOrder={costItemOrder}
+        category="CoGS"
+        title="CoGS Costs"
+        addLabel="+ Add CoGS Cost"
+      />
+      <CostItemsCard
+        costItems={costItems}
+        onChange={onCostItemsChange}
+        itemOrder={costItemOrder}
+        category="OpEx"
+        title="OpEx Costs"
+        addLabel="+ Add OpEx Cost"
+      />
+      {costItems.some((i) => i.category === 'Other') && (
+        <CostItemsCard
+          costItems={costItems}
+          onChange={onCostItemsChange}
+          itemOrder={costItemOrder}
+          category="Other"
+          title="Other (Non-Operating)"
+          addLabel="+ Add Cost"
+        />
+      )}
     </div>
   );
 }

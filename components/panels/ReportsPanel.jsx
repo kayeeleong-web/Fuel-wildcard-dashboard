@@ -1051,6 +1051,20 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   // section's row group; nothing here is persisted, it just paints a highlight while
   // a drag is in progress.
   const [dragOverKey, setDragOverKey] = useState(null);
+
+  // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
+  // headcount cost to cogs and opex... if i add the cost in cogs it will only be
+  // allow to get sync to any items in cogs, same with opex"). This client's real
+  // sheet has exactly one section literally called "COGS" — everything else that
+  // isn't Revenue is some flavor of OpEx (Salaries & Benefits, Travel, Meals,
+  // Facilities, etc. — there's no single flat "OpEx" section to check against, same
+  // reasoning as CUSTOM_ACCOUNT_SECTION_ALIASES only ever having a CoGS entry).
+  // Revenue rows aren't a valid link target for a cost item at all, so that returns
+  // null and blocks dropping there entirely.
+  const sectionUpper = section.toUpperCase();
+  const sectionCategory = sectionUpper === 'REVENUE' ? null : sectionUpper === 'COGS' ? 'CoGS' : 'OpEx';
+  const dropMimeType = sectionCategory ? `application/x-cost-item-${sectionCategory.toLowerCase()}` : null;
+
   return (
     <>
       {/* Two cells, not one colSpan cell — position:sticky on a <td> with colspan doesn't
@@ -1079,14 +1093,19 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         } catch (err) {
           console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
         }
-        // A cost item's own custom row, and the Campaigns/Meetings driver rows, aren't
-        // valid drop targets — dropping a cost item onto its OWN already-generated row
-        // (or onto a row that isn't a real GL line at all) doesn't mean anything.
-        // Everything else — including Total rows, same as the existing
-        // COST_ITEM_ROW_LABEL_OVERRIDES precedent (Travel -> "Total Travel") — is fair
-        // game (2026-08-10, Kayee: "give me the option to drag and drop to match
-        // thing... if it said rent it will allow me to add rent to P&L").
-        const isDropTarget = !!onLinkCostItem && !row.custom && !row.driver;
+        // A cost item's own custom row, the Campaigns/Meetings driver rows, and any
+        // Revenue-section row aren't valid drop targets at all. Everything else —
+        // including Total rows, same as the existing COST_ITEM_ROW_LABEL_OVERRIDES
+        // precedent (Travel -> "Total Travel") — is fair game, but ONLY for a cost
+        // item whose own category matches this row's section (2026-08-10, Kayee: "if
+        // i add the cost in cogs it will only be allow to get sync to any items in
+        // cogs"). `onDragOver` only calls preventDefault (which is what permits a
+        // drop at all) when the dragged item's encoded category type matches — for a
+        // mismatched category, the browser shows its native "not allowed" cursor and
+        // a drop is simply impossible, no separate error state needed. The `onDrop`
+        // check against `costCtx.costItems` is a second, authoritative guard for any
+        // browser that doesn't expose dataTransfer.types during dragover consistently.
+        const isDropTarget = !!onLinkCostItem && !row.custom && !row.driver && !!sectionCategory;
         return (
           <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
             <td
@@ -1094,6 +1113,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
               onDragOver={
                 isDropTarget
                   ? (e) => {
+                      if (!e.dataTransfer.types.includes(dropMimeType)) return;
                       e.preventDefault();
                       if (dragOverKey !== row.key) setDragOverKey(row.key);
                     }
@@ -1106,7 +1126,10 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                       e.preventDefault();
                       setDragOverKey(null);
                       const itemId = e.dataTransfer.getData('text/plain');
-                      if (itemId) onLinkCostItem(itemId, row.label);
+                      if (!itemId) return;
+                      const draggedItem = costCtx.costItems?.find((i) => i.id === itemId);
+                      if (!draggedItem || draggedItem.category !== sectionCategory) return;
+                      onLinkCostItem(itemId, row.label);
                     }
                   : undefined
               }
