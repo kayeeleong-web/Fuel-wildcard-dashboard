@@ -583,13 +583,26 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .pr-assumption-sidebar-list .pr-assumption-label { font-size: 10px; flex: none; }
 .pr-assumption-sidebar-list .pr-assumption-input-wrap { justify-content: flex-end; flex: none; }
 .pr-assumption-sidebar-list .pr-input-assumption { width: 76px; padding: 5px 7px; font-size: 12px; }
+/* Fixed-width suffix (2026-08-10, Kayee: "make all of these boxes align please") — the
+   wrap above is flex:none (sized to its own content: input + gap + suffix text), and
+   the row it sits in uses justify-content:space-between, so the wrap's RIGHT edge was
+   always flush against the sidebar's edge but its total width — and therefore where
+   the input box itself starts — shifted depending on how wide that row's suffix text
+   was ("mo" wider than "%" or "$"). Giving every suffix the same reserved width makes
+   the wrap's total width constant across every row, so every input box's left edge
+   now lines up too, not just the right edge. */
+.pr-assumption-sidebar-list .pr-assumption-suffix { display: inline-block; width: 16px; text-align: left; }
 
 /* One group per revenue stream (2026-08-07) — a small caption naming the exact P&L
    account it feeds (Kayee: "align with what's on the P&L"), then its rate field(s). */
 .pr-assumption-group { display: flex; flex-direction: column; gap: 10px; }
+/* Sized up (2026-08-10, Kayee: "make these bigger so that we know it's a title") —
+   10.5px read almost the same size as the field labels sitting directly under it
+   (TRANSACTION REVENUE vs. PER MEETING RATE looked like peers, not header-and-child),
+   so bumped size/spacing/margin to clearly read as a section heading instead. */
 .pr-assumption-group-label {
-  font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase;
-  letter-spacing: .4px; border-bottom: 1px solid var(--border); padding-bottom: 5px;
+  font-size: 13px; font-weight: 800; color: var(--black); text-transform: uppercase;
+  letter-spacing: .5px; border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 2px;
 }
 
 /* A single rate field + its optional schedule (2026-08-07 redesign, replacing an

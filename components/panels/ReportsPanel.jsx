@@ -439,6 +439,12 @@ function costCalcExplanation(rowLabel, ctx) {
   if (['Operating Profit', 'Operating Income', 'Operating Margin'].includes(rowLabel)) {
     return { calcNote: 'Operating Profit = Total Revenue − Total COGS − Total OpEx.' };
   }
+  if (rowLabel === 'Gross Profit Margin %') {
+    return {
+      calcNote:
+        'Gross Profit Margin % = Gross Profit ÷ Total Revenue × 100 — computed for every month, actual and projected alike (not forecast-only like most other rows on this tab).',
+    };
+  }
   if (rowLabel === 'Cost of campaigns') {
     return { calcNote: "Cost of campaigns = last month's # of Campaigns × Cost Per Campaign rate. Both editable on the Assumptions tab." };
   }
@@ -726,21 +732,28 @@ const PAYROLL_HEADCOUNT_TOTAL_LABELS = {
   OpEx: ['Total OpEx', 'Total OPEX', 'Total Operating Expenses'],
 };
 
-// The real row Kayee's own P&L already has in BOTH the COGS and OpEx sections
-// (2026-08-10: "Headcount (Payroll) should be under salaries & benefit") — every
-// Payroll line gets anchored directly under whichever one of these rows sits in its
-// own section, rather than just floating above the section's Total.
-const SALARIES_BENEFITS_LABELS = ['salaries & benefits', 'salaries and benefits'];
+// "Salaries & Benefits" is a real named SUB-SECTION on Kayee's own OpEx (a section
+// band like "COGS", grouping several of its own leaf rows — Salaries, Payroll Taxes,
+// Benefits, Payroll & Benefits Processing Fees, Bonuses — under one green header band,
+// confirmed against her screenshot 2026-08-10), NOT a single leaf row with its own $
+// column. COGS has no equivalent nested sub-section (it's one flat "COGS" section per
+// CUSTOM_ACCOUNT_SECTION_ALIASES's own comment above), so only OpEx's payroll
+// breakdown needs to find it; COGS's lump line just sits above the flat section's own
+// Total COGS row, same as before this fix.
+const SALARIES_BENEFITS_SECTION_NAMES = ['salaries & benefits', 'salaries and benefits'];
 
-function findSalariesBenefitsRowIndex(rows, wantCogs) {
-  const sectionsPresent = new Set(rows.map((r) => r.section));
-  const cogsSection = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES.CoGS);
-  return rows.findIndex((r) => {
-    if (r.isTotal) return false;
-    if (!SALARIES_BENEFITS_LABELS.includes(String(r.label).trim().toLowerCase())) return false;
-    const inCogs = cogsSection != null && r.section === cogsSection;
-    return wantCogs ? inCogs : !inCogs;
-  });
+/** Returns the exact raw `.section` string used by the "Salaries & Benefits" sub-
+ *  section's rows, or null if no row anywhere carries it (falls back to the grand
+ *  Total OpEx in that case — see withPayrollHeadcountRows below). Matching by SECTION
+ *  value, not row label, is the fix for the 2026-08-10 bug Kayee flagged ("you have it
+ *  at the bottom, it should align with the actual Salaries & Benefits section") — the
+ *  original version searched for a leaf ROW literally labeled "Salaries & Benefits",
+ *  which doesn't exist (it's a section band, not a line item), so it always silently
+ *  fell through to sitting above the grand Total OpEx at the very bottom of the whole
+ *  OpEx block instead of inside this specific sub-section. */
+function findSalariesBenefitsSection(rows) {
+  const match = rows.find((r) => SALARIES_BENEFITS_SECTION_NAMES.includes(String(r.section).trim().toLowerCase()));
+  return match ? match.section : null;
 }
 
 function buildPayrollLineRow(key, label, section, costType, kind, values) {
@@ -756,38 +769,42 @@ function buildPayrollLineRow(key, label, section, costType, kind, values) {
  *  withCustomAccountRows (a display of a number the Total already contains, not an
  *  addition to it).
  *
- *  COGS gets ONE lump "Headcount (Payroll)" line (Kayee's own call — no need to split
- *  it there). OpEx gets three separate lines — Salaries (base + Bonus $, since bonus
- *  carries no tax/benefit load of its own), Payroll Taxes, and Benefits. Both are
- *  inserted directly under that section's own real "Salaries & Benefits" row; if that
- *  row can't be found by label (e.g. it's worded differently on Kayee's live sheet),
- *  falls back to sitting right above the section's Total row instead, so the figures
- *  are never silently dropped. */
+ *  COGS gets ONE lump "Headcount (Payroll)" line, right above the flat COGS section's
+ *  own Total COGS row (Kayee's own call — no need to split it there, and COGS has no
+ *  further named sub-section to place it inside anyway). OpEx gets three separate
+ *  lines — Salaries (base + Bonus $, since bonus carries no tax/benefit load of its
+ *  own), Payroll Taxes, and Benefits — inserted directly inside the real "Salaries &
+ *  Benefits" sub-section, right above ITS OWN "Total Salaries & Benefits" row (not the
+ *  grand Total OpEx). Falls back to sitting above the grand Total OpEx if that named
+ *  sub-section can't be found at all (worded differently on Kayee's live sheet), so
+ *  the figures are never silently dropped. */
 function withPayrollHeadcountRows(statementType, rows, payrollState, months, lastActualIndex) {
   if (statementType !== 'PL') return rows;
   let next = rows;
 
-  // --- COGS: one lump line ---
-  const cogsSBIdx = findSalariesBenefitsRowIndex(next, true);
+  // --- COGS: one lump line, right above the flat COGS section's own Total ---
   const cogsTotalIdx = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.CoGS.includes(r.label));
-  const cogsSection = cogsSBIdx !== -1 ? next[cogsSBIdx].section : cogsTotalIdx !== -1 ? next[cogsTotalIdx].section : null;
-  if (cogsSection) {
+  if (cogsTotalIdx !== -1) {
+    const section = next[cogsTotalIdx].section;
     const values = {};
     for (let i = lastActualIndex + 1; i < months.length; i++) {
       values[months[i]] = payrollState
         ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'CoGS', months[i])
         : 0;
     }
-    const row = buildPayrollLineRow('payroll_headcount_cogs', 'Headcount (Payroll)', cogsSection, 'CoGS', 'lump', values);
-    const insertAt = cogsSBIdx !== -1 ? cogsSBIdx + 1 : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.CoGS.includes(r.label));
-    if (insertAt !== -1) next = [...next.slice(0, insertAt), row, ...next.slice(insertAt)];
+    const row = buildPayrollLineRow('payroll_headcount_cogs', 'Headcount (Payroll)', section, 'CoGS', 'lump', values);
+    next = [...next.slice(0, cogsTotalIdx), row, ...next.slice(cogsTotalIdx)];
   }
 
-  // --- OpEx: 3-way split (recomputed against the just-updated `next`, so the COGS
-  // insertion above can never leave this looking at stale row indices) ---
-  const opexSBIdx = findSalariesBenefitsRowIndex(next, false);
-  const opexTotalIdx = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
-  const opexSection = opexSBIdx !== -1 ? next[opexSBIdx].section : opexTotalIdx !== -1 ? next[opexTotalIdx].section : null;
+  // --- OpEx: 3-way split, inside the real "Salaries & Benefits" sub-section (recomputed
+  // against the just-updated `next`, so the COGS insertion above can never leave this
+  // looking at stale row indices) ---
+  const sbSection = findSalariesBenefitsSection(next);
+  let opexInsertAt = sbSection != null ? next.findIndex((r) => r.section === sbSection && r.isTotal) : -1;
+  if (opexInsertAt === -1) {
+    opexInsertAt = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
+  }
+  const opexSection = opexInsertAt !== -1 ? next[opexInsertAt].section : null;
   if (opexSection) {
     const salariesValues = {};
     const taxValues = {};
@@ -809,8 +826,7 @@ function withPayrollHeadcountRows(statementType, rows, payrollState, months, las
       buildPayrollLineRow('payroll_taxes_opex', 'Payroll Taxes (Payroll)', opexSection, 'OpEx', 'taxes', taxValues),
       buildPayrollLineRow('payroll_benefits_opex', 'Benefits (Payroll)', opexSection, 'OpEx', 'benefits', benefitsValues),
     ];
-    const insertAt = opexSBIdx !== -1 ? opexSBIdx + 1 : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
-    if (insertAt !== -1) next = [...next.slice(0, insertAt), ...newRows, ...next.slice(insertAt)];
+    next = [...next.slice(0, opexInsertAt), ...newRows, ...next.slice(opexInsertAt)];
   }
 
   return next;
@@ -1048,6 +1064,43 @@ function withReorderedRevenueRows(rows) {
   return [...withoutServices.slice(0, totalIdx), servicesRow, ...withoutServices.slice(totalIdx)];
 }
 
+const TOTAL_REVENUE_ROW_LABELS = ['Total Revenue', 'TOTAL REVENUE'];
+const GROSS_PROFIT_ROW_LABELS = ['Gross Profit'];
+
+/** Kayee, 2026-08-10: "add gross profit margin % below gross profit both actual and
+ *  projection" — unlike every other injected row on this tab, this one is NOT
+ *  forecast-only: it's computed for every month, actual and projected alike, straight
+ *  from whichever "Total Revenue" and "Gross Profit" values are ALREADY on screen for
+ *  that month (real booked $ for an actual month, formula-projected $ for a forecast
+ *  one) — so it's automatically correct either way without needing its own separate
+ *  actual-vs-forecast logic. Runs LAST, after every other row transform, so it's
+ *  reading each row's truly final value. A percentage, not a dollar figure — flagged
+ *  `isPercent` so the cell renderer below formats it as "42.3%" instead of "$42". Safe
+ *  no-op if "Gross Profit" isn't found on this sheet at all. */
+function withGrossProfitMarginRow(rows, months) {
+  const gpIdx = rows.findIndex((r) => GROSS_PROFIT_ROW_LABELS.includes(r.label));
+  if (gpIdx === -1) return rows;
+  const gpRow = rows[gpIdx];
+  const revenueRow = rows.find((r) => TOTAL_REVENUE_ROW_LABELS.includes(r.label));
+  const values = {};
+  for (const iso of months) {
+    const revenueVal = revenueRow ? revenueRow.values[iso] : null;
+    const gpVal = gpRow.values[iso];
+    if (revenueVal != null && gpVal != null && revenueVal !== 0) {
+      values[iso] = (gpVal / revenueVal) * 100;
+    }
+  }
+  const marginRow = {
+    key: 'gross_profit_margin_pct',
+    label: 'Gross Profit Margin %',
+    section: gpRow.section,
+    isTotal: false,
+    isPercent: true,
+    values,
+  };
+  return [...rows.slice(0, gpIdx + 1), marginRow, ...rows.slice(gpIdx + 1)];
+}
+
 function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
@@ -1136,6 +1189,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withReorderedRevenueRows(rows);
     } catch (err) {
       console.warn('Revenue row reorder failed, showing sheet order:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
+      rows = withGrossProfitMarginRow(rows, months);
+    } catch (err) {
+      console.warn('Gross Profit Margin % row injection failed:', err);
     }
   }
 
@@ -1355,7 +1415,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         // from the Payroll tab's roster/bonus totals, not from a linked cost item, so
         // dropping a cost item on it would silently do nothing rather than actually
         // add the $ anywhere.
-        const isDropTarget = !!onLinkCostItem && !row.driver && !row.payrollHeadcount && !!sectionCategory;
+        const isDropTarget = !!onLinkCostItem && !row.driver && !row.payrollHeadcount && !row.isPercent && !!sectionCategory;
         return (
           <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
             <td
@@ -1418,8 +1478,16 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
               // month simply had no activity in that account was noise, not
               // information; an actually-missing figure and a genuine zero now read
               // identically (empty), which is the tradeoff Kayee explicitly asked for.
-              const rounded = row.values[m] != null ? Math.round(row.values[m]) : 0;
-              const cellText = rounded ? `$${rounded.toLocaleString('en-US')}` : '';
+              // A percent row (currently just Gross Profit Margin %, 2026-08-10) shows
+              // "42.3%" instead of a dollar figure — and unlike every $ row, a genuine
+              // 0.0% is still a real, worth-showing number, not noise to blank out.
+              let cellText;
+              if (row.isPercent) {
+                cellText = row.values[m] != null ? `${row.values[m].toFixed(1)}%` : '';
+              } else {
+                const rounded = row.values[m] != null ? Math.round(row.values[m]) : 0;
+                cellText = rounded ? `$${rounded.toLocaleString('en-US')}` : '';
+              }
               const isForecast = i > lastActualIndex;
               return (
                 <td
