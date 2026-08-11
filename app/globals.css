@@ -303,9 +303,15 @@ a {
 .drillable { position: relative; display: inline-block; cursor: help; border-bottom: 1px dashed var(--muted-2); }
 .drillable .drill-pop {
   position: absolute; z-index: 50; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(4px);
-  width: 220px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  width: 240px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
   box-shadow: 0 16px 40px rgba(17,17,17,.18); opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity .12s ease, transform .12s ease; z-index: 50; text-align: left;
+  /* 2026-08-10 (Kayee: "the text is coming out of the box, it's overflowing, keep the
+     text inside of the box") — the calc-note strings got a lot longer once every row
+     started getting a real formula explanation instead of a one-liner; without an
+     explicit wrap rule, a single very long word/run can push the box wider than its
+     fixed 240px and spill past its own border instead of wrapping onto another line. */
+  overflow-wrap: break-word; word-break: break-word; white-space: normal;
 }
 .drillable:hover .drill-pop { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); pointer-events: auto; }
 .drillable .drill-pop::before { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); width: 0; height: 0; border: 7px solid transparent; border-top-color: var(--border); }
@@ -355,8 +361,17 @@ a {
    ones by default, regardless of a z-index buried inside the earlier one. Since the
    popover opens DOWNWARD now, it visually sits on top of the NEXT row(s) in the table,
    which is exactly that case. Lifting the entire hovered row's own stacking context
-   (not just the popover's) is what actually lets it paint above those later rows. */
-.report-doc tbody tr:has(.drillable:hover) { position: relative; z-index: 100; }
+   (not just the popover's) is what actually lets it paint above those later rows.
+
+   2026-08-10 fix: the first attempt at this used `tr:has(.drillable:hover)`, which
+   quietly does nothing in any browser without :has() support — since :has() failing
+   to match isn't a CSS error, that version could ship and look identical to "still
+   broken" (Kayee's follow-up screenshot: text still bleeding through rows below,
+   same exact bug). A plain `tr:hover` achieves the exact same result with zero
+   feature-detection risk: hovering anything INSIDE a <tr>, including a nested
+   .drillable span, already satisfies :hover on that ancestor <tr> in every browser —
+   :has() was never actually necessary here. */
+.report-doc tbody tr:hover { position: relative; z-index: 100; }
 
 /* ==================== Executive Summary widget ==================== */
 .exec-summary { display: flex; gap: 16px; align-items: flex-start; background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--green); border-radius: 14px; padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(17,17,17,.03); }

@@ -157,11 +157,6 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
             />
           </div>
 
-          <p className="pr-assumption-note" style={{ marginLeft: 0, maxWidth: 'none' }}>
-            # of Campaigns and # of Meetings are now edited directly on the P&L, under Subscription Revenue and
-            Transaction Revenue. Uncollectible % moved off this P&L view (2026-08-07) — it's a cash-collection
-            adjustment, not an accrual one, so it belongs on Cash Flow instead; still editable on the Assumptions tab.
-          </p>
         </div>
       </div>
 
