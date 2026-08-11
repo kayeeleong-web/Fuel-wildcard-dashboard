@@ -8,12 +8,18 @@ import { RosterCard } from '../payroll/RosterCard';
 import { HiringPlanCard } from '../payroll/HiringPlanCard';
 import { BonusCard } from '../payroll/BonusCard';
 import { TotalCompCard } from '../payroll/TotalCompCard';
+import { TotalCompByCategoryCard } from '../payroll/TotalCompByCategoryCard';
 import { CollapsibleSection } from '../payroll/CollapsibleSection';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
 import { currentIsoMonth, monthsForRange } from '../../lib/payroll/payrollData';
 
 // Section anchor ids — Payroll Summary's clickable rows scroll to these.
-const SECTION_IDS = { totalComp: 'section-total-comp', existing: 'section-existing', planned: 'section-planned' };
+const SECTION_IDS = {
+  totalComp: 'section-total-comp',
+  byCategory: 'section-by-category',
+  existing: 'section-existing',
+  planned: 'section-planned',
+};
 
 /**
  * Payroll tab — 5th sibling panel alongside KPI Report / Dashboard / Reports / Custom
@@ -47,6 +53,7 @@ export function PayrollPanel() {
   // click, so nothing below needs to be open by default just to land on the page.
   const [collapsedSections, setCollapsedSections] = useState({
     totalComp: true,
+    byCategory: true,
     existing: true,
     planned: true,
   });
@@ -145,6 +152,25 @@ export function PayrollPanel() {
               onToggle={() => toggleSection('totalComp')}
             >
               <TotalCompCard
+                roster={state.roster}
+                bonuses={state.bonuses}
+                assumptions={state.assumptions}
+                months={visibleMonths}
+                todayIso={todayIso}
+              />
+            </CollapsibleSection>
+
+            <div style={{ height: 20 }} />
+
+            <CollapsibleSection
+              id={SECTION_IDS.byCategory}
+              title="Total Comp by CoGS/OpEx"
+              subtitle="Two totals to match against the new Payroll lines on the P&L · read-only"
+              colorVar="--green"
+              collapsed={collapsedSections.byCategory}
+              onToggle={() => toggleSection('byCategory')}
+            >
+              <TotalCompByCategoryCard
                 roster={state.roster}
                 bonuses={state.bonuses}
                 assumptions={state.assumptions}

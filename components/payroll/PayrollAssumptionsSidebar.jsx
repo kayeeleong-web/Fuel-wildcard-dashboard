@@ -72,9 +72,10 @@ export function PayrollAssumptionsSidebar({ collapsed, onToggleCollapse, assumpt
               onCommit={(v) => setField('yearlyMeritIncrease', v)}
             />
           </div>
-          <div className="pr-assumption-note">
-            Does not include contractors. Loaded cost = Base ÷ 12 × (1 + Tax Rate + Benefits).
-          </div>
+          {/* Shortened 2026-08-10, Kayee: "remove... does not include contractors... just
+              say cost = calculation" — dropped the contractor caveat entirely, kept only
+              the one-line formula, relabeled plain "Cost" instead of "Loaded cost". */}
+          <div className="pr-assumption-note">Cost = Base ÷ 12 × (1 + Tax Rate + Benefits)</div>
         </div>
       </div>
     </div>

@@ -536,7 +536,11 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    Payroll's tables too. Layout mechanics are identical, so those rules are just
    duplicated under the new names, not reinvented. */
 .payroll-with-sidebar { display: flex; align-items: stretch; gap: 18px; }
-.payroll-sidebar { flex: 0 0 34%; max-width: 34%; min-width: 340px; display: flex; flex-direction: column; gap: 18px; }
+/* Fixed, compact width (2026-08-10, Kayee: "make this narrower, so many empty space in
+   between") rather than Reports' 34%/340px-min sidebar — Payroll's sidebar only ever
+   holds the 4 short rate fields (no wide cost-item table like Reports has), so the
+   same wide column just left a big gap between each label and its small input box. */
+.payroll-sidebar { flex: 0 0 260px; max-width: 260px; min-width: 220px; display: flex; flex-direction: column; gap: 18px; }
 .payroll-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .payroll-with-sidebar.is-collapsed .payroll-sidebar-rail { flex: 0 0 auto; }
 .payroll-sidebar-rail { display: flex; align-self: stretch; }

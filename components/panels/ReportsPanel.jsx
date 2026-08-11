@@ -8,7 +8,12 @@ import { PLAssumptionsSidebar } from '../reports/PLAssumptionsSidebar';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
-import { headcountCostByCostType } from '../../lib/payroll/payrollData';
+import {
+  headcountCostByCostType,
+  headcountSalariesByCostType,
+  headcountPayrollTaxesByCostType,
+  headcountBenefitsByCostType,
+} from '../../lib/payroll/payrollData';
 import {
   upfrontRevenueForMonth,
   meetingRevenueForMonth,
@@ -705,56 +710,103 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
   return next;
 }
 
-// Which real Total row each Payroll headcount line sits above — matched by label, not
-// a section alias, since OpEx has no single section string to key off of (see
-// CUSTOM_ACCOUNT_SECTION_ALIASES's own comment above for why).
+// Which real Total row each Payroll line falls back to sitting above, if no real
+// "Salaries & Benefits" row is found to anchor under instead (see
+// withPayrollHeadcountRows below) — matched by label, not a section alias, since OpEx
+// has no single section string to key off of (see CUSTOM_ACCOUNT_SECTION_ALIASES's own
+// comment above for why).
 const PAYROLL_HEADCOUNT_TOTAL_LABELS = {
   CoGS: ['Total COGS'],
   OpEx: ['Total OpEx', 'Total OPEX', 'Total Operating Expenses'],
 };
 
-function buildPayrollHeadcountRow(costType, section, payrollState, months, lastActualIndex) {
-  const values = {};
-  // Forecast-only, same rule as every other injected row — Payroll is a what-if
-  // calculator with no real GL entry of its own, so actual months stay "—".
-  for (let i = lastActualIndex + 1; i < months.length; i++) {
-    values[months[i]] = payrollState
-      ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, costType, months[i])
-      : 0;
-  }
-  return {
-    key: `payroll_headcount_${costType.toLowerCase()}`,
-    label: 'Headcount (Payroll)',
-    section,
-    isTotal: false,
-    payrollHeadcount: true,
-    costType,
-    values,
-  };
+// The real row Kayee's own P&L already has in BOTH the COGS and OpEx sections
+// (2026-08-10: "Headcount (Payroll) should be under salaries & benefit") — every
+// Payroll line gets anchored directly under whichever one of these rows sits in its
+// own section, rather than just floating above the section's Total.
+const SALARIES_BENEFITS_LABELS = ['salaries & benefits', 'salaries and benefits'];
+
+function findSalariesBenefitsRowIndex(rows, wantCogs) {
+  const sectionsPresent = new Set(rows.map((r) => r.section));
+  const cogsSection = findPresentSection(sectionsPresent, CUSTOM_ACCOUNT_SECTION_ALIASES.CoGS);
+  return rows.findIndex((r) => {
+    if (r.isTotal) return false;
+    if (!SALARIES_BENEFITS_LABELS.includes(String(r.label).trim().toLowerCase())) return false;
+    const inCogs = cogsSection != null && r.section === cogsSection;
+    return wantCogs ? inCogs : !inCogs;
+  });
 }
 
-/** Kayee, 2026-08-10: "with payroll expenses i want it to go into P&L. add a new line
- *  in COGS for headcount as well as OpEx... if it's labeled as OpEx it will link there
- *  and if it's COGS as well. so if I edit payroll like increase the spend it will
- *  increase in P&L as well." Payroll's headcount cost was already folded into Total
- *  COGS/Total OpEx's own math (cogsTotalForMonth/opexTotalForMonth above, since
- *  2026-08-06) — this just makes that already-included number VISIBLE as its own named
- *  row, same read-only/no-double-count convention as withCustomAccountRows (the row is
- *  a display of a number the Total already contains, not an addition to it). Placed
- *  directly above whichever real Total COGS/Total OpEx row is actually present. Every
- *  roster/bonus row already carries a `costType` of 'CoGS' or 'OpEx' (see
- *  payrollData.js SEED_ROSTER) — that's the "label it as OpEx/COGS" split Kayee's
- *  asking for; it already exists on the Payroll tab, this just routes it visibly. */
+function buildPayrollLineRow(key, label, section, costType, kind, values) {
+  return { key, label, section, isTotal: false, payrollHeadcount: true, costType, payrollLineKind: kind, values };
+}
+
+/** Kayee, 2026-08-10: "Headcount (Payroll) should be under salaries & benefit... get
+ *  the salaries, payroll taxes and benefit separated... in cogs payroll no need to
+ *  have division for benefit and payroll tax, only in opex you need." Payroll's
+ *  headcount cost was already folded into Total COGS/Total OpEx's own math
+ *  (cogsTotalForMonth/opexTotalForMonth above, since 2026-08-06) — these rows only make
+ *  that already-included number VISIBLE, same read-only/no-double-count convention as
+ *  withCustomAccountRows (a display of a number the Total already contains, not an
+ *  addition to it).
+ *
+ *  COGS gets ONE lump "Headcount (Payroll)" line (Kayee's own call — no need to split
+ *  it there). OpEx gets three separate lines — Salaries (base + Bonus $, since bonus
+ *  carries no tax/benefit load of its own), Payroll Taxes, and Benefits. Both are
+ *  inserted directly under that section's own real "Salaries & Benefits" row; if that
+ *  row can't be found by label (e.g. it's worded differently on Kayee's live sheet),
+ *  falls back to sitting right above the section's Total row instead, so the figures
+ *  are never silently dropped. */
 function withPayrollHeadcountRows(statementType, rows, payrollState, months, lastActualIndex) {
   if (statementType !== 'PL') return rows;
   let next = rows;
-  for (const costType of Object.keys(PAYROLL_HEADCOUNT_TOTAL_LABELS)) {
-    const totalLabels = PAYROLL_HEADCOUNT_TOTAL_LABELS[costType];
-    const totalIdx = next.findIndex((r) => r.isTotal && totalLabels.includes(r.label));
-    if (totalIdx === -1) continue;
-    const row = buildPayrollHeadcountRow(costType, next[totalIdx].section, payrollState, months, lastActualIndex);
-    next = [...next.slice(0, totalIdx), row, ...next.slice(totalIdx)];
+
+  // --- COGS: one lump line ---
+  const cogsSBIdx = findSalariesBenefitsRowIndex(next, true);
+  const cogsTotalIdx = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.CoGS.includes(r.label));
+  const cogsSection = cogsSBIdx !== -1 ? next[cogsSBIdx].section : cogsTotalIdx !== -1 ? next[cogsTotalIdx].section : null;
+  if (cogsSection) {
+    const values = {};
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      values[months[i]] = payrollState
+        ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'CoGS', months[i])
+        : 0;
+    }
+    const row = buildPayrollLineRow('payroll_headcount_cogs', 'Headcount (Payroll)', cogsSection, 'CoGS', 'lump', values);
+    const insertAt = cogsSBIdx !== -1 ? cogsSBIdx + 1 : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.CoGS.includes(r.label));
+    if (insertAt !== -1) next = [...next.slice(0, insertAt), row, ...next.slice(insertAt)];
   }
+
+  // --- OpEx: 3-way split (recomputed against the just-updated `next`, so the COGS
+  // insertion above can never leave this looking at stale row indices) ---
+  const opexSBIdx = findSalariesBenefitsRowIndex(next, false);
+  const opexTotalIdx = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
+  const opexSection = opexSBIdx !== -1 ? next[opexSBIdx].section : opexTotalIdx !== -1 ? next[opexTotalIdx].section : null;
+  if (opexSection) {
+    const salariesValues = {};
+    const taxValues = {};
+    const benefitsValues = {};
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      const iso = months[i];
+      salariesValues[iso] = payrollState
+        ? headcountSalariesByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso)
+        : 0;
+      taxValues[iso] = payrollState
+        ? headcountPayrollTaxesByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso)
+        : 0;
+      benefitsValues[iso] = payrollState
+        ? headcountBenefitsByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso)
+        : 0;
+    }
+    const newRows = [
+      buildPayrollLineRow('payroll_salaries_opex', 'Salaries (Payroll)', opexSection, 'OpEx', 'salaries', salariesValues),
+      buildPayrollLineRow('payroll_taxes_opex', 'Payroll Taxes (Payroll)', opexSection, 'OpEx', 'taxes', taxValues),
+      buildPayrollLineRow('payroll_benefits_opex', 'Benefits (Payroll)', opexSection, 'OpEx', 'benefits', benefitsValues),
+    ];
+    const insertAt = opexSBIdx !== -1 ? opexSBIdx + 1 : next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.OpEx.includes(r.label));
+    if (insertAt !== -1) next = [...next.slice(0, insertAt), ...newRows, ...next.slice(insertAt)];
+  }
+
   return next;
 }
 
@@ -818,8 +870,14 @@ function withManualAccountRows(statementType, rows, customPLAccounts, costItems,
  *  pointer back to where it's actually edited, not a components list. */
 function customAccountCalcExplanation(row) {
   if (row.payrollHeadcount) {
+    const kindNote = {
+      lump: `Sum of every Payroll roster/bonus row tagged "${row.costType}" (base + bonus, loaded) for this month.`,
+      salaries: `Base salary (÷12, active headcount only) + Bonus $ for every Payroll row tagged "${row.costType}" — Bonus carries no tax/benefit load of its own, so it's folded in here rather than split into its own line.`,
+      taxes: `Base salary (÷12) × Tax Rate% for every Payroll row tagged "${row.costType}".`,
+      benefits: `Base salary (÷12) × Benefits% for every Payroll row tagged "${row.costType}".`,
+    }[row.payrollLineKind] || `Sum of every Payroll roster/bonus row tagged "${row.costType}" for this month.`;
     return {
-      calcNote: `Sum of every Payroll roster/bonus row tagged "${row.costType}" (base + bonus, loaded) for this month — same figure already counted inside this section's Total. Edit headcount or pay on the Payroll tab to change it here.`,
+      calcNote: `${kindNote} Already counted inside this section's Total. Edit headcount or pay on the Payroll tab to change it here.`,
     };
   }
   if (row.manualAccount) {
