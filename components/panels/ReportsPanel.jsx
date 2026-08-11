@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
 import { MonthInput } from '../payroll/PayrollTable';
@@ -198,6 +198,34 @@ export function ReportsPanel({ statements, customReports }) {
   // "like a lot of major websites... hide it into a hamburger."
   const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Auto-scroll the page while dragging a cost item (2026-08-10, Kayee: "i try to
+  // drag rent to rent in p&l but it's too far to the bottom... make the drag also
+  // scroll when i put it to the bottom of the page"). The P&L table has no internal
+  // scrollbar of its own while the Assumptions sidebar is open — `max-height: none`
+  // on .table-wrap in that layout lets it grow to full length and the PAGE scrolls
+  // instead (see globals.css) — so this listens on the whole document, not just the
+  // table, and scrolls the window itself. `dragover` is the only drag event that
+  // fires repeatedly while the pointer holds still near an edge (browsers re-fire it
+  // on a UA-defined interval for exactly this purpose), which is what makes a
+  // continuous auto-scroll possible without any extra timers. Mounted once for the
+  // whole panel's lifetime — completely inert outside of an actual drag, so there's
+  // no cost to leaving it attached when nothing's being dragged.
+  useEffect(() => {
+    const EDGE = 90; // px from the top/bottom viewport edge that starts scrolling
+    const MAX_SPEED = 26; // px scrolled per dragover tick, right at the very edge
+    function handleDragOver(e) {
+      const y = e.clientY;
+      const vh = window.innerHeight;
+      if (y < EDGE) {
+        window.scrollBy(0, -MAX_SPEED * (1 - y / EDGE));
+      } else if (y > vh - EDGE) {
+        window.scrollBy(0, MAX_SPEED * (1 - (vh - y) / EDGE));
+      }
+    }
+    document.addEventListener('dragover', handleDragOver);
+    return () => document.removeEventListener('dragover', handleDragOver);
+  }, []);
 
   const showSidebar = reportType === 'PL';
 
