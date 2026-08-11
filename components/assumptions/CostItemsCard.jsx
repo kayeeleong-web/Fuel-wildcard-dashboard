@@ -191,7 +191,16 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                       know what row it landed on until it's dropped — that's read back
                       via `item.linkedRowLabel` below, set from the P&L side. */}
                   <tr className="assump-cost-draggable-row" draggable onDragStart={(e) => e.dataTransfer.setData('text/plain', item.id)}>
-                    <td>
+                    {/* Stacked flex column, not two inline siblings (2026-08-10 fix,
+                        Kayee: "it created these funny watermark like a blue thing but
+                        overlap with other text") — the link badge is long text
+                        ("↳ Software - Operating Expense") that has nowhere to go but
+                        overflow sideways into the $ column next to it when it's just
+                        an inline <span> after the name input in a narrow cell. Forcing
+                        this cell into its own column layout guarantees the badge
+                        always renders on its own line, clipped to this cell's width,
+                        never bleeding into a neighbor. */}
+                    <td className="assump-cost-name-cell">
                       <TextInput value={item.name} onCommit={(v) => updateItem(item.id, { name: v })} placeholder="Cost name" />
                       {item.linkedRowLabel && (
                         <span className="assump-cost-link-badge" title={`Forecasts feed the "${item.linkedRowLabel}" P&L row directly`}>

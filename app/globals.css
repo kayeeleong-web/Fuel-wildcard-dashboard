@@ -443,7 +443,12 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    underneath it — Kayee: "p&l can be longer too so that it can fill this white space
    and be the same height was the bottom of non headcount items." */
 .reports-with-sidebar { display: flex; align-items: stretch; gap: 18px; }
-.reports-sidebar { flex: 0 0 30%; max-width: 30%; min-width: 280px; display: flex; flex-direction: column; gap: 18px; }
+/* Widened 2026-08-10 (Kayee: "the non headcount cost is too narrow, everything kinda
+   get mushed up... maybe it needs to be a wider width, then you increase the width for
+   the entire hamburger section") — 30% was fine for a plain rate list but the
+   Non-Headcount Costs table needs room for a name + $ + cadence + category + date +
+   delete, all on one row, without crowding. */
+.reports-sidebar { flex: 0 0 38%; max-width: 38%; min-width: 360px; display: flex; flex-direction: column; gap: 18px; }
 .reports-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
 .reports-sidebar-rail { display: flex; align-self: stretch; }
@@ -577,17 +582,26 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    "30("). Explicit widths give the name and $ columns the room they actually need;
    Cadence/Category/Start On/remove only need to fit a short word or icon. Font-size
    and padding also drop a notch so more rows show before the inner scrollbar kicks in. */
-.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 30%; }
-.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 16%; }
+/* Column widths rebalanced 2026-08-10 for the wider 38% sidebar — Name gets the most
+   room since it's the only column that also has to fit the link badge underneath it;
+   Start On shrinks (mm/dd is short) to give that room back. */
+.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 34%; }
+.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 15%; }
 .reports-sidebar .assump-cost-table th:nth-child(3), .reports-sidebar .assump-cost-table td:nth-child(3) { width: 16%; }
 .reports-sidebar .assump-cost-table th:nth-child(4), .reports-sidebar .assump-cost-table td:nth-child(4) { width: 16%; }
-.reports-sidebar .assump-cost-table th:nth-child(5), .reports-sidebar .assump-cost-table td:nth-child(5) { width: 14%; }
-.reports-sidebar .assump-cost-table th:nth-child(6), .reports-sidebar .assump-cost-table td:nth-child(6) { width: 8%; }
-.reports-sidebar .assump-cost-table th, .reports-sidebar .assump-cost-table td { padding: 5px 6px; font-size: 11px; }
-.reports-sidebar .assump-cost-table .pr-input { padding: 4px 5px; font-size: 11px; }
-.reports-sidebar .assump-cost-table .pr-select { font-size: 11px; padding: 3px 2px; }
-.reports-sidebar .assump-cost-table .icon-btn { width: 22px; height: 22px; }
+.reports-sidebar .assump-cost-table th:nth-child(5), .reports-sidebar .assump-cost-table td:nth-child(5) { width: 12%; }
+.reports-sidebar .assump-cost-table th:nth-child(6), .reports-sidebar .assump-cost-table td:nth-child(6) { width: 7%; }
+.reports-sidebar .assump-cost-table th, .reports-sidebar .assump-cost-table td { padding: 6px 7px; font-size: 11.5px; }
+.reports-sidebar .assump-cost-table .pr-input { padding: 5px 6px; font-size: 11.5px; }
+.reports-sidebar .assump-cost-table .pr-select { font-size: 11.5px; padding: 4px 3px; }
+.reports-sidebar .assump-cost-table .icon-btn { width: 23px; height: 23px; }
 .reports-sidebar .assump-cost-table .icon-btn svg { width: 11px; height: 11px; }
+
+/* Stacked name+link-badge cell (2026-08-10) — see the matching comment in
+   CostItemsCard.jsx for why this has to be its own column layout, not two inline
+   siblings, to stop the badge from overflowing into the $ column next to it. */
+.assump-cost-name-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.assump-cost-name-cell .pr-input { width: 100%; box-sizing: border-box; }
 
 /* Lets the Non-Headcount Costs card (the taller of the sidebar's two cards) grow to
    fill whatever extra height align-items:stretch above gives .reports-sidebar, with
@@ -904,6 +918,24 @@ tr.pr-dragging { opacity: .4; }
    hovering over that specific row, so the whole table doesn't light up at once. */
 .report-cost-drop-target { position: relative; }
 .report-cost-drop-target.is-drag-over { background: var(--blue-soft); outline: 2px dashed var(--blue); outline-offset: -2px; }
+
+/* Manual "+ Add account" line and its remove control (2026-08-10, Kayee: "give me the
+   ability to add a new account under each section so i can add other travel and drag
+   travel there"). The trigger row sits at the bottom of every section, quiet until
+   clicked — same "don't show the heavy UI until it's wanted" convention as the rate
+   schedule controls. */
+.report-manual-account-remove {
+  border: none; background: none; color: var(--muted); opacity: .5; cursor: pointer; margin-left: 6px;
+  font-size: 12px; line-height: 1; padding: 0 2px; vertical-align: middle;
+}
+.report-manual-account-remove:hover { opacity: 1; color: var(--pink); }
+.report-add-account-row td { padding: 6px 12px; border-top: none; }
+.report-add-account-link {
+  border: none; background: none; color: var(--blue); font-size: 11.5px; font-weight: 600; cursor: pointer; padding: 2px 0;
+}
+.report-add-account-link:hover { text-decoration: underline; }
+.report-add-account-form { display: inline-flex; align-items: center; gap: 8px; }
+.report-add-account-form .pr-input { width: 200px; }
 
 /* ==================== Payroll — outer grouping sections ==================== */
 /* Existing / Planned each roll their Base + Bonus cards up into one outer collapsible

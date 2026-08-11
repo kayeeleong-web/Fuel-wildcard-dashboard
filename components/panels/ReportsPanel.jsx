@@ -19,6 +19,7 @@ import {
   costItemsTotalForMonth,
   costItemAmountForMonth,
   toggleCampaignActualOverride,
+  generateId,
 } from '../../lib/assumptions/assumptionsData';
 
 // Which Reports section a NOT-YET-matched custom cost item's category rolls up under
@@ -635,10 +636,71 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
   return next;
 }
 
+/** A user-added blank P&L line (2026-08-10, Kayee: "give me the ability to add a new
+ *  account under each section so i can add other travel and drag travel there") — a
+ *  placeholder in a real section the person picked themselves, with no built-in
+ *  matching guesswork at all: it only ever shows a $ once a cost item is explicitly
+ *  dragged onto it (see matchCostItemToRowLabel's `linkedRowLabel` priority and
+ *  FragmentRows' drop handling in StatementDoc). Forecast-only, same rule as every
+ *  other injected row — there's no real GL entry for a line that didn't exist on the
+ *  actual sheet. */
+function buildManualAccountRow(account, costItems, months, lastActualIndex) {
+  const values = {};
+  const item = matchCostItemToRowLabel(account.label, costItems);
+  if (item) {
+    for (let i = lastActualIndex + 1; i < months.length; i++) {
+      values[months[i]] = costItemAmountForMonth(item, months[i]);
+    }
+  }
+  return {
+    key: `manual_account_${account.id}`,
+    label: account.label,
+    section: account.section,
+    isTotal: false,
+    manualAccount: true,
+    linkedItemName: item ? item.name : null,
+    values,
+  };
+}
+
+/** Inserts every user-added manual account line into its own section, right before
+ *  that section's Total row (same slot convention as buildCustomAccountRow) — falls
+ *  back to right after the section's last row if it has no Total row. Unlike
+ *  withCustomAccountRows, this needs no CUSTOM_ACCOUNT_SECTION_ALIASES guesswork at
+ *  all: the section was captured verbatim from the real row the person clicked "+ Add
+ *  account" under, so it's always already a section that's actually present. */
+function withManualAccountRows(statementType, rows, customPLAccounts, costItems, months, lastActualIndex) {
+  if (statementType !== 'PL' || !customPLAccounts || customPLAccounts.length === 0) return rows;
+  let next = rows;
+  for (const account of customPLAccounts) {
+    let insertAt = next.findIndex((r) => r.section === account.section && r.isTotal);
+    if (insertAt === -1) {
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].section === account.section) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+    }
+    if (insertAt === -1) continue;
+    const row = buildManualAccountRow(account, costItems, months, lastActualIndex);
+    next = [...next.slice(0, insertAt), row, ...next.slice(insertAt)];
+  }
+  return next;
+}
+
 /** Explains a custom account row — there's no further breakdown (it's a single
  *  user-entered $ figure, same as a MonthInput cell on Assumptions), so this is just a
  *  pointer back to where it's actually edited, not a components list. */
 function customAccountCalcExplanation(row) {
+  if (row.manualAccount) {
+    const linkedNote = row.linkedItemName
+      ? `Currently fed by the "${row.linkedItemName}" cost item on the Assumptions tab.`
+      : 'Nothing linked yet — drag a Non-Headcount Cost item from the sidebar and drop it on this row.';
+    return {
+      calcNote: `"${row.label}" is a line you added by hand. ${linkedNote} It's already included in this section's Total.`,
+    };
+  }
   return {
     calcNote: `"${row.label}" is a custom account entered on the Assumptions tab's Non-Headcount Costs table — edit it there. It's already included in this section's Total.`,
     components: [],
@@ -838,6 +900,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   } catch (err) {
     console.warn('Custom cost-item row projection failed:', err);
   }
+  if (statement.type === 'PL') {
+    try {
+      rows = withManualAccountRows(statement.type, rows, assumptionsState?.customPLAccounts, costCtx.costItems, months, lastActualIndex);
+    } catch (err) {
+      console.warn('Manual account row injection failed:', err);
+    }
+  }
   if (statement.type === 'PL' && revenue && setAssumptionsState) {
     try {
       rows = withRevenueDriverRows(
@@ -884,6 +953,29 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       return item;
     });
     setAssumptionsState({ ...assumptionsState, costItems: nextCostItems });
+  }
+
+  // "+ Add account" (2026-08-10, Kayee: "give me the ability to add a new account
+  // under each section so i can add other travel and drag travel there") — creates a
+  // blank placeholder line in whichever section it was added from, ready to receive a
+  // dragged cost item. Removing one clears any cost item still linked to it (rather
+  // than leaving a dangling linkedRowLabel that no longer matches any real row).
+  function handleAddManualAccount(section, label) {
+    if (!assumptionsState || !label.trim()) return;
+    const account = { id: generateId('acct'), label: label.trim(), section };
+    setAssumptionsState({
+      ...assumptionsState,
+      customPLAccounts: [...(assumptionsState.customPLAccounts || []), account],
+    });
+  }
+
+  function handleRemoveManualAccount(accountId, label) {
+    if (!assumptionsState) return;
+    setAssumptionsState({
+      ...assumptionsState,
+      customPLAccounts: (assumptionsState.customPLAccounts || []).filter((a) => a.id !== accountId),
+      costItems: (assumptionsState.costItems || []).map((i) => (i.linkedRowLabel === label ? { ...i, linkedRowLabel: null } : i)),
+    });
   }
 
   return (
@@ -942,6 +1034,8 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               revenue={revenue}
               costCtx={costCtx}
               onLinkCostItem={statement.type === 'PL' ? handleLinkCostItem : null}
+              onAddManualAccount={statement.type === 'PL' ? handleAddManualAccount : null}
+              onRemoveManualAccount={statement.type === 'PL' ? handleRemoveManualAccount : null}
             />
           ))}
         </tbody>
@@ -950,7 +1044,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   );
 }
 
-function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem }) {
+function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount }) {
   // Which row (by key) currently has a cost item dragged over it — purely visual
   // feedback for the drag-and-drop cost-item-to-P&L-row linking feature (2026-08-10,
   // see handleLinkCostItem in StatementDoc for the full reasoning). Local to this
@@ -981,7 +1075,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           rowCalcInfo =
             revenueCalcExplanation(row.key, revenue) ||
             costCalcExplanation(row.label, costCtx) ||
-            (row.custom ? customAccountCalcExplanation(row) : null);
+            (row.custom || row.manualAccount ? customAccountCalcExplanation(row) : null);
         } catch (err) {
           console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
         }
@@ -1021,6 +1115,16 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                 <DrillPopover label={row.label} value={row.label} calcNote={rowCalcInfo.calcNote} />
               ) : (
                 row.label
+              )}
+              {row.manualAccount && onRemoveManualAccount && (
+                <button
+                  type="button"
+                  className="report-manual-account-remove"
+                  title="Remove this line"
+                  onClick={() => onRemoveManualAccount(row.key.replace('manual_account_', ''), row.label)}
+                >
+                  ×
+                </button>
               )}
             </td>
             {months.map((m, i) => {
@@ -1064,7 +1168,70 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           </tr>
         );
       })}
+      {onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
     </>
+  );
+}
+
+/** The "+ Add account" trigger at the bottom of every P&L section (2026-08-10, Kayee:
+ *  "give me the ability to add a new account under each section so i can add other
+ *  travel and drag travel there") — a plain text link until clicked, then a one-line
+ *  inline name field, same collapsed-by-default convention as the rate-schedule
+ *  controls elsewhere on this tab. Submitting inserts a new blank row into THIS
+ *  section (via withManualAccountRows, right before its Total row), ready to be a
+ *  drag-and-drop target for any Non-Headcount Cost item. */
+function AddAccountRow({ section, months, onAdd }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+
+  function submit() {
+    if (!name.trim()) return;
+    onAdd(section, name);
+    setName('');
+    setAdding(false);
+  }
+
+  return (
+    <tr className="report-add-account-row">
+      <td colSpan={months.length + 1}>
+        {!adding ? (
+          <button type="button" className="report-add-account-link" onClick={() => setAdding(true)}>
+            + Add account
+          </button>
+        ) : (
+          <span className="report-add-account-form">
+            <input
+              type="text"
+              className="pr-input"
+              autoFocus
+              placeholder="e.g. Other Travel"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit();
+                if (e.key === 'Escape') {
+                  setName('');
+                  setAdding(false);
+                }
+              }}
+            />
+            <button type="button" className="btn primary" onClick={submit} disabled={!name.trim()}>
+              Add
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setName('');
+                setAdding(false);
+              }}
+            >
+              Cancel
+            </button>
+          </span>
+        )}
+      </td>
+    </tr>
   );
 }
 
