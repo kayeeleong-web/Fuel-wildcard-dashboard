@@ -1244,6 +1244,24 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     });
   }
 
+  // Delete a Non-Headcount Cost item directly from its auto-generated `row.custom`
+  // line on the P&L itself (2026-08-10, Kayee: "there's no trash icon for vetric and
+  // misc, i want to delete it here inside of cogs") — previously the ONLY way to
+  // delete one of these was the trash icon on the Assumptions sidebar's own
+  // Non-Headcount Cost table; this is the exact same deletion, just reachable from
+  // where Kayee is actually looking at it. Deletes the item outright (not just an
+  // unlink) — a `row.custom` row only exists in the first place because this cost item
+  // has no real GL row to attach to, so "remove this row" and "delete this cost item"
+  // are the same action here (unlike a manual account, which can outlive the item that
+  // was linked to it).
+  function handleRemoveCostItem(itemId) {
+    if (!assumptionsState?.costItems) return;
+    setAssumptionsState({
+      ...assumptionsState,
+      costItems: assumptionsState.costItems.filter((i) => i.id !== itemId),
+    });
+  }
+
   return (
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
     // targets (`#reports[data-range] .report-doc:not([data-doc="custom"])`) — without it
@@ -1302,6 +1320,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               onLinkCostItem={statement.type === 'PL' ? handleLinkCostItem : null}
               onAddManualAccount={statement.type === 'PL' ? handleAddManualAccount : null}
               onRemoveManualAccount={statement.type === 'PL' ? handleRemoveManualAccount : null}
+              onRemoveCostItem={statement.type === 'PL' ? handleRemoveCostItem : null}
             />
           ))}
         </tbody>
@@ -1310,13 +1329,23 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   );
 }
 
-function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount }) {
+function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount, onRemoveCostItem }) {
   // Which row (by key) currently has a cost item dragged over it — purely visual
   // feedback for the drag-and-drop cost-item-to-P&L-row linking feature (2026-08-10,
   // see handleLinkCostItem in StatementDoc for the full reasoning). Local to this
   // section's row group; nothing here is persisted, it just paints a highlight while
   // a drag is in progress.
   const [dragOverKey, setDragOverKey] = useState(null);
+
+  // Per-section collapse (2026-08-10, Kayee: "have it collapsable for anything under
+  // each section... in cogs you will collapse everything until the total cogs, keep
+  // cogs and total cogs") — clicking the section band (e.g. "COGS") hides every
+  // non-Total row in between, leaving just the section header and its own Total row
+  // visible, same idea as the Payroll tab's own collapsible outer sections. Expanded
+  // by default so nothing changes for anyone who hasn't touched this yet. Local to
+  // this one section's row group, same as dragOverKey above — collapsing COGS has no
+  // effect on OpEx's own state.
+  const [collapsed, setCollapsed] = useState(false);
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
   // headcount cost to cogs and opex... if i add the cost in cogs it will only be
@@ -1337,8 +1366,11 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           reliably stick in table layout (a well-known cross-browser limitation), which
           was letting the section band's label scroll away with the rest of the row. A
           real single-column first cell sticks the same way a normal data row's does. */}
-      <tr className="section">
-        <td>{section}</td>
+      <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
+        <td>
+          <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
+          {section}
+        </td>
         <td colSpan={months.length}></td>
       </tr>
       {/* "+ Add account" now renders right BEFORE this section's own Total row
@@ -1358,8 +1390,8 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         const totalRows = rows.filter((r) => r.isTotal);
         return (
           <>
-            {nonTotalRows.map(renderRow)}
-            {onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
+            {!collapsed && nonTotalRows.map(renderRow)}
+            {!collapsed && onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
             {totalRows.map(renderRow)}
           </>
         );
@@ -1455,6 +1487,21 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                   className="report-manual-account-remove"
                   title="Remove this line"
                   onClick={() => onRemoveManualAccount(row.key.replace('manual_account_', ''), row.label)}
+                >
+                  ×
+                </button>
+              )}
+              {/* Delete a Non-Headcount Cost item straight from its own auto-generated
+                  P&L row (2026-08-10, Kayee: "there's no trash icon for vetric and
+                  misc, i want to delete it here inside of cogs") — deletes the item
+                  outright, same as the Assumptions sidebar's own trash icon does,
+                  just reachable from right here too. */}
+              {row.custom && onRemoveCostItem && (
+                <button
+                  type="button"
+                  className="report-manual-account-remove"
+                  title="Delete this cost item"
+                  onClick={() => onRemoveCostItem(row.key.replace('custom_cost_', ''))}
                 >
                   ×
                 </button>

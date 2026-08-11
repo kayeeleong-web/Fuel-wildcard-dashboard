@@ -397,6 +397,17 @@ tbody tr { border-bottom: 1px solid var(--border-soft); }
 tbody tr:nth-child(even) { background: var(--panel-2); }
 tbody tr:hover { background: #F0FBF4; }
 tbody tr.section td { font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase; letter-spacing: .6px; background: var(--green-soft); padding-top: 9px; padding-bottom: 9px; font-family: 'Space Grotesk', sans-serif; }
+/* Collapsible P&L section (2026-08-10, Kayee: "have it collapsable for anything under
+   each section... keep cogs and total cogs") — the section band itself is the click
+   target, same pattern as every other collapsible header in this app (Payroll's
+   .payroll-chevron / .pr-outer-chevron), just reused here on the report table's own
+   section row instead of a card header. */
+tbody tr.report-section-toggle { cursor: pointer; }
+.report-section-chevron {
+  display: inline-block; font-size: 10px; color: var(--black); transition: transform .15s ease;
+  margin-right: 5px;
+}
+.report-section-chevron.open { transform: rotate(90deg); }
 tbody tr.total td { font-weight: 700; background: var(--black); color: #fff; border-top: 2px solid var(--green); border-bottom: 2px solid var(--green); }
 tbody tr.total td:first-child { color: #fff; }
 tbody tr.total .g { color: #7FE3A4; }
