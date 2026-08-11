@@ -49,13 +49,19 @@ const CUSTOM_ACCOUNT_SECTION_ALIASES = {
 // "Rent" row) are handled automatically below (matchCostItemToExistingRow) and don't
 // need an entry here — this map is only for name MISMATCHES Kayee's confirmed by hand:
 //   - software -> 'Software - Cost of Revenue' (2026-08-06: "they are the same")
-//   - travel -> 'Total Travel' (2026-08-06: "Travel is the total travel")
 //   - team-lunches -> 'Meals (Office)' (2026-08-06: "Team Lunches is Meals (Office)")
 // Keyed by the Assumptions cost item's stable `id` (see SEED_COST_ITEMS in
 // assumptionsData.js) -> the real P&L row's exact label.
+//
+// `travel -> 'Total Travel'` REMOVED (2026-08-10, Kayee: "why total travel has 500? it
+// shouldn't think [link] travel already before i drag it") — with drag-and-drop
+// linking now built (linkedRowLabel), a hardcoded automatic match like this silently
+// pre-populated "Total Travel" before Kayee ever dragged anything there herself, which
+// read as a bug (a total showing a number none of its visible detail rows accounted
+// for) rather than the confirmed convenience it was meant to be. Travel now behaves
+// like every other cost item: blank until explicitly dragged onto a row.
 const COST_ITEM_ROW_LABEL_OVERRIDES = {
   software: 'Software - Cost of Revenue',
-  travel: 'Total Travel',
   'team-lunches': 'Meals (Office)',
 };
 
@@ -1275,7 +1281,33 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         <td>{section}</td>
         <td colSpan={months.length}></td>
       </tr>
-      {rows.map((row) => {
+      {/* "+ Add account" now renders right BEFORE this section's own Total row
+          (2026-08-10 fix, Kayee: "i click add account above travel thinking that it
+          will get added to travel but then it was added to the one above") — it used
+          to sit after every row INCLUDING Total, which put it visually sandwiched
+          between "Total [This Section]" and the NEXT section's header/first row
+          (e.g. right above where "Travel" happened to sit), even though clicking it
+          actually added the new line to THIS section (the one whose Total just
+          printed above it) — exactly backwards from what it looked like. Splitting
+          the rows into non-Total / Total groups and inserting the trigger between
+          them puts it inside its own section, immediately above that section's own
+          Total, matching where a newly added account actually lands
+          (withManualAccountRows already inserts right before the section's Total). */}
+      {(() => {
+        const nonTotalRows = rows.filter((r) => !r.isTotal);
+        const totalRows = rows.filter((r) => r.isTotal);
+        return (
+          <>
+            {nonTotalRows.map(renderRow)}
+            {onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
+            {totalRows.map(renderRow)}
+          </>
+        );
+      })()}
+    </>
+  );
+
+  function renderRow(row) {
         // Calc-note lookup now runs ONCE per row, not once per month cell (2026-08-07,
         // Kayee: "the hover over explanation on the calculation only needs to appear
         // once at the account title") — the popover moves from every forecast $ cell
@@ -1295,7 +1327,8 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         }
         // The Campaigns/Meetings driver rows and any Revenue-section row aren't valid
         // drop targets at all. Everything else — including Total rows (same as the
-        // existing COST_ITEM_ROW_LABEL_OVERRIDES precedent, Travel -> "Total Travel")
+        // existing COST_ITEM_ROW_LABEL_OVERRIDES precedent, Software -> "Software -
+        // Cost of Revenue")
         // AND a cost item's own already-auto-matched custom row — is fair game, but
         // ONLY for a cost item whose own category matches this row's section
         // (2026-08-10, Kayee: "if i add the cost in cogs it will only be allow to get
@@ -1406,20 +1439,19 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
               );
             })}
           </tr>
-        );
-      })}
-      {onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
-    </>
-  );
+    );
+  }
 }
 
-/** The "+ Add account" trigger at the bottom of every P&L section (2026-08-10, Kayee:
- *  "give me the ability to add a new account under each section so i can add other
- *  travel and drag travel there") — a plain text link until clicked, then a one-line
+/** The "+ Add account" trigger, rendered right above each P&L section's own Total row
+ *  (2026-08-10, Kayee: "give me the ability to add a new account under each section so
+ *  i can add other travel and drag travel there"; moved up from below Total the same
+ *  day — see FragmentRows above) — a plain text link until clicked, then a one-line
  *  inline name field, same collapsed-by-default convention as the rate-schedule
  *  controls elsewhere on this tab. Submitting inserts a new blank row into THIS
- *  section (via withManualAccountRows, right before its Total row), ready to be a
- *  drag-and-drop target for any Non-Headcount Cost item. */
+ *  section (via withManualAccountRows, right before its Total row — matching exactly
+ *  where this trigger itself now sits), ready to be a drag-and-drop target for any
+ *  Non-Headcount Cost item. */
 function AddAccountRow({ section, months, onAdd }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
