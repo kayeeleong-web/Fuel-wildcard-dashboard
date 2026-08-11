@@ -431,39 +431,63 @@ function costCalcExplanation(rowLabel, ctx) {
   if (rowLabel === 'Cost of campaigns') {
     return { calcNote: "Cost of campaigns = last month's # of Campaigns × Cost Per Campaign rate. Both editable on the Assumptions tab." };
   }
-  const matchedItem = matchCostItemToRowLabel(rowLabel, ctx.costItems);
-  if (matchedItem) {
-    return { calcNote: `Same figure as the "${matchedItem.name}" cost item on the Assumptions tab (${matchedItem.category}) — shown on this line since it's the same cost. Edit the amount there.` };
+  // Plural now (2026-08-10, Kayee: "I dragged Central - Bookkeeping and Central -
+  // Payroll both to Tax and Accounting... it will add the amount") — more than one
+  // cost item can feed the same real row, summed together.
+  const matchedItems = matchedCostItemsForRowLabel(rowLabel, ctx.costItems);
+  if (matchedItems.length > 0) {
+    const names = matchedItems.map((i) => `"${i.name}"`).join(' + ');
+    const suffix = matchedItems.length > 1 ? ' (summed together)' : ` (${matchedItems[0].category})`;
+    return { calcNote: `Same figure as ${names} on the Assumptions tab${suffix} — shown on this line since it's the same cost. Edit the amount there.` };
   }
   return null;
 }
 
-/** Finds the Assumptions cost item (if any) that feeds a given real P&L row.
+/** Finds EVERY Assumptions cost item that feeds a given real P&L row — plural,
+ *  because more than one item can now feed the same line (2026-08-10, Kayee: "I
+ *  dragged Central - Bookkeeping and Central - Payroll both to Tax and Accounting...
+ *  I want to assign both, in P&L it will add the amount"). Returns an array (possibly
+ *  empty), never a single item, so every caller sums/lists rather than picking one.
  *
  *  Priority order, highest first:
- *   1. `linkedRowLabel` — an explicit drag-and-drop link Kayee made by hand on the
+ *   1. `linkedRowLabel` — explicit drag-and-drop links Kayee made by hand on the
  *      Reports tab (2026-08-10: "give me the option to drag and drop to match thing
  *      so that you dont have to worry about mapping and if the users want to do it
  *      they could"). Deterministic and immune to text drift — the root cause traced
  *      down that same day was that the "Rent" cost item silently stopped
  *      case-insensitive-matching its real "Rent" row (a stray character or a raw
  *      sheet-label quirk that plain `.trim().toLowerCase()` can't fix), and there was
- *      no way to just tell the app "this one, that one" directly. This link always
- *      wins over any guess below, once it exists.
+ *      no way to just tell the app "this one, that one" directly. ALL items linked to
+ *      this exact label are returned together — this always wins over any guess
+ *      below, once at least one exists.
  *   2. COST_ITEM_ROW_LABEL_OVERRIDES — confirmed name mismatches (Travel -> "Total
- *      Travel", etc.) baked into the code.
+ *      Travel", etc.) baked into the code. Single-item by construction (one override
+ *      entry per item id).
  *   3. An exact, case-insensitive name match (e.g. a "Rent" cost item auto-matches a
  *      real "Rent" row with zero extra config) — a reasonable default, but per the
  *      above, not bulletproof; #1 exists specifically so a person can route around a
- *      case where this guess turns out to be wrong or fragile. */
-function matchCostItemToRowLabel(rowLabel, costItems) {
-  if (!costItems || !rowLabel) return null;
-  const linked = costItems.find((i) => i.linkedRowLabel === rowLabel);
-  if (linked) return linked;
+ *      case where this guess turns out to be wrong or fragile. Also single-item —
+ *      two cost items can't legitimately share the exact same name AND both
+ *      auto-match the same row without an explicit link disambiguating them. */
+function matchedCostItemsForRowLabel(rowLabel, costItems) {
+  if (!costItems || !rowLabel) return [];
+  const linked = costItems.filter((i) => i.linkedRowLabel === rowLabel);
+  if (linked.length > 0) return linked;
   const overrideId = Object.keys(COST_ITEM_ROW_LABEL_OVERRIDES).find((id) => COST_ITEM_ROW_LABEL_OVERRIDES[id] === rowLabel);
-  if (overrideId) return costItems.find((i) => i.id === overrideId) || null;
+  if (overrideId) {
+    const item = costItems.find((i) => i.id === overrideId);
+    return item ? [item] : [];
+  }
   const target = rowLabel.trim().toLowerCase();
-  return costItems.find((i) => (i.name || '').trim().toLowerCase() === target) || null;
+  const nameMatch = costItems.find((i) => (i.name || '').trim().toLowerCase() === target);
+  return nameMatch ? [nameMatch] : [];
+}
+
+/** Single-item convenience wrapper over matchedCostItemsForRowLabel, for the handful
+ *  of call sites that only need to know "is ANYTHING matched here" (picks the first
+ *  when more than one item shares a link). */
+function matchCostItemToRowLabel(rowLabel, costItems) {
+  return matchedCostItemsForRowLabel(rowLabel, costItems)[0] || null;
 }
 
 /** Orders the Non-Headcount Costs list to match where each item actually lands on the
@@ -495,10 +519,14 @@ function computeCostItemOrder(statement, costItems) {
   const seen = new Set();
 
   for (const row of statement.rows) {
-    const matchedItem = matchCostItemToRowLabel(row.label, costItems);
-    if (matchedItem && !seen.has(matchedItem.id)) {
-      order.push(matchedItem.id);
-      seen.add(matchedItem.id);
+    // Plural now (2026-08-10) — more than one cost item can share the same P&L row
+    // (Kayee: "Central - Bookkeeping and Central - Payroll both to Tax and
+    // Accounting"), and both should sort next to that same row, not just the first.
+    for (const matchedItem of matchedCostItemsForRowLabel(row.label, costItems)) {
+      if (!seen.has(matchedItem.id)) {
+        order.push(matchedItem.id);
+        seen.add(matchedItem.id);
+      }
     }
     if (row.isTotal) {
       for (const category of Object.keys(customSectionByCategory)) {
@@ -574,12 +602,15 @@ function withNamedCostItemProjections(statementType, rows, costItems, months, la
     // not a leaf line. `row.custom` IS excluded so this can never match onto a row we
     // ourselves injected (this runs before that injection anyway, but harmless either way).
     if (row.custom) return row;
-    const item = matchCostItemToRowLabel(row.label, costItems);
-    if (!item) return row;
-    matchedIds.add(item.id);
+    // Plural now (2026-08-10, Kayee: "I dragged Central - Bookkeeping and Central -
+    // Payroll both to Tax and Accounting... it will add the amount") — every item
+    // linked (or matched) to this row's label gets SUMMED into it, not just the first.
+    const items = matchedCostItemsForRowLabel(row.label, costItems);
+    if (items.length === 0) return row;
+    items.forEach((item) => matchedIds.add(item.id));
     const patchedValues = { ...row.values };
     for (let i = lastActualIndex + 1; i < months.length; i++) {
-      patchedValues[months[i]] = costItemAmountForMonth(item, months[i]);
+      patchedValues[months[i]] = items.reduce((sum, item) => sum + costItemAmountForMonth(item, months[i]), 0);
     }
     return { ...row, values: patchedValues };
   });
@@ -674,6 +705,59 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
   return next;
 }
 
+// Which real Total row each Payroll headcount line sits above — matched by label, not
+// a section alias, since OpEx has no single section string to key off of (see
+// CUSTOM_ACCOUNT_SECTION_ALIASES's own comment above for why).
+const PAYROLL_HEADCOUNT_TOTAL_LABELS = {
+  CoGS: ['Total COGS'],
+  OpEx: ['Total OpEx', 'Total OPEX', 'Total Operating Expenses'],
+};
+
+function buildPayrollHeadcountRow(costType, section, payrollState, months, lastActualIndex) {
+  const values = {};
+  // Forecast-only, same rule as every other injected row — Payroll is a what-if
+  // calculator with no real GL entry of its own, so actual months stay "—".
+  for (let i = lastActualIndex + 1; i < months.length; i++) {
+    values[months[i]] = payrollState
+      ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, costType, months[i])
+      : 0;
+  }
+  return {
+    key: `payroll_headcount_${costType.toLowerCase()}`,
+    label: 'Headcount (Payroll)',
+    section,
+    isTotal: false,
+    payrollHeadcount: true,
+    costType,
+    values,
+  };
+}
+
+/** Kayee, 2026-08-10: "with payroll expenses i want it to go into P&L. add a new line
+ *  in COGS for headcount as well as OpEx... if it's labeled as OpEx it will link there
+ *  and if it's COGS as well. so if I edit payroll like increase the spend it will
+ *  increase in P&L as well." Payroll's headcount cost was already folded into Total
+ *  COGS/Total OpEx's own math (cogsTotalForMonth/opexTotalForMonth above, since
+ *  2026-08-06) — this just makes that already-included number VISIBLE as its own named
+ *  row, same read-only/no-double-count convention as withCustomAccountRows (the row is
+ *  a display of a number the Total already contains, not an addition to it). Placed
+ *  directly above whichever real Total COGS/Total OpEx row is actually present. Every
+ *  roster/bonus row already carries a `costType` of 'CoGS' or 'OpEx' (see
+ *  payrollData.js SEED_ROSTER) — that's the "label it as OpEx/COGS" split Kayee's
+ *  asking for; it already exists on the Payroll tab, this just routes it visibly. */
+function withPayrollHeadcountRows(statementType, rows, payrollState, months, lastActualIndex) {
+  if (statementType !== 'PL') return rows;
+  let next = rows;
+  for (const costType of Object.keys(PAYROLL_HEADCOUNT_TOTAL_LABELS)) {
+    const totalLabels = PAYROLL_HEADCOUNT_TOTAL_LABELS[costType];
+    const totalIdx = next.findIndex((r) => r.isTotal && totalLabels.includes(r.label));
+    if (totalIdx === -1) continue;
+    const row = buildPayrollHeadcountRow(costType, next[totalIdx].section, payrollState, months, lastActualIndex);
+    next = [...next.slice(0, totalIdx), row, ...next.slice(totalIdx)];
+  }
+  return next;
+}
+
 /** A user-added blank P&L line (2026-08-10, Kayee: "give me the ability to add a new
  *  account under each section so i can add other travel and drag travel there") — a
  *  placeholder in a real section the person picked themselves, with no built-in
@@ -684,10 +768,12 @@ function withCustomAccountRows(statementType, rows, costItems, months, lastActua
  *  actual sheet. */
 function buildManualAccountRow(account, costItems, months, lastActualIndex) {
   const values = {};
-  const item = matchCostItemToRowLabel(account.label, costItems);
-  if (item) {
+  // Plural now (2026-08-10, Kayee: "I want to assign both... it will add the amount")
+  // — a manual account can be fed by more than one linked cost item, summed together.
+  const items = matchedCostItemsForRowLabel(account.label, costItems);
+  if (items.length > 0) {
     for (let i = lastActualIndex + 1; i < months.length; i++) {
-      values[months[i]] = costItemAmountForMonth(item, months[i]);
+      values[months[i]] = items.reduce((sum, item) => sum + costItemAmountForMonth(item, months[i]), 0);
     }
   }
   return {
@@ -696,7 +782,7 @@ function buildManualAccountRow(account, costItems, months, lastActualIndex) {
     section: account.section,
     isTotal: false,
     manualAccount: true,
-    linkedItemName: item ? item.name : null,
+    linkedItemNames: items.map((i) => i.name),
     values,
   };
 }
@@ -731,10 +817,19 @@ function withManualAccountRows(statementType, rows, customPLAccounts, costItems,
  *  user-entered $ figure, same as a MonthInput cell on Assumptions), so this is just a
  *  pointer back to where it's actually edited, not a components list. */
 function customAccountCalcExplanation(row) {
+  if (row.payrollHeadcount) {
+    return {
+      calcNote: `Sum of every Payroll roster/bonus row tagged "${row.costType}" (base + bonus, loaded) for this month — same figure already counted inside this section's Total. Edit headcount or pay on the Payroll tab to change it here.`,
+    };
+  }
   if (row.manualAccount) {
-    const linkedNote = row.linkedItemName
-      ? `Currently fed by the "${row.linkedItemName}" cost item on the Assumptions tab.`
-      : 'Nothing linked yet — drag a Non-Headcount Cost item from the sidebar and drop it on this row.';
+    // Plural now (2026-08-10, Kayee: "I want to assign both... here it will show both
+    // are linked") — list every linked item's name, summed together on this line.
+    const names = row.linkedItemNames || [];
+    const linkedNote =
+      names.length > 0
+        ? `Currently fed by ${names.map((n) => `"${n}"`).join(' + ')} on the Assumptions tab (summed together).`
+        : 'Nothing linked yet — drag a Non-Headcount Cost item from the sidebar and drop it on this row.';
     return {
       calcNote: `"${row.label}" is a line you added by hand. ${linkedNote} It's already included in this section's Total.`,
     };
@@ -938,6 +1033,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   } catch (err) {
     console.warn('Custom cost-item row projection failed:', err);
   }
+  try {
+    rows = withPayrollHeadcountRows(statement.type, rows, costCtx.payrollState, months, lastActualIndex);
+  } catch (err) {
+    console.warn('Payroll headcount row injection failed:', err);
+  }
   if (statement.type === 'PL') {
     try {
       rows = withManualAccountRows(statement.type, rows, assumptionsState?.customPLAccounts, costCtx.costItems, months, lastActualIndex);
@@ -985,11 +1085,15 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // time (dropping a second item onto the same row re-points it, it doesn't stack).
   function handleLinkCostItem(itemId, rowLabel) {
     if (!assumptionsState?.costItems) return;
-    const nextCostItems = assumptionsState.costItems.map((item) => {
-      if (item.id === itemId) return { ...item, linkedRowLabel: rowLabel };
-      if (item.linkedRowLabel === rowLabel) return { ...item, linkedRowLabel: null };
-      return item;
-    });
+    // No longer clears any OTHER item's link to this same row (2026-08-10, Kayee: "I
+    // dragged Central - Bookkeeping and Central - Payroll both to Tax and Accounting
+    // ... I want to assign both, in P&L it will add the amount, and here it will show
+    // both are linked") — more than one cost item can now feed the same P&L line at
+    // once; matchedCostItemsForRowLabel sums all of them together wherever this row's
+    // value is computed. Only THIS item's own link changes here.
+    const nextCostItems = assumptionsState.costItems.map((item) =>
+      item.id === itemId ? { ...item, linkedRowLabel: rowLabel } : item
+    );
     setAssumptionsState({ ...assumptionsState, costItems: nextCostItems });
   }
 
@@ -1127,7 +1231,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           rowCalcInfo =
             revenueCalcExplanation(row.key, revenue) ||
             costCalcExplanation(row.label, costCtx) ||
-            (row.custom || row.manualAccount ? customAccountCalcExplanation(row) : null);
+            (row.custom || row.manualAccount || row.payrollHeadcount ? customAccountCalcExplanation(row) : null);
         } catch (err) {
           console.warn('Reports calc-note lookup failed for a row label, showing plain label:', err);
         }
@@ -1156,7 +1260,11 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         // a drop is simply impossible, no separate error state needed. The `onDrop`
         // check against `costCtx.costItems` is a second, authoritative guard for any
         // browser that doesn't expose dataTransfer.types during dragover consistently.
-        const isDropTarget = !!onLinkCostItem && !row.driver && !!sectionCategory;
+        // `row.payrollHeadcount` excluded (2026-08-10) — this row's $ comes straight
+        // from the Payroll tab's roster/bonus totals, not from a linked cost item, so
+        // dropping a cost item on it would silently do nothing rather than actually
+        // add the $ anywhere.
+        const isDropTarget = !!onLinkCostItem && !row.driver && !row.payrollHeadcount && !!sectionCategory;
         return (
           <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
             <td

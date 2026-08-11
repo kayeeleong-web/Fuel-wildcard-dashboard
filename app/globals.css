@@ -525,6 +525,42 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    of layering in another (smaller) fixed gutter. */
 .page-wide-reports-open { max-width: none; padding-left: 16px; padding-right: 16px; }
 
+/* Payroll Assumptions sidebar (2026-08-10, Kayee: "in the payroll tab move the payroll
+   assumption to the left just like the p&l with a hamburger") — deliberately its OWN
+   class names rather than reusing .reports-with-sidebar/.reports-sidebar/.reports-main
+   directly: several P&L-only rules are scoped under those exact classes further below
+   (e.g. `.reports-with-sidebar .reports-main thead th { ... }`, tightened padding meant
+   only for the P&L table's own thead/tbody), and Payroll's tables use a completely
+   different set of classes (.payroll-table/.payroll-table-wrap/.pr-frozen) — reusing the
+   same wrapper classes here would risk those P&L-specific paddings silently applying to
+   Payroll's tables too. Layout mechanics are identical, so those rules are just
+   duplicated under the new names, not reinvented. */
+.payroll-with-sidebar { display: flex; align-items: stretch; gap: 18px; }
+.payroll-sidebar { flex: 0 0 34%; max-width: 34%; min-width: 340px; display: flex; flex-direction: column; gap: 18px; }
+.payroll-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
+.payroll-with-sidebar.is-collapsed .payroll-sidebar-rail { flex: 0 0 auto; }
+.payroll-sidebar-rail { display: flex; align-self: stretch; }
+
+.payroll-sidebar-toggle-rail {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px;
+  width: 40px; align-self: stretch; border: none; border-radius: 10px;
+  background: var(--black); color: #fff; cursor: pointer; padding: 20px 0;
+}
+.payroll-sidebar-toggle-rail:hover { background: #000; }
+.payroll-sidebar-toggle-rail svg { width: 16px; height: 16px; flex: none; }
+.payroll-sidebar-toggle-rail span {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase;
+}
+
+.payroll-sidebar-toggle-open {
+  display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.3); border-radius: 7px;
+  background: #fff; color: var(--text); font-size: 11.5px; font-weight: 700;
+  padding: 6px 10px; cursor: pointer; transition: background .12s ease;
+}
+.payroll-sidebar-toggle-open:hover { background: var(--panel-2); }
+.payroll-sidebar-toggle-open svg { width: 13px; height: 13px; }
+
 /* Revenue Assumptions fields stacked one per line (Kayee: "instead of horizontal make
    them vertical") — reuses the exact same .pr-assumption field component as the
    Payroll assumptions bar (app/globals.css `.pr-assumption` is already internally
