@@ -597,15 +597,18 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    "30("). Explicit widths give the name and $ columns the room they actually need;
    Cadence/Category/Start On/remove only need to fit a short word or icon. Font-size
    and padding also drop a notch so more rows show before the inner scrollbar kicks in. */
-/* Column widths rebalanced 2026-08-10 for the wider 38% sidebar — Name gets the most
-   room since it's the only column that also has to fit the link badge underneath it;
-   Start On shrinks (mm/dd is short) to give that room back. */
-.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 34%; }
-.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 15%; }
-.reports-sidebar .assump-cost-table th:nth-child(3), .reports-sidebar .assump-cost-table td:nth-child(3) { width: 16%; }
-.reports-sidebar .assump-cost-table th:nth-child(4), .reports-sidebar .assump-cost-table td:nth-child(4) { width: 16%; }
-.reports-sidebar .assump-cost-table th:nth-child(5), .reports-sidebar .assump-cost-table td:nth-child(5) { width: 12%; }
-.reports-sidebar .assump-cost-table th:nth-child(6), .reports-sidebar .assump-cost-table td:nth-child(6) { width: 7%; }
+/* Column widths rebalanced again 2026-08-10, this time to just 5 columns — Start On
+   moved off its own column entirely (folded into the clock-icon panel, see
+   CostItemsCard.jsx), and that freed-up room goes to Name (still truncating, per
+   Kayee's screenshot: "the text box is too narrow and the text got covered") and to
+   the $ column (needs to fit the amount input, the clock icon, AND the schedule
+   summary line, per Kayee: "the clock icon need more space too, it's now covering
+   some part of the monthly box"). */
+.reports-sidebar .assump-cost-table th:nth-child(1), .reports-sidebar .assump-cost-table td:nth-child(1) { width: 38%; }
+.reports-sidebar .assump-cost-table th:nth-child(2), .reports-sidebar .assump-cost-table td:nth-child(2) { width: 26%; }
+.reports-sidebar .assump-cost-table th:nth-child(3), .reports-sidebar .assump-cost-table td:nth-child(3) { width: 17%; }
+.reports-sidebar .assump-cost-table th:nth-child(4), .reports-sidebar .assump-cost-table td:nth-child(4) { width: 11%; }
+.reports-sidebar .assump-cost-table th:nth-child(5), .reports-sidebar .assump-cost-table td:nth-child(5) { width: 8%; }
 .reports-sidebar .assump-cost-table th, .reports-sidebar .assump-cost-table td { padding: 6px 7px; font-size: 11.5px; }
 .reports-sidebar .assump-cost-table .pr-input { padding: 5px 6px; font-size: 11.5px; }
 .reports-sidebar .assump-cost-table .pr-select { font-size: 11.5px; padding: 4px 3px; }
@@ -617,6 +620,15 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    siblings, to stop the badge from overflowing into the $ column next to it. */
 .assump-cost-name-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .assump-cost-name-cell .pr-input { width: 100%; box-sizing: border-box; }
+.reports-sidebar .assump-cost-table .assump-cost-name-cell .pr-input { font-size: 11.5px; }
+
+/* $ column: input + clock icon side by side, schedule summary stacked below both
+   (2026-08-10) — same always-visible-summary convention as the Revenue side. */
+.assump-cost-amount-td { vertical-align: top; }
+.assump-cost-amount-cell { display: flex; align-items: center; gap: 5px; justify-content: flex-end; }
+.assump-cost-amount-cell .pr-input-month { min-width: 0; flex: 1 1 auto; }
+.assump-cost-schedule-summary { margin-top: 4px; align-items: flex-end; }
+.assump-cost-schedule-summary .pr-schedule-summary-line { font-size: 9.5px; max-width: 100%; }
 
 /* Lets the Non-Headcount Costs card (the taller of the sidebar's two cards) grow to
    fill whatever extra height align-items:stretch above gives .reports-sidebar, with

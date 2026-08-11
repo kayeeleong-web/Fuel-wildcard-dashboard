@@ -26,19 +26,47 @@ function Picker({ value, options, onCommit }) {
   );
 }
 
+/** Always-visible schedule summary (2026-08-10, Kayee: "like in revenue assumption
+ *  you need to show which period is how much so that the user know") — matches
+ *  ScheduledRateField's convention on the Revenue side exactly: don't make anyone open
+ *  anything just to see WHETHER a future change is queued. Rendered right under the $
+ *  input regardless of whether the schedule row is expanded. */
+function CostItemScheduleSummary({ item, onRemoveEntry }) {
+  const schedule = item.amountSchedule || {};
+  const entries = Object.keys(schedule).sort();
+  if (entries.length === 0) return null;
+  return (
+    <div className="pr-schedule-summary assump-cost-schedule-summary">
+      {entries.map((iso) => (
+        <span key={iso} className="pr-schedule-summary-line">
+          → {schedule[iso] === null ? 'base amount' : `$${schedule[iso]}`} from {formatMonthLabel(iso)}
+          <button type="button" onClick={() => onRemoveEntry(iso)} title="Remove this scheduled change">
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /** Inline "schedule a future amount change" row (2026-08-07, Kayee: "we should be able
- *  to apply to other period just like those revenue assumptions") — same collapsed-by-
- *  default pattern as ScheduledRateField (components/reports/RateScheduleControl.jsx):
- *  a quiet summary line for anything already scheduled, and the actual From/To/Value/
- *  Apply form only appears once "+ Schedule a future change" is clicked. Rendered as
- *  its own <tr> (colSpan across every column) directly under the item's row, rather
- *  than trying to cram a form into one table cell. */
+ *  to apply to other period just like those revenue assumptions") — the From/To/Value/
+ *  Apply form only appears once the clock icon is clicked (the summary itself is now
+ *  always visible, see CostItemScheduleSummary above). Rendered as its own <tr>
+ *  (colSpan across every column) directly under the item's row, rather than trying to
+ *  cram a form into one table cell.
+ *
+ *  Also holds the "Start On" date (2026-08-10, Kayee: "why do i need start on if the
+ *  clock icon will take care of it") — folded in here instead of its own standalone
+ *  column, since both controls are about "when does this cost actually apply," just
+ *  two different shapes of that question (a one-time start date vs. a $ that changes
+ *  more than once). Tucking both behind the same icon frees up the name column, which
+ *  was the thing actually running out of room. */
 function CostItemScheduleRow({ item, onChange, onCollapse }) {
   const [fromMonth, setFromMonth] = useState('');
   const [toMonth, setToMonth] = useState('');
   const [newValue, setNewValue] = useState('');
   const schedule = item.amountSchedule || {};
-  const entries = Object.keys(schedule).sort();
 
   function apply() {
     if (!fromMonth || newValue === '') return;
@@ -57,20 +85,15 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
 
   return (
     <tr className="assump-cost-schedule-row">
-      <td colSpan={6}>
+      <td colSpan={5}>
         <div className="pr-schedule-inline-form pr-schedule-inline-form-table">
-          {entries.length > 0 && (
-            <div className="pr-schedule-summary">
-              {entries.map((iso) => (
-                <span key={iso} className="pr-schedule-summary-line">
-                  → {schedule[iso] === null ? 'base amount' : `$${schedule[iso]}`} from {formatMonthLabel(iso)}
-                  <button type="button" onClick={() => removeEntry(iso)} title="Remove this scheduled change">
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+          <CostItemScheduleSummary item={item} onRemoveEntry={removeEntry} />
+          <div className="pr-schedule-row">
+            <label className="pr-schedule-field">
+              <span>Start On (optional)</span>
+              <DateInput value={item.startOn} onCommit={(v) => onChange({ startOn: v })} />
+            </label>
+          </div>
           <div className="pr-schedule-row">
             <label className="pr-schedule-field">
               <span>From</span>
@@ -98,14 +121,21 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
 }
 
 /**
- * Non-Headcount Costs table — one flat list matching Kayee's real sheet exactly (What
- * is it? / $ / Cadence / Category / Start On), rather than splitting into separate
- * COGS/OPEX tables. The Category column is what determines whether a row counts
- * toward projected COGS, OPEX, or Other (Non-Operating) each month — see
- * ProjectionSummaryCard. Monthly items show their full $ every active month;
- * Quarterly items show their total / 3 every active month (spread evenly — e.g.
- * Vetric's $5,250/quarter shows as $1,750 every month, per Kayee 2026-08-05). Start
- * On is optional on both — leave it blank for "always active."
+ * Non-Headcount Costs table — one flat list matching Kayee's real sheet (What is it? /
+ * $ / Cadence / Category), rather than splitting into separate COGS/OPEX tables. The
+ * Category column is what determines whether a row counts toward projected COGS,
+ * OPEX, or Other (Non-Operating) each month — see ProjectionSummaryCard. Monthly items
+ * show their full $ every active month; Quarterly items show their total / 3 every
+ * active month (spread evenly — e.g. Vetric's $5,250/quarter shows as $1,750 every
+ * month, per Kayee 2026-08-05).
+ *
+ * Start On (2026-08-10, moved off its own column) and the effective-dated amount
+ * schedule both live behind the clock icon now — Kayee: "why do i need start on if the
+ * clock icon will take care of it." Whatever schedule IS set always shows as a quiet
+ * "→ $X from [month]" line under the $ box regardless of whether the panel is open
+ * (Kayee: "like in revenue assumption you need to show which period is how much so
+ * that the user know") — nothing about an item's timing is ever hidden, only the form
+ * used to CHANGE it is collapsed by default.
  *
  * `itemOrder` (2026-08-07, optional) — a list of item ids in the order they actually
  * appear on the P&L, computed in ReportsPanel.jsx from the real matched/injected row
@@ -171,7 +201,6 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
               <th style={{ textAlign: 'right' }}>$</th>
               <th>Cadence</th>
               <th>Category</th>
-              <th>Start On</th>
               <th></th>
             </tr>
           </thead>
@@ -211,17 +240,18 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                         </span>
                       )}
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right' }} className="assump-cost-amount-td">
                       <div className="assump-cost-amount-cell">
                         <MonthInput value={item.amount} onCommit={(n) => updateItem(item.id, { amount: n })} />
                         {/* Schedule toggle (2026-08-07) — a filled dot marks an item that
                             already has a future change queued, so that's visible even
                             while collapsed, same "don't hide what's already there"
-                            principle as the Revenue rate fields. */}
+                            principle as the Revenue rate fields. Also covers Start On
+                            now (2026-08-10) — the dot lights up for either one. */}
                         <button
                           type="button"
-                          className={`icon-btn assump-cost-schedule-toggle${hasSchedule ? ' has-schedule' : ''}`}
-                          title="Schedule a future amount change"
+                          className={`icon-btn assump-cost-schedule-toggle${hasSchedule || item.startOn ? ' has-schedule' : ''}`}
+                          title="Schedule a future amount change or set a start date"
                           onClick={() => setScheduleOpenId(isOpen ? null : item.id)}
                         >
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -230,6 +260,11 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                           </svg>
                         </button>
                       </div>
+                      <CostItemScheduleSummary item={item} onRemoveEntry={(iso) => {
+                        const patch = { ...(item.amountSchedule || {}) };
+                        delete patch[iso];
+                        updateItem(item.id, { amountSchedule: patch });
+                      }} />
                     </td>
                     <td>
                       <Picker
@@ -244,9 +279,6 @@ export function CostItemsCard({ costItems, onChange, itemOrder }) {
                         options={COST_CATEGORIES}
                         onCommit={(v) => updateItem(item.id, { category: v })}
                       />
-                    </td>
-                    <td>
-                      <DateInput value={item.startOn} onCommit={(v) => updateItem(item.id, { startOn: v })} />
                     </td>
                     <td>
                       <button
