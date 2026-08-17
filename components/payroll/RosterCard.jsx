@@ -10,16 +10,20 @@ import {
 } from '../../lib/payroll/payrollData';
 import { DateInput, FillRangeButton, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
+// Narrowed across the board (2026-08-17, Kayee: "i can only see one month... push
+// the width to further both side") — these 9 frozen columns alone used to run
+// ~1154px before a single month column started; trimmed to ~1020px so more months
+// fit in view, combined with the wider .page-wide cap in globals.css.
 const FROZEN_COLUMNS = [
   { key: 'actions', label: '', width: 64 },
-  { key: 'name', label: 'Name', width: 210 },
-  { key: 'department', label: 'Department', width: 130 },
-  { key: 'costType', label: 'CoGS or OpEx?', width: 100 },
-  { key: 'title', label: 'Title', width: 170 },
-  { key: 'startDate', label: 'Start Date', width: 130 },
-  { key: 'endDate', label: 'End Date', width: 130 },
-  { key: 'employment', label: 'Employment', width: 100 },
-  { key: 'baseSalary', label: 'Base Salaries', width: 120, align: 'right' },
+  { key: 'name', label: 'Name', width: 200 },
+  { key: 'department', label: 'Department', width: 105 },
+  { key: 'costType', label: 'CoGS or OpEx?', width: 90 },
+  { key: 'title', label: 'Title', width: 140 },
+  { key: 'startDate', label: 'Start Date', width: 110 },
+  { key: 'endDate', label: 'End Date', width: 110 },
+  { key: 'employment', label: 'Employment', width: 90 },
+  { key: 'baseSalary', label: 'Base Salaries', width: 105, align: 'right' },
 ];
 
 const SECTION_ORDER = [

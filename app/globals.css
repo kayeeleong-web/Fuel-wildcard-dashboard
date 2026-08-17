@@ -842,13 +842,21 @@ tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0
    1664px breakpoint (1600 + 32px padding x2) it behaves like the old full-bleed version,
    shrinking with the viewport; above it, it centers itself with a fixed gutter on both
    sides instead of continuing to stretch. */
+/* Widened 1600 -> 2200 (2026-08-17, Kayee: "push the width to further both side...
+   there's so much space on each side... i can only see one month") — the frozen
+   leading columns on Payroll/Reports tables already eat ~1000px+ before a single
+   month column starts, so the earlier 1600px cap (itself a deliberate choice,
+   2026-08-05: "full-bleed read as too wide with no breathing room") left almost no
+   room for the scrollable month grid on anything but an ultra-wide monitor. Padding
+   trimmed 32 -> 24px too, so less of the extra width is immediately given back as
+   side gutter. */
 .page-wide {
-  width: 100vw; max-width: 1600px;
+  width: 100vw; max-width: 2200px;
   margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
-  padding-left: 32px; padding-right: 32px; box-sizing: border-box;
+  padding-left: 24px; padding-right: 24px; box-sizing: border-box;
 }
-@media (min-width: 1664px) {
-  .page-wide { margin-left: calc(50% - 800px); margin-right: calc(50% - 800px); }
+@media (min-width: 2248px) {
+  .page-wide { margin-left: calc(50% - 1100px); margin-right: calc(50% - 1100px); }
 }
 
 .payroll-assumptions {
