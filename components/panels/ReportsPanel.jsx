@@ -1073,6 +1073,40 @@ function withReorderedRevenueRows(rows) {
   return [...withoutServices.slice(0, totalIdx), servicesRow, ...withoutServices.slice(totalIdx)];
 }
 
+const CASH_ROW_PATTERNS = {
+  beginning: /beginning.*cash/i,
+  netChange: /net (change|increase|decrease)(\s*\/\s*decrease)?.*cash/i,
+  ending: /ending.*cash/i,
+};
+
+/** Moves Beginning Cash / Net Change in Cash / Ending Cash to the very top of the Cash
+ *  Flow statement, in that fixed order — Kayee (2026-08-17): "move the beginning cash
+ *  and ending cash to all the way to the top... beginning cash and then net change in
+ *  cash and then followed by ending cash." These three normally sit wherever the sheet
+ *  puts its cash-reconciliation block (often the bottom), burying the one number
+ *  (ending cash) most people open a Cash Flow statement to check first. Purely a
+ *  display reorder — same row objects/values, so no total can change, only where these
+ *  three lines render. All three are forced onto ONE shared section (the first found
+ *  row's own section) so they render as a single clean group up top instead of
+ *  fragmenting across whatever separate sections they originally lived in on the
+ *  sheet. Safe no-op if none of the three labels are found on this client's CF sheet. */
+function withReorderedCashFlowRows(rows) {
+  const beginningIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.beginning.test(r.label));
+  const netChangeIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.netChange.test(r.label));
+  const endingIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.ending.test(r.label));
+  const pickedIdxs = [beginningIdx, netChangeIdx, endingIdx].filter((i) => i !== -1);
+  if (pickedIdxs.length === 0) return rows;
+
+  const topSection = rows[pickedIdxs[0]].section;
+  const orderedTopRows = [beginningIdx, netChangeIdx, endingIdx]
+    .filter((i) => i !== -1)
+    .map((i) => ({ ...rows[i], section: topSection }));
+
+  const removeSet = new Set(pickedIdxs);
+  const rest = rows.filter((_, i) => !removeSet.has(i));
+  return [...orderedTopRows, ...rest];
+}
+
 /** Generic fallback so every fine-grained section Total (e.g. "Total Meals &
  *  Entertainment", "Total Professional Services") also projects forward, not just the
  *  handful of labels PL_COST_PROJECTIONS_BY_LABEL knows a bespoke formula for (Total
@@ -1268,6 +1302,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withGrossProfitMarginRow(rows, months);
     } catch (err) {
       console.warn('Gross Profit Margin % row injection failed:', err);
+    }
+  }
+  if (statement.type === 'CF') {
+    try {
+      rows = withReorderedCashFlowRows(rows);
+    } catch (err) {
+      console.warn('Cash Flow row reorder failed, showing sheet order:', err);
     }
   }
 

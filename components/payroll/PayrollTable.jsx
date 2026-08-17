@@ -21,7 +21,11 @@ export function PayrollTable({
   defaultCollapsed = false,
   frozenColumns, // [{ key, label, width, align }]
   months,
-  monthWidth = 92,
+  // Narrowed 92 -> 74 (2026-08-17, Kayee: "the width is too long, like i cant see the
+  // month to scroll, i can only see 3 month in this view... make the width of each
+  // month smaller") — more months fit in view before the horizontal scrollbar kicks
+  // in, without touching the frozen leading columns at all.
+  monthWidth = 74,
   todayIso,
   // Whether future months get the app's ACT/FCST blue tint at all. Defaults to true
   // for tabs like Reports, which mix real reported months with genuine projections.

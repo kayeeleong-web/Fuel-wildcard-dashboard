@@ -47,10 +47,33 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   const employees = roster.filter((r) => !r.isRamp);
   const [justAddedId, setJustAddedId] = useState(null);
 
+  // Multi-line-per-person rollup (2026-08-17, Kayee: "people will have multiple lines
+  // with multiple salary rate but it will get roll up to one line, only expand if i
+  // want to see"). `personId` is the new grouping key — every row still calculates
+  // exactly like an independent roster entry (monthlyCostFor, the Payroll totals, the
+  // P&L wiring all just sum every roster row regardless of grouping), so NOTHING about
+  // the underlying math changes; this is purely how multiple rows for the same person
+  // (e.g. current salary + an already-scheduled future raise) are DISPLAYED. Existing
+  // saved rows have no `personId` yet — falling back to `r.id` below means an
+  // old/ungrouped row just renders as its own singleton group, no migration needed.
+  // Scoped to this card only (Kayee: "existing only") — Hiring Plan keeps its simpler
+  // one-row-per-role layout.
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
+
+  function toggleGroup(personId) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(personId)) next.delete(personId);
+      else next.add(personId);
+      return next;
+    });
+  }
+
   function addEmployee() {
     const id = generateId('emp');
     const newEmployee = {
       id,
+      personId: id,
       name: '',
       department: '',
       costType: 'OpEx',
@@ -65,33 +88,74 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     setJustAddedId(id);
   }
 
+  // Adds a new salary line to an EXISTING person (2026-08-17, Kayee: "when i add a new
+  // person it will automatically populate the name if i expand it already if not it
+  // will have no name populate") — this is the "already expanded" case: it always
+  // pre-fills name/department/title/costType/employment from that person's own most
+  // recent line, since the whole point is a second line for someone already on the
+  // roster. A genuinely NEW person still goes through addEmployee() above (blank
+  // name), which is the only way to reach a state with no name populated.
+  function addLine(personId) {
+    const groupRows = employees.filter((r) => (r.personId || r.id) === personId);
+    const template = groupRows[groupRows.length - 1] || groupRows[0];
+    if (!template) return;
+    const id = generateId('emp');
+    const newLine = {
+      id,
+      personId,
+      name: template.name,
+      department: template.department,
+      costType: template.costType,
+      title: template.title,
+      startDate: '',
+      endDate: '',
+      employment: template.employment || 'Active',
+      baseSalary: 0,
+      monthlyOverrides: {},
+    };
+    onChange([...roster, newLine]);
+    setExpandedGroups((prev) => new Set(prev).add(personId));
+    setJustAddedId(id);
+  }
+
   // Drag-to-reorder (Kayee, 2026-08-05: "turn it into draggable so people can rearrange
   // people") — scoped to within one section only (Active/Planned/Dismissed don't mix),
   // per Kayee's call, so dragging never silently changes someone's Employment status.
-  const [draggedId, setDraggedId] = useState(null);
+  // Now reorders by GROUP (personId), not individual row id (2026-08-17 rollup change)
+  // — a person with multiple salary lines has to move as one block, or dragging could
+  // silently interleave their lines with someone else's.
+  const [draggedGroupId, setDraggedGroupId] = useState(null);
 
-  function reorderWithinSection(sectionKey, fromId, toId) {
-    if (fromId === toId) return;
-    const sectionIds = employees.filter((r) => (r.employment || 'Active') === sectionKey).map((r) => r.id);
-    const fromIndex = sectionIds.indexOf(fromId);
-    const toIndex = sectionIds.indexOf(toId);
+  function reorderGroupsWithinSection(sectionKey, fromPersonId, toPersonId) {
+    if (fromPersonId === toPersonId) return;
+    const sectionRows = employees.filter((r) => (r.employment || 'Active') === sectionKey);
+    const order = [];
+    const rowsByPerson = new Map();
+    for (const r of sectionRows) {
+      const pid = r.personId || r.id;
+      if (!rowsByPerson.has(pid)) {
+        rowsByPerson.set(pid, []);
+        order.push(pid);
+      }
+      rowsByPerson.get(pid).push(r);
+    }
+    const fromIndex = order.indexOf(fromPersonId);
+    const toIndex = order.indexOf(toPersonId);
     if (fromIndex === -1 || toIndex === -1) return;
-    const reorderedIds = [...sectionIds];
+    const reorderedIds = [...order];
     const [moved] = reorderedIds.splice(fromIndex, 1);
     reorderedIds.splice(toIndex, 0, moved);
+    const newSectionRows = reorderedIds.flatMap((pid) => rowsByPerson.get(pid));
 
     // Walk the roster in its existing order, and wherever a row belongs to this
-    // section, substitute the next id off the freshly-reordered list — every other
-    // row (and every other section's rows) stays exactly where it was. Filtering by
-    // section for display only cares about relative order among matching rows, so
-    // this alone is enough to make the drag visible without touching anything else.
+    // section, substitute the next row off the freshly-ordered (group-block) list —
+    // every other row (and every other section's rows) stays exactly where it was.
     let cursor = 0;
-    const rosterById = Object.fromEntries(roster.map((r) => [r.id, r]));
     const newRoster = roster.map((r) => {
       // Ramp rows can share the same 'TBD' employment value but live on the Hiring
       // Plan card, not here — excluded so they never get pulled into this reorder.
       if (r.isRamp || (r.employment || 'Active') !== sectionKey) return r;
-      const next = rosterById[reorderedIds[cursor]];
+      const next = newSectionRows[cursor];
       cursor += 1;
       return next;
     });
@@ -130,16 +194,100 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     new Set([...DEPARTMENT_OPTIONS, ...employees.map((r) => r.department).filter(Boolean)])
   );
 
-  const rowGroups = SECTION_ORDER.map((section) => ({
-    key: section.key,
-    label: section.label,
-    rowModifier: section.rowModifier,
-    rows: employees
-      .filter((r) => (r.employment || 'Active') === section.key)
-      .map((employee) => buildRow(employee, section.key)),
-  }));
+  // Groups each section's rows by personId (falls back to the row's own id, so an
+  // old/ungrouped saved row just renders as a singleton group). A group of 1 renders
+  // exactly like the old flat table always did; a group of >1 renders one collapsed
+  // summary row (name + count badge + the SUM of every line's monthly cost) and, only
+  // when expanded, each individual line below it — Kayee: "it will get roll up to one
+  // line, only expand if i want to see."
+  const rowGroups = SECTION_ORDER.map((section) => {
+    const sectionEmployees = employees.filter((r) => (r.employment || 'Active') === section.key);
+    const order = [];
+    const rowsByPerson = new Map();
+    for (const r of sectionEmployees) {
+      const pid = r.personId || r.id;
+      if (!rowsByPerson.has(pid)) {
+        rowsByPerson.set(pid, []);
+        order.push(pid);
+      }
+      rowsByPerson.get(pid).push(r);
+    }
+    const rows = [];
+    for (const pid of order) {
+      const groupRows = rowsByPerson.get(pid);
+      if (groupRows.length === 1) {
+        rows.push(buildRow(groupRows[0], section.key, { dragKey: pid, showDragHandle: true }));
+        continue;
+      }
+      rows.push(buildGroupSummaryRow(pid, groupRows, section.key));
+      if (expandedGroups.has(pid)) {
+        for (const emp of groupRows) rows.push(buildRow(emp, section.key, { isChild: true }));
+      }
+    }
+    return { key: section.key, label: section.label, rowModifier: section.rowModifier, rows };
+  });
 
-  function buildRow(employee, sectionKey) {
+  function buildGroupSummaryRow(personId, groupRows, sectionKey) {
+    const isExpanded = expandedGroups.has(personId);
+    const name = groupRows[0]?.name || '';
+    const monthCells = {};
+    for (const iso of months) {
+      const sum = groupRows.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
+      monthCells[iso] = <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>;
+    }
+    return {
+      id: `group_${personId}`,
+      monthCells,
+      className: `pr-comp-group-row${draggedGroupId === personId ? ' pr-dragging' : ''}`,
+      draggable: true,
+      onDragStart: (e) => {
+        if (!e.target.closest('[data-drag-handle]')) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.effectAllowed = 'move';
+        setDraggedGroupId(personId);
+      },
+      onDragOver: (e) => e.preventDefault(),
+      onDrop: (e) => {
+        e.preventDefault();
+        if (draggedGroupId) reorderGroupsWithinSection(sectionKey, draggedGroupId, personId);
+        setDraggedGroupId(null);
+      },
+      onDragEnd: () => setDraggedGroupId(null),
+      cells: {
+        actions: (
+          <div className="pr-row-actions">
+            <button
+              type="button"
+              className="icon-btn pr-comp-expand-toggle"
+              onClick={() => toggleGroup(personId)}
+              title={isExpanded ? 'Collapse lines' : 'Expand lines'}
+            >
+              <span className={`pr-comp-chevron${isExpanded ? ' open' : ''}`}>▸</span>
+            </button>
+            <span className="icon-btn pr-drag-handle" data-drag-handle title="Drag to reorder within this section">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            </span>
+            <button type="button" className="icon-btn" title="Add another salary line for this person" onClick={() => addLine(personId)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          </div>
+        ),
+        name: (
+          <span className="pr-comp-group-name">
+            {name || <i className="pr-comp-noname">Unnamed</i>} <span className="pr-comp-count">({groupRows.length})</span>
+          </span>
+        ),
+      },
+    };
+  }
+
+  function buildRow(employee, sectionKey, { dragKey, showDragHandle = false, isChild = false } = {}) {
     const monthCells = {};
     for (const iso of months) {
       const val = monthlyCostFor(employee, iso, assumptions);
@@ -149,43 +297,49 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     return {
       id: employee.id,
       monthCells,
-      className: draggedId === employee.id ? 'pr-dragging' : undefined,
-      draggable: true,
+      className: [isChild ? 'pr-comp-child-row' : null, showDragHandle && draggedGroupId === dragKey ? 'pr-dragging' : null]
+        .filter(Boolean)
+        .join(' ') || undefined,
+      draggable: showDragHandle,
       // Row itself is draggable (HTML5 DnD requires that), but the drag only actually
       // starts if the gesture began on the handle icon specifically — otherwise
       // clicking/dragging to select text inside a Name field would trigger a row drag.
-      onDragStart: (e) => {
-        if (!e.target.closest('[data-drag-handle]')) {
-          e.preventDefault();
-          return;
-        }
-        e.dataTransfer.effectAllowed = 'move';
-        setDraggedId(employee.id);
-      },
-      onDragOver: (e) => e.preventDefault(),
-      onDrop: (e) => {
-        e.preventDefault();
-        if (draggedId) reorderWithinSection(sectionKey, draggedId, employee.id);
-        setDraggedId(null);
-      },
-      onDragEnd: () => setDraggedId(null),
+      // A single-line-per-person row IS the group (dragKey = its own personId), so
+      // dragging still moves the whole "group" — which here is just itself.
+      onDragStart: showDragHandle
+        ? (e) => {
+            if (!e.target.closest('[data-drag-handle]')) {
+              e.preventDefault();
+              return;
+            }
+            e.dataTransfer.effectAllowed = 'move';
+            setDraggedGroupId(dragKey);
+          }
+        : undefined,
+      onDragOver: showDragHandle ? (e) => e.preventDefault() : undefined,
+      onDrop: showDragHandle
+        ? (e) => {
+            e.preventDefault();
+            if (draggedGroupId) reorderGroupsWithinSection(sectionKey, draggedGroupId, dragKey);
+            setDraggedGroupId(null);
+          }
+        : undefined,
+      onDragEnd: showDragHandle ? () => setDraggedGroupId(null) : undefined,
       cells: {
         actions: (
           <div className="pr-row-actions">
-            <span
-              className="icon-btn pr-drag-handle"
-              data-drag-handle
-              title="Drag to reorder within this section"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            </span>
+            {showDragHandle && (
+              <span className="icon-btn pr-drag-handle" data-drag-handle title="Drag to reorder within this section">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 7h16M4 12h16M4 17h16" />
+                </svg>
+              </span>
+            )}
             <FillRangeButton months={months} onApply={(targetMonths, value) => fillRange(employee.id, targetMonths, value)} />
             <button
               type="button"
               className="icon-btn"
-              title="Remove from roster"
+              title={isChild ? 'Remove this line' : 'Remove from roster'}
               onClick={() => removeEmployee(employee.id, employee.name)}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -266,10 +420,12 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     ),
   };
 
+  const uniquePeopleCount = new Set(employees.map((r) => r.personId || r.id)).size;
+
   return (
     <PayrollTable
       title="Employees"
-      subtitle={`${employees.length} people`}
+      subtitle={`${uniquePeopleCount} people`}
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}

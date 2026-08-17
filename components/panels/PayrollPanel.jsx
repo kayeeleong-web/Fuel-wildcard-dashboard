@@ -144,44 +144,6 @@ export function PayrollPanel() {
             <div style={{ height: 20 }} />
 
             <CollapsibleSection
-              id={SECTION_IDS.totalComp}
-              title="Total Comp by Employee"
-              subtitle="Base + bonus, combined per person · read-only"
-              colorVar="--green"
-              collapsed={collapsedSections.totalComp}
-              onToggle={() => toggleSection('totalComp')}
-            >
-              <TotalCompCard
-                roster={state.roster}
-                bonuses={state.bonuses}
-                assumptions={state.assumptions}
-                months={visibleMonths}
-                todayIso={todayIso}
-              />
-            </CollapsibleSection>
-
-            <div style={{ height: 20 }} />
-
-            <CollapsibleSection
-              id={SECTION_IDS.byCategory}
-              title="Total Comp by CoGS/OpEx"
-              subtitle="Two totals to match against the new Payroll lines on the P&L · read-only"
-              colorVar="--green"
-              collapsed={collapsedSections.byCategory}
-              onToggle={() => toggleSection('byCategory')}
-            >
-              <TotalCompByCategoryCard
-                roster={state.roster}
-                bonuses={state.bonuses}
-                assumptions={state.assumptions}
-                months={visibleMonths}
-                todayIso={todayIso}
-              />
-            </CollapsibleSection>
-
-            <div style={{ height: 20 }} />
-
-            <CollapsibleSection
               id={SECTION_IDS.existing}
               title="Existing"
               subtitle="People already on payroll — base salaries + their bonus"
@@ -233,6 +195,44 @@ export function PayrollPanel() {
                 todayIso={todayIso}
                 onChange={setBonuses}
                 scope="planned"
+              />
+            </CollapsibleSection>
+
+            <div style={{ height: 20 }} />
+
+            <CollapsibleSection
+              id={SECTION_IDS.totalComp}
+              title="Total Comp by Employee"
+              subtitle="Base + bonus, combined per person · read-only"
+              colorVar="--green"
+              collapsed={collapsedSections.totalComp}
+              onToggle={() => toggleSection('totalComp')}
+            >
+              <TotalCompCard
+                roster={state.roster}
+                bonuses={state.bonuses}
+                assumptions={state.assumptions}
+                months={visibleMonths}
+                todayIso={todayIso}
+              />
+            </CollapsibleSection>
+
+            <div style={{ height: 20 }} />
+
+            <CollapsibleSection
+              id={SECTION_IDS.byCategory}
+              title="Total Comp by CoGS/OpEx"
+              subtitle="Two totals to match against the new Payroll lines on the P&L · read-only"
+              colorVar="--green"
+              collapsed={collapsedSections.byCategory}
+              onToggle={() => toggleSection('byCategory')}
+            >
+              <TotalCompByCategoryCard
+                roster={state.roster}
+                bonuses={state.bonuses}
+                assumptions={state.assumptions}
+                months={visibleMonths}
+                todayIso={todayIso}
               />
             </CollapsibleSection>
           </div>

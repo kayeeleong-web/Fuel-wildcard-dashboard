@@ -881,7 +881,15 @@ tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0
 .payroll-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
 .payroll-table-wrap { overflow: auto; max-height: 560px; }
-.payroll-table { table-layout: fixed; border-collapse: collapse; font-size: 12.5px; }
+.payroll-table { table-layout: fixed; border-collapse: collapse; font-size: 11.5px; }
+
+/* Tighter row height + slightly smaller type (2026-08-17, Kayee: "i think the height
+   is too big... reduce the font slightly slightly") — overrides the shared generic
+   `thead th`/`tbody td` padding (13px/10px vertical) that every other table on the app
+   still uses, scoped to Payroll's own table only so nothing elsewhere changes. */
+.payroll-table thead th { padding: 8px 12px; font-size: 10px; }
+.payroll-table tbody td { padding: 5px 12px; }
+.payroll-table .pr-input { font-size: 11.5px; padding: 4px 7px; }
 
 /* Frozen leading columns — position:sticky with a per-column `left` offset computed in
    JS (PayrollTable.jsx), NOT the single-column .table-wrap rule used elsewhere in this
@@ -917,6 +925,20 @@ thead .pr-frozen { z-index: 5; }
 .payroll-table tbody tr:not(.total):not(.section) td.pr-frozen { background: var(--panel); }
 .payroll-table tbody tr:not(.total):not(.section):nth-child(even) td.pr-frozen { background: var(--panel-2); }
 .payroll-table tbody tr:not(.total):not(.section):hover td.pr-frozen { background: #F0FBF4; }
+
+/* Multi-line-per-person rollup (2026-08-17) — the collapsed summary row reuses the
+   even/odd zebra + frozen-cell backgrounds above, just adds the chevron/count/bolder
+   name treatment on top. Child rows (only rendered while expanded) get a slightly
+   indented, tinted name cell so it reads as "belongs to the row above" without a full
+   nested-table layout. */
+.pr-comp-group-row td.pr-frozen { font-weight: 600; }
+.pr-comp-expand-toggle { padding: 0; }
+.pr-comp-chevron { display: inline-block; font-size: 10px; color: var(--muted-2); transition: transform .15s ease; }
+.pr-comp-chevron.open { transform: rotate(90deg); color: var(--black); }
+.pr-comp-count { font-size: 11px; color: var(--muted-2); font-weight: 400; }
+.pr-comp-noname { color: var(--muted-2); font-style: italic; font-weight: 400; }
+.pr-comp-child-row td.pr-frozen { background: var(--panel-2); }
+.pr-comp-child-row td.pr-frozen:nth-child(2) { padding-left: 28px; box-shadow: inset 3px 0 0 var(--border); }
 
 /* Planned (TBD) / Dismissed sub-sections — Wildcard-palette equivalents of the Payroll
    build notes' status sub-sectioning (blue tint for planned, dark "closed" band for
