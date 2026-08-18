@@ -5,6 +5,7 @@ import { PageHead } from '../ui/PageHead';
 import { buildCustomerWaterfall } from '../../lib/data/customerData';
 import { MonthInput, PayrollTable, TextInput } from '../payroll/PayrollTable';
 import { AssumptionField } from '../payroll/AssumptionsBar';
+import { CollapsibleSection } from '../payroll/CollapsibleSection';
 import { CUSTOMER_INFLOW_STORAGE_KEY } from '../../lib/cashflow/cashProjection';
 import {
   currentIsoMonth,
@@ -623,234 +624,209 @@ export function CustomerPanel({ glCash, glAccrued }) {
           so this section breaks out wider, exactly like the Payroll tab (.page-wide
           in globals.css). PageHead above stays at the normal page width. */}
       <div className="page-wide">
+        {/* Each of the 4 sections is a CollapsibleSection card — the exact same
+            .pr-outer-section "outer folder" shell the Payroll tab uses for Existing /
+            Planned / Total Comp, so both Projection tabs read identically: tinted
+            header bar with chevron + colored dot + title + caption, black-headed
+            tables inside, one consistent 20px rhythm (spacer divs between cards,
+            .pr-outer-body's own gap inside them) instead of ad hoc margins. */}
         {/* -------------------------- Current Customers -------------------------- */}
-        <div style={{ marginBottom: '40px' }}>
-          <div
-            className="collapsible-section-header"
-            onClick={() => toggleSection('current')}
-            style={{ cursor: 'pointer', marginBottom: '16px' }}
-          >
-            <span className={`chevron${!collapsedSections.current ? ' open' : ''}`}>▸</span>
-            <h3 style={{ margin: 0, display: 'inline' }}>Current Customers</h3>
-            <span style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Waterfall by start month — Cash (received) vs Accrued (recognized) · GL accounts 4xxxx
-            </span>
-          </div>
-
-          {!collapsedSections.current && (
-            <>
-              {glCash?.error ? (
-                <MisconfiguredNotice tab="GL Cash" message={glCash.error} />
-              ) : (
-                <WaterfallTable
-                  title="Cash Waterfall — GL Cash"
-                  subtitle={`${cashWaterfall.customers.length} customer${
-                    cashWaterfall.customers.length === 1 ? '' : 's'
-                  } · cash received per month, ordered by start month`}
-                  waterfall={cashWaterfall}
-                  months={cashMonths}
-                  todayIso={todayIso}
-                />
-              )}
-
-              <div style={{ height: 20 }} />
-
-              {glAccrued?.error ? (
-                <MisconfiguredNotice tab="GL Accrued" message={glAccrued.error} />
-              ) : (
-                <WaterfallTable
-                  title="Accrued Waterfall — GL Accrued"
-                  subtitle={`${accruedWaterfall.customers.length} customer${
-                    accruedWaterfall.customers.length === 1 ? '' : 's'
-                  } · revenue recognized per month, ordered by start month`}
-                  waterfall={accruedWaterfall}
-                  months={accruedMonths}
-                  todayIso={todayIso}
-                />
-              )}
-            </>
+        <CollapsibleSection
+          title="Current Customers"
+          subtitle="Waterfall by start month — Cash (received) vs Accrued (recognized) · GL accounts 4xxxx"
+          colorVar="--blue"
+          collapsed={collapsedSections.current}
+          onToggle={() => toggleSection('current')}
+        >
+          {glCash?.error ? (
+            <MisconfiguredNotice tab="GL Cash" message={glCash.error} />
+          ) : (
+            <WaterfallTable
+              title="Cash Waterfall — GL Cash"
+              subtitle={`${cashWaterfall.customers.length} customer${
+                cashWaterfall.customers.length === 1 ? '' : 's'
+              } · cash received per month, ordered by start month`}
+              waterfall={cashWaterfall}
+              months={cashMonths}
+              todayIso={todayIso}
+            />
           )}
-        </div>
+
+          {glAccrued?.error ? (
+            <MisconfiguredNotice tab="GL Accrued" message={glAccrued.error} />
+          ) : (
+            <WaterfallTable
+              title="Accrued Waterfall — GL Accrued"
+              subtitle={`${accruedWaterfall.customers.length} customer${
+                accruedWaterfall.customers.length === 1 ? '' : 's'
+              } · revenue recognized per month, ordered by start month`}
+              waterfall={accruedWaterfall}
+              months={accruedMonths}
+              todayIso={todayIso}
+            />
+          )}
+        </CollapsibleSection>
+
+        <div style={{ height: 20 }} />
 
         {/* ------------------------- Cash Inflow Drivers ------------------------- */}
-        <div style={{ marginBottom: '40px' }}>
-          <div
-            className="collapsible-section-header"
-            onClick={() => toggleSection('inflow')}
-            style={{ cursor: 'pointer', marginBottom: '16px' }}
-          >
-            <span className={`chevron${!collapsedSections.inflow ? ' open' : ''}`}>▸</span>
-            <h3 style={{ margin: 0, display: 'inline' }}>Cash Inflow Drivers</h3>
-            <span style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Campaigns purchased & meetings booked per customer per forecast month — feeds the Cash Flow Projection
-            </span>
-          </div>
-
-          {!collapsedSections.inflow &&
-            (driversHydrated && drivers ? (
-              <>
-                {/* Price assumptions — same AssumptionField strip as the Payroll tab's
-                    assumptions bar, so the pattern reads identically across tabs. */}
-                <div className="payroll-assumptions" style={{ marginBottom: 16 }}>
-                  <AssumptionField
-                    label="Price per Campaign"
-                    value={drivers.campaignPrice}
-                    suffix="$"
-                    onCommit={(v) => setDrivers({ ...drivers, campaignPrice: v })}
-                  />
-                  <AssumptionField
-                    label="Price per Meeting"
-                    value={drivers.meetingPrice}
-                    suffix="$"
-                    onCommit={(v) => setDrivers({ ...drivers, meetingPrice: v })}
-                  />
-                  <div className="pr-assumption-note">
-                    Cash Coming In = campaigns × campaign price + meetings × meeting price. The monthly TOTAL is
-                    saved for the Cash Flow Projection tab. Editing starts after the GL&apos;s last actual month
-                    {glLastIso ? ` (${formatMonthLabel(glLastIso)})` : ''}.
-                  </div>
+        <CollapsibleSection
+          title="Cash Inflow Drivers"
+          subtitle="Campaigns purchased & meetings booked per forecast month — feeds the Cash Flow Projection"
+          colorVar="--teal"
+          collapsed={collapsedSections.inflow}
+          onToggle={() => toggleSection('inflow')}
+        >
+          {driversHydrated && drivers ? (
+            <>
+              {/* Price assumptions — same AssumptionField strip as the Payroll tab's
+                  assumptions bar, so the pattern reads identically across tabs. */}
+              <div className="payroll-assumptions">
+                <AssumptionField
+                  label="Price per Campaign"
+                  value={drivers.campaignPrice}
+                  suffix="$"
+                  onCommit={(v) => setDrivers({ ...drivers, campaignPrice: v })}
+                />
+                <AssumptionField
+                  label="Price per Meeting"
+                  value={drivers.meetingPrice}
+                  suffix="$"
+                  onCommit={(v) => setDrivers({ ...drivers, meetingPrice: v })}
+                />
+                <div className="pr-assumption-note">
+                  Cash Coming In = campaigns × campaign price + meetings × meeting price. The monthly TOTAL is
+                  saved for the Cash Flow Projection tab. Editing starts after the GL&apos;s last actual month
+                  {glLastIso ? ` (${formatMonthLabel(glLastIso)})` : ''}.
                 </div>
+              </div>
 
-                <DriverGrid
-                  title="Current & Pipeline — Campaigns Purchased"
-                  subtitle="# of campaigns purchased per customer per month · rows from the live GL Cash roster, plus rows you add"
-                  rows={currentDriverRows}
-                  months={planMonths}
-                  isEditableMonth={isEditableMonth}
-                  todayIso={todayIso}
-                  getCount={(key, iso) => getDriverCount('campaigns', key, iso)}
-                  onSetCount={(key, iso, n) => setDriverCount('campaigns', key, iso, n)}
-                  headActions={
-                    <button type="button" className="btn" onClick={addManualCustomer}>
-                      + Add Customer Row
-                    </button>
-                  }
-                />
+              <DriverGrid
+                title="Current & Pipeline — Campaigns Purchased"
+                subtitle="# of campaigns purchased per customer per month · rows from the live GL Cash roster, plus rows you add"
+                rows={currentDriverRows}
+                months={planMonths}
+                isEditableMonth={isEditableMonth}
+                todayIso={todayIso}
+                getCount={(key, iso) => getDriverCount('campaigns', key, iso)}
+                onSetCount={(key, iso, n) => setDriverCount('campaigns', key, iso, n)}
+                headActions={
+                  <button type="button" className="btn" onClick={addManualCustomer}>
+                    + Add Customer Row
+                  </button>
+                }
+              />
 
-                <div style={{ height: 20 }} />
+              <DriverGrid
+                title="Current & Pipeline — # of Meetings Booked"
+                subtitle="# of meetings booked per customer per month · same rows as the campaigns grid above"
+                rows={currentDriverRows}
+                months={planMonths}
+                isEditableMonth={isEditableMonth}
+                todayIso={todayIso}
+                getCount={(key, iso) => getDriverCount('meetings', key, iso)}
+                onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
+              />
+            </>
+          ) : (
+            <div className="cap">Loading saved cash inflow drivers…</div>
+          )}
+        </CollapsibleSection>
 
-                <DriverGrid
-                  title="Current & Pipeline — # of Meetings Booked"
-                  subtitle="# of meetings booked per customer per month · same rows as the campaigns grid above"
-                  rows={currentDriverRows}
-                  months={planMonths}
-                  isEditableMonth={isEditableMonth}
-                  todayIso={todayIso}
-                  getCount={(key, iso) => getDriverCount('meetings', key, iso)}
-                  onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
-                />
-              </>
-            ) : (
-              <div className="cap">Loading saved cash inflow drivers…</div>
-            ))}
-        </div>
+        <div style={{ height: 20 }} />
 
         {/* --------------------------- Customer Planning -------------------------- */}
-        <div style={{ marginBottom: '40px' }}>
-          <div
-            className="collapsible-section-header"
-            onClick={() => toggleSection('planning')}
-            style={{ cursor: 'pointer', marginBottom: '16px' }}
-          >
-            <span className={`chevron${!collapsedSections.planning ? ' open' : ''}`}>▸</span>
-            <h3 style={{ margin: 0, display: 'inline' }}>Customer Planning</h3>
-            <span style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Planned new customers — what-if amounts, plus their own campaign/meeting driver grids
-            </span>
-          </div>
-
-          {!collapsedSections.planning &&
-            (hydrated && planned ? (
-              <>
-                <PayrollTable
-                  title="Planned Customers"
-                  subtitle={`${planned.length} planned customer${
-                    planned.length === 1 ? '' : 's'
-                  } · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
-                  tintForecast={false}
-                  frozenColumns={PLAN_FROZEN_COLUMNS}
-                  months={planMonths}
-                  todayIso={todayIso}
-                  totalRow={planTotalRow}
-                  rowGroups={[{ key: 'planned', label: null, rows: planRows }]}
-                  headActions={
-                    // Plain .btn (white bg), not .btn.primary — solid black would vanish
-                    // against the card's own black header bar (same contrast fix as the
-                    // Payroll tab's "+ Add Role", 2026-08-05).
-                    <button type="button" className="btn" onClick={addPlannedCustomer}>
-                      + Add Customer
-                    </button>
-                  }
-                />
-
-                {/* Parallel driver grids for planned customers (2026-08-18) — same
-                    campaigns/meetings shape as the current-customer grids above, rows
-                    keyed to the planning table (add a planned customer there and it
-                    appears here). Kept as separate grids rather than widening the
-                    planning table itself — two more 30-column month sets inside one
-                    table would bury the plan's own five setup columns. */}
-                {driversHydrated && drivers && plannedDriverRows.length > 0 && (
-                  <>
-                    <div style={{ height: 20 }} />
-                    <DriverGrid
-                      title="Planned Customers — Campaigns Purchased"
-                      subtitle="# of campaigns purchased per planned customer per month"
-                      rows={plannedDriverRows}
-                      months={planMonths}
-                      isEditableMonth={isEditableMonth}
-                      todayIso={todayIso}
-                      getCount={(key, iso) => getDriverCount('campaigns', key, iso)}
-                      onSetCount={(key, iso, n) => setDriverCount('campaigns', key, iso, n)}
-                    />
-                    <div style={{ height: 20 }} />
-                    <DriverGrid
-                      title="Planned Customers — # of Meetings Booked"
-                      subtitle="# of meetings booked per planned customer per month"
-                      rows={plannedDriverRows}
-                      months={planMonths}
-                      isEditableMonth={isEditableMonth}
-                      todayIso={todayIso}
-                      getCount={(key, iso) => getDriverCount('meetings', key, iso)}
-                      onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
-                    />
-                  </>
-                )}
-              </>
-            ) : (
-              <div className="cap">Loading saved customer plan…</div>
-            ))}
-        </div>
-
-        {/* ----------------------------- Cash Coming In ---------------------------- */}
-        <div>
-          <div
-            className="collapsible-section-header"
-            onClick={() => toggleSection('cashIn')}
-            style={{ cursor: 'pointer', marginBottom: '16px' }}
-          >
-            <span className={`chevron${!collapsedSections.cashIn ? ' open' : ''}`}>▸</span>
-            <h3 style={{ margin: 0, display: 'inline' }}>Cash Coming In</h3>
-            <span style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Computed — campaigns × price + meetings × price per customer; TOTAL feeds the Cash Flow Projection
-            </span>
-          </div>
-
-          {!collapsedSections.cashIn &&
-            (driversHydrated && drivers ? (
+        <CollapsibleSection
+          title="Customer Planning"
+          subtitle="Planned new customers — what-if amounts, plus their own campaign/meeting driver grids"
+          colorVar="--purple"
+          collapsed={collapsedSections.planning}
+          onToggle={() => toggleSection('planning')}
+        >
+          {hydrated && planned ? (
+            <>
               <PayrollTable
-                title="Cash Coming In (computed)"
-                subtitle="Read-only · actual months show real GL Cash receipts for current customers; forecast months are campaigns × price + meetings × price"
+                title="Planned Customers"
+                subtitle={`${planned.length} planned customer${
+                  planned.length === 1 ? '' : 's'
+                } · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
                 tintForecast={false}
-                frozenColumns={CASH_IN_FROZEN_COLUMNS}
+                frozenColumns={PLAN_FROZEN_COLUMNS}
                 months={planMonths}
                 todayIso={todayIso}
-                totalRow={cashInTotalRow}
-                rowGroups={[{ key: 'cashIn', label: null, rows: cashInRows }]}
+                totalRow={planTotalRow}
+                rowGroups={[{ key: 'planned', label: null, rows: planRows }]}
+                headActions={
+                  // Plain .btn (white bg), not .btn.primary — solid black would vanish
+                  // against the card's own black header bar (same contrast fix as the
+                  // Payroll tab's "+ Add Role", 2026-08-05).
+                  <button type="button" className="btn" onClick={addPlannedCustomer}>
+                    + Add Customer
+                  </button>
+                }
               />
-            ) : (
-              <div className="cap">Loading saved cash inflow drivers…</div>
-            ))}
-        </div>
+
+              {/* Parallel driver grids for planned customers (2026-08-18) — same
+                  campaigns/meetings shape as the current-customer grids above, rows
+                  keyed to the planning table (add a planned customer there and it
+                  appears here). Kept as separate grids rather than widening the
+                  planning table itself — two more 30-column month sets inside one
+                  table would bury the plan's own five setup columns. */}
+              {driversHydrated && drivers && plannedDriverRows.length > 0 && (
+                <>
+                  <DriverGrid
+                    title="Planned Customers — Campaigns Purchased"
+                    subtitle="# of campaigns purchased per planned customer per month"
+                    rows={plannedDriverRows}
+                    months={planMonths}
+                    isEditableMonth={isEditableMonth}
+                    todayIso={todayIso}
+                    getCount={(key, iso) => getDriverCount('campaigns', key, iso)}
+                    onSetCount={(key, iso, n) => setDriverCount('campaigns', key, iso, n)}
+                  />
+                  <DriverGrid
+                    title="Planned Customers — # of Meetings Booked"
+                    subtitle="# of meetings booked per planned customer per month"
+                    rows={plannedDriverRows}
+                    months={planMonths}
+                    isEditableMonth={isEditableMonth}
+                    todayIso={todayIso}
+                    getCount={(key, iso) => getDriverCount('meetings', key, iso)}
+                    onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
+                  />
+                </>
+              )}
+            </>
+          ) : (
+            <div className="cap">Loading saved customer plan…</div>
+          )}
+        </CollapsibleSection>
+
+        <div style={{ height: 20 }} />
+
+        {/* ----------------------------- Cash Coming In ---------------------------- */}
+        <CollapsibleSection
+          title="Cash Coming In"
+          subtitle="Computed — campaigns × price + meetings × price per customer; TOTAL feeds the Cash Flow Projection"
+          colorVar="--green"
+          collapsed={collapsedSections.cashIn}
+          onToggle={() => toggleSection('cashIn')}
+        >
+          {driversHydrated && drivers ? (
+            <PayrollTable
+              title="Cash Coming In (computed)"
+              subtitle="Read-only · actual months show real GL Cash receipts for current customers; forecast months are campaigns × price + meetings × price"
+              tintForecast={false}
+              frozenColumns={CASH_IN_FROZEN_COLUMNS}
+              months={planMonths}
+              todayIso={todayIso}
+              totalRow={cashInTotalRow}
+              rowGroups={[{ key: 'cashIn', label: null, rows: cashInRows }]}
+            />
+          ) : (
+            <div className="cap">Loading saved cash inflow drivers…</div>
+          )}
+        </CollapsibleSection>
       </div>
     </>
   );

@@ -24,7 +24,7 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
     { id: 'pl', label: 'P&L Projection' },
     { id: 'cf', label: 'Cash Flow Projection' },
     { id: 'payroll', label: 'Payroll' },
-    { id: 'customer', label: 'Customer Cash Flow' },
+    { id: 'customer', label: 'Customer' },
   ];
 
   return (

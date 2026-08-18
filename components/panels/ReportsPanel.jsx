@@ -1238,9 +1238,24 @@ function withReorderedCashFlowRows(rows) {
   if (pickedIdxs.length === 0) return rows;
 
   const topSection = rows[pickedIdxs[0]].section;
-  const orderedTopRows = [beginningIdx, netChangeIdx, endingIdx]
-    .filter((i) => i !== -1)
-    .map((i) => ({ ...rows[i], section: topSection }));
+  // Style the block as the formula it is — Kayee (2026-08-18): "it's like a formula
+  // right. the beginning cash plus the net cash activity equal to ending cash."
+  // Beginning and Net Change render as plain rows (isTotal stripped — the sheet often
+  // marks Net Change as a total, which drops a heavy black band mid-formula); only
+  // Ending Cash keeps the total band, prefixed "=" so the sum reads at a glance.
+  const formulaStyle = [
+    { idx: beginningIdx, isTotal: false, prefix: '' },
+    { idx: netChangeIdx, isTotal: false, prefix: '+ ' },
+    { idx: endingIdx, isTotal: true, prefix: '= ' },
+  ];
+  const orderedTopRows = formulaStyle
+    .filter((s) => s.idx !== -1)
+    .map((s) => ({
+      ...rows[s.idx],
+      section: topSection,
+      isTotal: s.isTotal,
+      label: `${s.prefix}${rows[s.idx].label}`,
+    }));
 
   const removeSet = new Set(pickedIdxs);
   const rest = rows.filter((_, i) => !removeSet.has(i));
