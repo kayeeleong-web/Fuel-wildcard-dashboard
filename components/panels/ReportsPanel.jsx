@@ -5,6 +5,7 @@ import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
 import { MonthInput } from '../payroll/PayrollTable';
 import { PLAssumptionsSidebar } from '../reports/PLAssumptionsSidebar';
+import { CashFlowAssumptionsSidebar } from './CashFlowAssumptionsSidebar';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
@@ -215,6 +216,15 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Cash Flow cash timing state (2026-08-17, Kayee: "cash timing is different... the
+  // flexibility to select pulling from p&l or controlling cash timing like annually on
+  // which month or quarterly") — separate from Assumptions, stored in browser state.
+  // Row timings are keyed by row key ('total_revenue', 'total_cogs', 'total_opex') with
+  // mode ('followPL' or 'customInterval') + custom interval/payMonthOfCycle if applicable.
+  const [cashFlowTiming, setCashFlowTiming] = useState({
+    rowTimings: {},
+  });
+
   // Auto-scroll the page while dragging a cost item (2026-08-10, Kayee: "i try to
   // drag rent to rent in p&l but it's too far to the bottom... make the drag also
   // scroll when i put it to the bottom of the page"). The P&L table has no internal
@@ -243,7 +253,8 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
     return () => document.removeEventListener('dragover', handleDragOver);
   }, []);
 
-  const showSidebar = mode === 'projection' && reportType === 'PL';
+  // Show sidebar for P&L (Assumptions) and CF (Cash Timing) in projection mode
+  const showSidebar = mode === 'projection' && (reportType === 'PL' || reportType === 'CF');
 
   // Non-Headcount Costs display order, matching their real P&L row positions
   // (2026-08-07, Kayee: "make this align with what they actually are"). Recomputed
@@ -322,15 +333,24 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
           // normal .page-wide cap reserves everywhere else, instead of squeezing the
           // Non-Headcount Costs table into a narrower column than it needs.
           <div className={`reports-with-sidebar${sidebarCollapsed ? ' is-collapsed' : ''}`}>
-            <PLAssumptionsSidebar
-              collapsed={sidebarCollapsed}
-              onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-              revenue={assumptionsHydrated ? assumptionsState?.revenue : null}
-              costItems={assumptionsHydrated ? assumptionsState?.costItems : null}
-              onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
-              onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
-              costItemOrder={costItemOrder}
-            />
+            {reportType === 'PL' ? (
+              <PLAssumptionsSidebar
+                collapsed={sidebarCollapsed}
+                onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+                revenue={assumptionsHydrated ? assumptionsState?.revenue : null}
+                costItems={assumptionsHydrated ? assumptionsState?.costItems : null}
+                onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
+                onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
+                costItemOrder={costItemOrder}
+              />
+            ) : reportType === 'CF' ? (
+              <CashFlowAssumptionsSidebar
+                collapsed={sidebarCollapsed}
+                onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+                cashTimingState={cashFlowTiming}
+                onCashTimingChange={setCashFlowTiming}
+              />
+            ) : null}
             <div className="reports-main">
               <StatementDoc
                 statement={statements[reportType]}
