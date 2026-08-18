@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
+import { AssumptionsPanel } from './AssumptionsPanel';
 
 /**
  * Projection tab — sixth sibling panel (2026-08-17, Kayee: "let's separate projection
@@ -52,29 +53,21 @@ export function ProjectionPanel({ statements, customReports }) {
           Assumptions sidebar (P&L only), and extends months through PROJECTION_HORIZON.
           Payroll and Assumptions are their own panels (different UI entirely). */}
 
-      <section className={projectionSubTab === 'pl' ? '' : 'hidden'}>
+      {projectionSubTab === 'pl' && (
         <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="PL" />
-      </section>
+      )}
 
-      <section className={projectionSubTab === 'cf' ? '' : 'hidden'}>
+      {projectionSubTab === 'cf' && (
         <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="CF" />
-      </section>
+      )}
 
-      <section className={projectionSubTab === 'payroll' ? '' : 'hidden'}>
+      {projectionSubTab === 'payroll' && (
         <PayrollPanel />
-      </section>
+      )}
 
-      <section className={projectionSubTab === 'assumptions' ? '' : 'hidden'}>
-        {/* Assumptions tab in Projection — same AssumptionsPanel as the main bar's
-            "Assumptions" tab. This is a duplicate mount (it also appears in
-            DashboardApp), which is fine — they share the SAME localStorage state
-            (useAssumptionsState), so edits in either one sync instantly. The same
-            cost item or revenue rate edited here reflects immediately on the P&L
-            Projection or Cash Flow Projection sub-tabs above. */}
-        {/* For now, just a note — the full AssumptionsPanel wiring will be
-            imported and rendered here once Projection is confirmed live. */}
-        <div className="cap">Assumptions editor — same as main Assumptions tab, shared state</div>
-      </section>
+      {projectionSubTab === 'assumptions' && (
+        <AssumptionsPanel />
+      )}
     </>
   );
 }
