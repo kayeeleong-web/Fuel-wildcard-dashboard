@@ -64,6 +64,32 @@ export interface CustomReportData {
   rows: Record<string, string | number | null>[];
 }
 
+/** Which raw GL export tab a transaction set came from. */
+export type GLTab = "GL Cash" | "GL Accrued";
+
+/** One raw GL transaction row, already normalized (columns located by header name,
+ *  never by hardcoded index — the export's column order is not part of any contract). */
+export interface GLTransaction {
+  date: string; // raw date string as it appears in the sheet
+  month: string; // ISO "YYYY-MM" derived from date
+  account: string; // GL account number/name — customer revenue accounts start with "4"
+  counterparty: string; // Counterparty Name — the customer
+  amount: number;
+}
+
+/**
+ * Transaction-level GL export ("GL Cash" / "GL Accrued" tabs) feeding the Customer
+ * Cash Flow waterfall. `error` is set instead of throwing when the tab is missing or
+ * a required column can't be located, so ONE misconfigured GL tab degrades to a
+ * visible "data source misconfigured" notice in its section rather than taking down
+ * the whole page (CLAUDE.md: never silently wrong, never silently zeroed).
+ */
+export interface GLTransactionData {
+  tab: string;
+  transactions: GLTransaction[];
+  error?: string;
+}
+
 /**
  * The Dashboard tab's Executive Summary narrative — the one piece of genuinely
  * *written* content in the data layer. This is authored offline (an FM running a

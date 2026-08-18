@@ -24,20 +24,37 @@ export const dynamic = 'force-dynamic';
  * rather than rely on middleware alone — this page re-checks explicitly so financial
  * data is never rendered without a verified session, even if middleware config drifts.
  */
+/**
+ * GL Cash / GL Accrued are raw bookkeeping exports, more fragile than the fixed-shape
+ * statement tabs — a missing tab or renamed column must degrade to a visible
+ * "data source misconfigured" notice INSIDE the Customer Cash Flow section (CLAUDE.md),
+ * never crash the whole page: every other tab still renders.
+ */
+async function safeGLTransactions(source, tab) {
+  try {
+    return await source.getGLTransactions(tab);
+  } catch (err) {
+    return { tab, transactions: [], error: err?.message || String(err) };
+  }
+}
+
 export default async function HomePage() {
   const { isAuthenticated, redirectToSignIn } = await auth();
   if (!isAuthenticated) return redirectToSignIn();
 
   const source = getDataSource();
 
-  const [kpiData, dashboardSummary, pl, cf, bs, customReportsList] = await Promise.all([
-    source.getKPIData(),
-    source.getDashboardSummary(),
-    source.getStatement('PL', '24M'),
-    source.getStatement('CF', '24M'),
-    source.getStatement('BS', '24M'),
-    source.listCustomReports(),
-  ]);
+  const [kpiData, dashboardSummary, pl, cf, bs, customReportsList, glCash, glAccrued] =
+    await Promise.all([
+      source.getKPIData(),
+      source.getDashboardSummary(),
+      source.getStatement('PL', '24M'),
+      source.getStatement('CF', '24M'),
+      source.getStatement('BS', '24M'),
+      source.listCustomReports(),
+      safeGLTransactions(source, 'GL Cash'),
+      safeGLTransactions(source, 'GL Accrued'),
+    ]);
 
   return (
     <DashboardApp
@@ -46,6 +63,8 @@ export default async function HomePage() {
       dashboardSummary={dashboardSummary}
       statements={{ PL: pl, CF: cf, BS: bs }}
       customReportsList={customReportsList}
+      glCash={glCash}
+      glAccrued={glAccrued}
     />
   );
 }

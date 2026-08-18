@@ -5,6 +5,8 @@ import type {
   FinancialStatementData,
   CustomReportData,
   DashboardSummary,
+  GLTab,
+  GLTransactionData,
 } from "./types";
 
 /**
@@ -21,6 +23,10 @@ export interface DataSource {
   /** The Dashboard tab's Executive Summary — see DashboardSummary for why this is
    *  authored offline rather than computed. */
   getDashboardSummary(): Promise<DashboardSummary>;
+  /** Raw transaction-level GL export ("GL Cash" / "GL Accrued") for the Customer
+   *  Cash Flow waterfall. Throws when the tab is missing/misshapen — callers wrap
+   *  the call and surface a visible misconfigured-data state (see app/page.js). */
+  getGLTransactions(tab: GLTab): Promise<GLTransactionData>;
 }
 
 /** How long fetched data may be served stale before re-fetching, in seconds. */

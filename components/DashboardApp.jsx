@@ -44,7 +44,7 @@ const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
  * in a useEffect right after mount, which is the standard way to read a browser-only
  * API without breaking SSR.
  */
-export function DashboardApp({ clientName, kpiData, dashboardSummary, statements, customReportsList }) {
+export function DashboardApp({ clientName, kpiData, dashboardSummary, statements, customReportsList, glCash, glAccrued }) {
   const [activeTab, setActiveTab] = useState('kpi');
 
   useEffect(() => {
@@ -87,7 +87,7 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
 
         <section className={`panel-view${activeTab === 'projection' ? ' active' : ''}`}>
           <PanelErrorBoundary name="Projection">
-            <ProjectionPanel statements={statements} customReports={customReportsList} />
+            <ProjectionPanel statements={statements} customReports={customReportsList} glCash={glCash} glAccrued={glAccrued} />
           </PanelErrorBoundary>
         </section>
       </div>

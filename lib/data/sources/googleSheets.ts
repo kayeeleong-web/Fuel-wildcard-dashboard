@@ -11,6 +11,9 @@ import type {
   CustomReportData,
   DashboardSummary,
   Unit,
+  GLTab,
+  GLTransaction,
+  GLTransactionData,
 } from "../types";
 
 /**
@@ -105,6 +108,22 @@ function toNumberOrNull(v: string | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** Parse a GL date cell to an ISO "YYYY-MM" month key, or null when unparseable.
+ *  Handles ISO ("2026-08-14"), US ("8/14/2026"), and anything Date() accepts. */
+function toIsoMonth(raw: string | undefined): string | null {
+  const s = (raw ?? "").trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{4})-(\d{1,2})/); // ISO "YYYY-MM..."
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}`;
+  m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/); // US "M/D/YYYY"
+  if (m) return `${m[3]}-${m[1].padStart(2, "0")}`;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return null;
+}
+
 function toUnit(v: string | undefined): Unit {
   const u = (v ?? "number").toLowerCase();
   if (u === "currency" || u === "percent" || u === "ratio") return u;
@@ -181,6 +200,82 @@ export class GoogleSheetsDataSource implements DataSource {
       });
 
     return { type, months: monthsWanted, rows };
+  }
+
+  /**
+   * Raw transaction-level GL export ("GL Cash" / "GL Accrued") for the Customer Cash
+   * Flow waterfall. These tabs are bookkeeping-tool exports, so unlike KPI_Report/PL/
+   * CF/BS the exact column ORDER is not part of the sheet contract — columns are
+   * located by header name (case-insensitive contains match) from row 1, never by
+   * hardcoded index. A required column that can't be found throws with a message
+   * naming the tab and the header it looked for; app/page.js catches that into a
+   * visible "data source misconfigured" state (CLAUDE.md: never silently zeroed).
+   *
+   * Amount: prefers a single "Amount" column; if the export only has Debit/Credit
+   * pairs, amount = credit − debit (revenue accounts are credit-positive, and every
+   * consumer filters to accounts starting with "4").
+   *
+   * Served through the same getValues() → fetch cache as every other tab, so it
+   * auto-refreshes on the standard DEFAULT_REVALIDATE_SECONDS window.
+   */
+  async getGLTransactions(tab: GLTab): Promise<GLTransactionData> {
+    // Tab names contain a space — must be single-quoted in A1 notation.
+    const headerRows = await getValues(this.sheetId, `'${tab}'!1:1`);
+    const headers = (headerRows[0] ?? []).map((h) => String(h ?? "").trim().toLowerCase());
+    if (headers.length === 0) {
+      throw new Error(`GL tab "${tab}" has no header row (row 1 is empty).`);
+    }
+
+    const findCol = (...needles: string[]) =>
+      headers.findIndex((h) => needles.some((n) => h.includes(n)));
+
+    const counterpartyCol = findCol("counterparty");
+    const accountCol = findCol("account");
+    const dateCol = findCol("date");
+    const amountCol = findCol("amount");
+    const debitCol = findCol("debit");
+    const creditCol = findCol("credit");
+
+    const missing: string[] = [];
+    if (counterpartyCol === -1) missing.push('"Counterparty"');
+    if (accountCol === -1) missing.push('"Account"');
+    if (dateCol === -1) missing.push('"Date"');
+    if (amountCol === -1 && debitCol === -1 && creditCol === -1) {
+      missing.push('"Amount" (or "Debit"/"Credit")');
+    }
+    if (missing.length > 0) {
+      throw new Error(
+        `GL tab "${tab}" is missing required column header(s): ${missing.join(", ")}. ` +
+          `Row 1 must contain them (case-insensitive) — found: ${
+            (headerRows[0] ?? []).filter(Boolean).join(" | ") || "(none)"
+          }.`
+      );
+    }
+
+    const body = await getValues(this.sheetId, `'${tab}'!A2:ZZ`);
+
+    const transactions: GLTransaction[] = [];
+    for (const r of body) {
+      const account = String(r[accountCol] ?? "").trim();
+      const counterparty = String(r[counterpartyCol] ?? "").trim();
+      const date = String(r[dateCol] ?? "").trim();
+      const month = toIsoMonth(date);
+      if (!account || !month) continue; // blank/subtotal/unparseable rows
+
+      let amount: number;
+      if (amountCol !== -1) {
+        amount = toNumberOrNull(r[amountCol]) ?? 0;
+      } else {
+        const debit = debitCol !== -1 ? toNumberOrNull(r[debitCol]) ?? 0 : 0;
+        const credit = creditCol !== -1 ? toNumberOrNull(r[creditCol]) ?? 0 : 0;
+        amount = credit - debit; // revenue (4xxxx) accounts are credit-positive
+      }
+      if (amount === 0) continue;
+
+      transactions.push({ date, month, account, counterparty, amount });
+    }
+
+    return { tab, transactions };
   }
 
   async getDashboardSummary(): Promise<DashboardSummary> {

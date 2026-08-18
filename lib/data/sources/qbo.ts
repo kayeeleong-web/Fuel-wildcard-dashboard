@@ -6,6 +6,8 @@ import type {
   FinancialStatementData,
   CustomReportData,
   DashboardSummary,
+  GLTab,
+  GLTransactionData,
 } from "../types";
 
 /**
@@ -51,5 +53,10 @@ export class QBODataSource implements DataSource {
 
   async getDashboardSummary(): Promise<DashboardSummary> {
     throw new Error("QBODataSource.getDashboardSummary() not implemented yet.");
+  }
+
+  async getGLTransactions(_tab: GLTab): Promise<GLTransactionData> {
+    // QBO's TransactionList report maps onto this when the source is built.
+    throw new Error("QBODataSource.getGLTransactions() not implemented yet.");
   }
 }

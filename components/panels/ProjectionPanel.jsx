@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
+import { CustomerPanel } from './CustomerPanel';
 
 /**
  * Projection tab — sixth sibling panel (2026-08-17, Kayee: "let's separate projection
@@ -16,13 +17,14 @@ import { PayrollPanel } from './PayrollPanel';
  * "Reports" in the main bar hides this entire panel and shows the actual-only Reports
  * view instead.
  */
-export function ProjectionPanel({ statements, customReports }) {
+export function ProjectionPanel({ statements, customReports, glCash, glAccrued }) {
   const [projectionSubTab, setProjectionSubTab] = useState('pl');
 
   const SUB_TABS = [
     { id: 'pl', label: 'P&L Projection' },
     { id: 'cf', label: 'Cash Flow Projection' },
     { id: 'payroll', label: 'Payroll' },
+    { id: 'customer', label: 'Customer Cash Flow' },
   ];
 
   return (
@@ -61,6 +63,10 @@ export function ProjectionPanel({ statements, customReports }) {
 
       {projectionSubTab === 'payroll' && (
         <PayrollPanel />
+      )}
+
+      {projectionSubTab === 'customer' && (
+        <CustomerPanel glCash={glCash} glAccrued={glAccrued} />
       )}
     </>
   );
