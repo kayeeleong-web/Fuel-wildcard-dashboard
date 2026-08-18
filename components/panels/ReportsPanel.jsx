@@ -9,6 +9,13 @@ import { CashFlowAssumptionsSidebar } from './CashFlowAssumptionsSidebar';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
+import { useCashTimingState } from '../../lib/cashflow/useCashTimingState';
+import {
+  plExpenseAccounts,
+  plAccrualForMonth,
+  cashOutflowForMonth,
+  readCustomerInflowTotals,
+} from '../../lib/cashflow/cashProjection';
 import {
   headcountCostByCostType,
   headcountSalariesByCostType,
@@ -223,16 +230,64 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Cash Flow Assumptions state (2026-08-17, Kayee: "let's start building out cash
-  // inflow mechanism... current customer total plus projection how many client they have").
-  // Includes: revenue assumptions (customer count + pricing), COGS/OpEx accounts list,
-  // and timing overrides per GL account (follow P&L or custom interval + month).
-  const [cashFlowState, setCashFlowState] = useState({
-    revenue: { currentCustomers: 0, projectedNewCustomers: 0, upfrontPerCustomer: 0, meetingPrice: 0 },
-    cogsAccounts: [], // Will be populated from GL later
-    opexAccounts: [], // Will be populated from GL later
-    timingByAccount: {}, // { glAccountId: { mode, intervalMonths, payMonthOfCycle } }
-  });
+  // Cash Flow timing state (2026-08-18 rebuild) — per-P&L-account cash-timing config
+  // (Follow P&L / custom interval / manual), persisted to localStorage via the same
+  // hydrate-then-save pattern as Assumptions/Payroll. The old cashFlowState "Revenue
+  // Inflow" fields (currentCustomers/upfrontPerCustomer/...) are GONE — customer cash-in
+  // inputs live on the Customer Cash Flow tab now, which writes its computed monthly
+  // totals to localStorage (CUSTOMER_INFLOW_STORAGE_KEY) for this panel to read below.
+  const { state: cashTimingState, setState: setCashTimingState, hydrated: cashTimingHydrated } = useCashTimingState();
+
+  // Payroll state is needed at THIS level (not just inside StatementDoc) because the
+  // CF sidebar's per-account accrual reference and the CF projection's outflow math
+  // both fold in Payroll's headcount costs, same as the P&L projection does.
+  const { state: cfPayrollState, hydrated: cfPayrollHydrated } = usePayrollState();
+
+  // Customer tab → CF projection handoff: CustomerPanel (a sibling sub-tab that
+  // unmounts on tab switch) writes its "Cash Coming In" monthly TOTALs to
+  // localStorage whenever its inputs change; this panel reads that key once on mount
+  // (remounting on every sub-tab switch, so it always sees the latest save). See
+  // lib/cashflow/cashProjection.js + CustomerPanel.jsx for the other half of the link.
+  const [customerInflowTotals, setCustomerInflowTotals] = useState(null);
+  useEffect(() => {
+    setCustomerInflowTotals(readCustomerInflowTotals());
+  }, []);
+
+  // The COGS/OpEx account lists the CF sidebar shows timing controls for — the actual
+  // chart-of-account rows from the live P&L statement (plus Payroll's injected COGS
+  // headcount line and any user-added manual P&L accounts).
+  const expenseAccounts = useMemo(
+    () => plExpenseAccounts(statements?.PL, assumptionsHydrated ? assumptionsState?.customPLAccounts : null),
+    [statements, assumptionsState, assumptionsHydrated]
+  );
+
+  // Context for computing one account's projected P&L accrual in a forecast month —
+  // the same hydrated Assumptions + Payroll state the P&L projection pipeline reads.
+  const cfAccrualCtx = {
+    revenue: assumptionsHydrated ? assumptionsState?.revenue : null,
+    costItems: assumptionsHydrated ? assumptionsState?.costItems || [] : [],
+    payrollState: cfPayrollHydrated ? cfPayrollState : null,
+    sbSection: expenseAccounts.sbSection,
+  };
+
+  // Forecast months the sidebar's Manual-input mode exposes for typing — after the
+  // P&L's last actual month, capped at 2028-12 (the app's default forward window;
+  // typing 50+ cells out to the 2030 horizon would be noise, and untyped months are
+  // simply $0 cash out).
+  const cfManualMonths = useMemo(() => {
+    const pl = statements?.PL;
+    if (!pl || pl.months.length === 0) return [];
+    const lastActual = pl.months[pl.months.length - 1];
+    return extendMonthsThrough(pl.months, PROJECTION_HORIZON).filter((m) => m > lastActual && m <= '2028-12');
+  }, [statements]);
+
+  function handleSetTiming(accountId, timing) {
+    if (!cashTimingState) return;
+    const next = { ...(cashTimingState.timingByAccount || {}) };
+    if (timing == null) delete next[accountId];
+    else next[accountId] = timing;
+    setCashTimingState({ ...cashTimingState, timingByAccount: next });
+  }
 
   // Auto-scroll the page while dragging a cost item (2026-08-10, Kayee: "i try to
   // drag rent to rent in p&l but it's too far to the bottom... make the drag also
@@ -356,8 +411,12 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
               <CashFlowAssumptionsSidebar
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-                cashFlowState={cashFlowState}
-                onCashFlowChange={setCashFlowState}
+                cogsAccounts={cashTimingHydrated ? expenseAccounts.cogsAccounts : null}
+                opexAccounts={cashTimingHydrated ? expenseAccounts.opexAccounts : null}
+                timingByAccount={cashTimingState?.timingByAccount || {}}
+                onSetTiming={handleSetTiming}
+                manualMonths={cfManualMonths}
+                accrualFor={(account, iso) => plAccrualForMonth(account, iso, cfAccrualCtx)}
               />
             ) : null}
             <div className="reports-main">
@@ -368,6 +427,16 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 setAssumptionsState={setAssumptionsState}
                 assumptionsHydrated={assumptionsHydrated}
                 mode={mode}
+                cfProjection={
+                  reportType === 'CF'
+                    ? {
+                        expenseAccounts,
+                        timingByAccount: (cashTimingHydrated && cashTimingState?.timingByAccount) || {},
+                        customerInflowTotals,
+                        accrualCtx: cfAccrualCtx,
+                      }
+                    : null
+                }
               />
             </div>
           </div>
@@ -467,6 +536,30 @@ function revenueCalcExplanation(rowKey, revenue) {
  *  (see PL_COST_PROJECTIONS_BY_LABEL above) — formula-only text on the row label, no
  *  `iso` and no computed component numbers (2026-08-07, same follow-up as above). */
 function costCalcExplanation(rowLabel, ctx) {
+  if (!ctx) return null;
+  // CASH PROJECTION rows (CF projection only, 2026-08-18) — see
+  // withCashFlowProjectionRows for where these rows come from.
+  if (rowLabel === 'Customer Cash Inflow') {
+    return {
+      calcNote:
+        'Monthly TOTAL of the "Cash Coming In" table on the Customer Cash Flow tab (campaigns × price per campaign + meetings × price per meeting, current + planned customers). Edit it there — a blank cell means that tab has not been filled in on this browser yet.',
+    };
+  }
+  if (rowLabel === 'COGS Cash Outflow') {
+    return {
+      calcNote:
+        "Every P&L COGS account's projected accrual, run through its cash-timing setting in the Cash Flow Assumptions sidebar — Follow P&L (cash = accrual month-by-month), Custom interval (cycle's accruals land in the chosen payment month), or Manual input.",
+    };
+  }
+  if (rowLabel === 'OpEx Cash Outflow') {
+    return {
+      calcNote:
+        "Every P&L OpEx account's projected accrual (incl. Payroll's salaries/taxes/benefits/bonuses), run through its cash-timing setting in the Cash Flow Assumptions sidebar.",
+    };
+  }
+  if (rowLabel === 'Net Projected Cash Flow') {
+    return { calcNote: 'Customer Cash Inflow − COGS Cash Outflow − OpEx Cash Outflow, forecast months only.' };
+  }
   if (!ctx.revenue) return null;
   if (rowLabel === 'Total COGS') {
     return { calcNote: 'Total COGS = Cost Per Campaign + Non-Headcount Cost items tagged CoGS + Payroll headcount tagged CoGS. Editable on the Assumptions and Payroll tabs.' };
@@ -1154,6 +1247,61 @@ function withReorderedCashFlowRows(rows) {
   return [...orderedTopRows, ...rest];
 }
 
+/** Cash Flow forecast rows (2026-08-18) — the CF projection had no forecast pipeline
+ *  at all before this (every CF-specific transform was PL-only), so the sidebar's
+ *  cash-timing controls and the Customer tab's cash-in plan had nothing to land on.
+ *  The live CF sheet's own account rows have no confirmed key/label mapping to P&L
+ *  accounts yet, so rather than guess-patching real sheet rows (a wrong number that
+ *  looks booked is the worst failure mode here), this appends one clearly-labeled
+ *  "CASH PROJECTION" section with four rows, forecast months only:
+ *
+ *   - Customer Cash Inflow — the monthly TOTAL of the Customer Cash Flow tab's
+ *     computed "Cash Coming In" table (campaigns × price + meetings × price), read
+ *     from localStorage (CUSTOMER_INFLOW_STORAGE_KEY — see CustomerPanel.jsx, which
+ *     writes it on every input change). Blank (not $0) if that tab has never saved.
+ *   - COGS Cash Outflow / OpEx Cash Outflow — every P&L expense account's projected
+ *     accrual run through its cash-timing config from the CF sidebar (Follow P&L /
+ *     custom interval / manual — see lib/cashflow/cashProjection.js).
+ *   - Net Projected Cash Flow — inflow − both outflows, rendered as a Total band.
+ *
+ *  Actual months are never touched — real GL cash history stays exactly as the sheet
+ *  reported it. */
+function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection) {
+  const { expenseAccounts, timingByAccount, customerInflowTotals, accrualCtx } = cfProjection;
+  const forecastMonths = months.slice(lastActualIndex + 1);
+  if (forecastMonths.length === 0) return rows;
+  const forecastSet = new Set(forecastMonths);
+  const section = 'CASH PROJECTION';
+
+  const inflowValues = {};
+  const cogsValues = {};
+  const opexValues = {};
+  const netValues = {};
+  for (const iso of forecastMonths) {
+    const inflow = customerInflowTotals ? Number(customerInflowTotals[iso]) || 0 : null;
+    let cogs = 0;
+    for (const account of expenseAccounts.cogsAccounts) {
+      cogs += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
+    }
+    let opex = 0;
+    for (const account of expenseAccounts.opexAccounts) {
+      opex += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
+    }
+    if (inflow != null) inflowValues[iso] = inflow;
+    cogsValues[iso] = cogs;
+    opexValues[iso] = opex;
+    netValues[iso] = (inflow || 0) - cogs - opex;
+  }
+
+  return [
+    ...rows,
+    { key: 'cfproj_inflow', label: 'Customer Cash Inflow', section, isTotal: false, values: inflowValues },
+    { key: 'cfproj_cogs_outflow', label: 'COGS Cash Outflow', section, isTotal: false, values: cogsValues },
+    { key: 'cfproj_opex_outflow', label: 'OpEx Cash Outflow', section, isTotal: false, values: opexValues },
+    { key: 'cfproj_net', label: 'Net Projected Cash Flow', section, isTotal: true, values: netValues },
+  ];
+}
+
 /** Generic fallback so every fine-grained section Total (e.g. "Total Meals &
  *  Entertainment", "Total Professional Services") also projects forward, not just the
  *  handful of labels PL_COST_PROJECTIONS_BY_LABEL knows a bespoke formula for (Total
@@ -1235,7 +1383,7 @@ function withGrossProfitMarginRow(rows, months) {
   return [...rows.slice(0, gpIdx + 1), marginRow, ...rows.slice(gpIdx + 1)];
 }
 
-function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection' }) {
+function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection', cfProjection = null }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
   if (!statement) return <div className="cap">No data for this statement yet.</div>;
@@ -1413,6 +1561,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withReorderedCashFlowRows(rows);
     } catch (err) {
       console.warn('Cash Flow row reorder failed, showing sheet order:', err);
+    }
+  }
+  if (statement.type === 'CF' && cfProjection) {
+    try {
+      rows = withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection);
+    } catch (err) {
+      console.warn('Cash Flow projection row injection failed:', err);
     }
   }
 
