@@ -1147,34 +1147,124 @@ tr.pr-dragging { opacity: .4; }
    screenshot of the app chrome: no topbar, no nav, no interactive controls, no hover
    affordances, and tables/cards are allowed to break across pages instead of being
    clipped by their on-screen scroll containers. */
-/* Cash Flow sidebar uses the same card styling as P&L sidebar (2026-08-17) */
-.sidebar-card-toggle {
-  width: 100%;
-  padding: 8px 0;
-  background: none;
-  border: none;
-  color: var(--blue);
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: center;
-  margin-top: 8px;
-  border-top: 1px solid var(--border-light);
+/* Sidebar cards and controls — consistent with P&L sidebar styling */
+.sidebar-section {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-light);
 }
 
-.sidebar-card-toggle:hover {
-  color: var(--blue-dark);
+.sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.sidebar-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 0 10px 0;
+  letter-spacing: 0.4px;
+}
+
+.sidebar-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: box-shadow 150ms ease;
+}
+
+.sidebar-card:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.01);
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  gap: 8px;
+}
+
+.sidebar-card-header:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.sidebar-card-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.sidebar-card-value {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.sidebar-card-body {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.005);
+}
+
+.sidebar-control-group {
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sidebar-control-group:last-child {
+  margin-bottom: 0;
+}
+
+.sidebar-input-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+}
+
+.sidebar-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.sidebar-radio-label input[type="radio"] {
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .sidebar-select,
 .sidebar-input {
   width: 100%;
-  padding: 6px 8px;
+  padding: 7px 8px;
   border: 1px solid var(--border-light);
   border-radius: 4px;
   font-size: 12px;
   background: white;
   color: var(--text-primary);
+  font-family: inherit;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.sidebar-select:hover,
+.sidebar-input:hover {
+  border-color: var(--border-medium);
 }
 
 .sidebar-select:focus,
@@ -1182,6 +1272,24 @@ tr.pr-dragging { opacity: .4; }
   outline: none;
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.sidebar-card-toggle {
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border-top: 1px solid var(--border-light);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.sidebar-card-toggle:hover {
+  color: var(--blue-dark);
+  background: rgba(59, 130, 246, 0.02);
 }
 
 @media print {
