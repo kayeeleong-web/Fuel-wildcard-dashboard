@@ -1147,167 +1147,41 @@ tr.pr-dragging { opacity: .4; }
    screenshot of the app chrome: no topbar, no nav, no interactive controls, no hover
    affordances, and tables/cards are allowed to break across pages instead of being
    clipped by their on-screen scroll containers. */
-/* Cash Flow Assumptions sidebar (2026-08-17, Kayee: "the flexibility to select pulling
-   from p&l or controlling cash timing like annually on which month or quarterly") —
-   same left-sidebar pattern as PLAssumptionsSidebar. Each P&L row (Revenue/COGS/OpEx)
-   can override its cash timing: follow P&L accrual, or custom interval (monthly/
-   quarterly/annual) + specific month of that cycle. */
-.cash-timing-container {
-  padding: 12px 0;
-}
-
-.cash-timing-section {
-  margin-bottom: 16px;
-}
-
-.cash-timing-section-title {
+/* Cash Flow sidebar uses the same card styling as P&L sidebar (2026-08-17) */
+.sidebar-card-toggle {
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  color: var(--blue);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin: 0 0 8px 0;
-  padding: 0 12px;
-  letter-spacing: 0.5px;
-}
-
-.cash-timing-note {
-  font-size: 11px;
-  color: var(--text-secondary);
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  border-left: 3px solid var(--blue-light);
-  background: rgba(59, 130, 246, 0.02);
-  line-height: 1.4;
-}
-
-.cash-timing-row {
-  border-bottom: 1px solid var(--border-light);
-  margin-bottom: 0;
-}
-
-.cash-timing-row-header {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
   cursor: pointer;
-  font-size: 13px;
-  gap: 8px;
-  text-align: left;
-  color: var(--text-primary);
-  transition: background 150ms ease;
-}
-
-.cash-timing-row-header:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.cash-timing-chevron {
-  display: inline-block;
-  width: 16px;
   text-align: center;
-  transition: transform 150ms ease;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.cash-timing-chevron.open {
-  transform: rotate(90deg);
-}
-
-.cash-timing-row-label {
-  flex: 1;
-  font-weight: 500;
-  font-size: 13px;
-}
-
-.cash-timing-row-summary {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.cash-timing-row-detail {
-  padding: 0 12px 12px 12px;
-  background: rgba(0, 0, 0, 0.01);
-}
-
-.cash-timing-mode-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.cash-timing-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.cash-timing-option input[type="radio"] {
-  cursor: pointer;
-  width: 14px;
-  height: 14px;
-}
-
-.cash-timing-custom-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-light);
   margin-top: 8px;
+  border-top: 1px solid var(--border-light);
 }
 
-.cash-timing-control-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.sidebar-card-toggle:hover {
+  color: var(--blue-dark);
 }
 
-.cash-timing-control-group label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.cash-timing-control-group select,
-.cash-timing-control-group input[type="number"] {
+.sidebar-select,
+.sidebar-input {
+  width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--border-light);
   border-radius: 4px;
   font-size: 12px;
   background: white;
   color: var(--text-primary);
-  font-family: inherit;
 }
 
-.cash-timing-control-group select:hover,
-.cash-timing-control-group input[type="number"]:hover {
-  border-color: var(--border-medium);
-}
-
-.cash-timing-control-group select:focus,
-.cash-timing-control-group input[type="number"]:focus {
+.sidebar-select:focus,
+.sidebar-input:focus {
   outline: none;
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-.cash-timing-helper-text {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-  line-height: 1.3;
-  padding: 4px 0;
 }
 
 @media print {
