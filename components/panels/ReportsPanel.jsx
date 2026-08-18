@@ -244,7 +244,8 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   const { state: cfPayrollState, hydrated: cfPayrollHydrated } = usePayrollState();
 
   // Customer tab → CF projection handoff: CustomerPanel (a sibling sub-tab that
-  // unmounts on tab switch) writes its "Cash Coming In" monthly TOTALs to
+  // unmounts on tab switch) writes the "Cash Coming In" monthly TOTALs from its
+  // Cash Inflow Projection section to
   // localStorage whenever its inputs change; this panel reads that key once on mount
   // (remounting on every sub-tab switch, so it always sees the latest save). See
   // lib/cashflow/cashProjection.js + CustomerPanel.jsx for the other half of the link.
@@ -542,7 +543,7 @@ function costCalcExplanation(rowLabel, ctx) {
   if (rowLabel === 'Customer Cash Inflow') {
     return {
       calcNote:
-        'Monthly TOTAL of the "Cash Coming In" table on the Customer Cash Flow tab (campaigns × price per campaign + meetings × price per meeting, current + planned customers). Edit it there — a blank cell means that tab has not been filled in on this browser yet.',
+        'Cash Coming In monthly TOTAL from the Cash Inflow Projection section on the Customer Cash Flow tab (campaigns × price per campaign + meetings × price per meeting, current + planned customers). Edit it there — a blank cell means that tab has not been filled in on this browser yet.',
     };
   }
   if (rowLabel === 'COGS Cash Outflow') {
@@ -1270,8 +1271,9 @@ function withReorderedCashFlowRows(rows) {
  *  looks booked is the worst failure mode here), this appends one clearly-labeled
  *  "CASH PROJECTION" section with four rows, forecast months only:
  *
- *   - Customer Cash Inflow — the monthly TOTAL of the Customer Cash Flow tab's
- *     computed "Cash Coming In" table (campaigns × price + meetings × price), read
+ *   - Customer Cash Inflow — the computed Cash Coming In monthly TOTAL from the
+ *     Customer Cash Flow tab's Cash Inflow Projection section (campaigns × price +
+ *     meetings × price), read
  *     from localStorage (CUSTOMER_INFLOW_STORAGE_KEY — see CustomerPanel.jsx, which
  *     writes it on every input change). Blank (not $0) if that tab has never saved.
  *   - COGS Cash Outflow / OpEx Cash Outflow — every P&L expense account's projected

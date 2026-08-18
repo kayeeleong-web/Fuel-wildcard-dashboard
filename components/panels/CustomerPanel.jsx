@@ -20,21 +20,28 @@ import {
  * customer tab just like payroll inside of projection... i want to see the flow like
  * month over month cash movement for customer from GL Cash and then Accrued GL").
  *
- * Sections:
+ * Sections (2026-08-18, Kayee: merged the three inflow cards into ONE — "one section,
+ * one card", summary promoted to the top):
  *  - Current Customers: TWO cohort-style waterfall tables built live from the raw GL
  *    exports — Cash (GL Cash tab: when money was actually received) and Accrued
  *    (GL Accrued tab: when revenue was recognized).
- *  - Cash Inflow Drivers (2026-08-18, matching Kayee's own Google-Sheet workflow —
- *    grids of customers × months): editable "# of campaigns purchased" and "# of
- *    meetings booked" per customer per forecast month, rows pre-populated from the
- *    live GL Cash roster plus manually added rows. Price per Campaign / Price per
- *    Meeting assumptions sit at the top.
- *  - Customer Planning: the planned-customer what-if table, PLUS the same two driver
- *    grids for planned customers (parallel grids keyed to the planned rows — cleaner
- *    than widening the planning table itself to 30+ month columns twice over).
- *  - Cash Coming In (computed, read-only): per customer per month = campaigns ×
- *    campaign price + meetings × meeting price, with a bold TOTAL row. Actual months
- *    for current customers show the real GL Cash receipts read-only.
+ *  - Cash Inflow Projection (the former "Cash Inflow Drivers" + "Customer Planning" +
+ *    "Cash Coming In" cards, now one card), top to bottom:
+ *      1. Summary strip: Price per Campaign / Price per Meeting assumptions plus the
+ *         computed Cash Coming In monthly TOTAL row as a compact live summary that
+ *         recalculates as the inputs below change.
+ *      2. Current & pipeline driver grids (matching Kayee's own Google-Sheet
+ *         workflow — grids of customers × months): editable "# of campaigns
+ *         purchased" and "# of meetings booked" per customer per forecast month,
+ *         rows pre-populated from the live GL Cash roster plus manually added rows.
+ *      3. "Planned Customers" block (subtle labeled divider, same card): the
+ *         planned-customer what-if table, PLUS the same two driver grids for planned
+ *         customers (parallel grids keyed to the planned rows — cleaner than widening
+ *         the planning table itself to 30+ month columns twice over).
+ *      4. Cash Coming In detail (computed, read-only): per customer per month =
+ *         campaigns × campaign price + meetings × meeting price. Actual months for
+ *         current customers show the real GL Cash receipts read-only; its TOTAL is
+ *         the same row shown in the summary strip at the top.
  *
  * CF PROJECTION LINK (2026-08-18): whenever the driver inputs/prices change, this
  * panel writes the computed monthly Cash-Coming-In TOTALs (forecast months only) to
@@ -71,6 +78,22 @@ const CASH_IN_FROZEN_COLUMNS = [
   { key: 'name', label: 'Customer', width: 200 },
   { key: 'kind', label: 'Type', width: 90 },
 ];
+
+// The top-of-section summary strip is a TOTAL-only PayrollTable (no data rows), so it
+// only needs the one frozen label column — width matches the driver grids below it.
+const SUMMARY_FROZEN_COLUMNS = [{ key: 'name', label: '', width: 230 }];
+
+/** Subtle labeled divider between blocks INSIDE the one Cash Inflow Projection card —
+ *  deliberately not another CollapsibleSection (2026-08-18: "one section, one card,
+ *  not three"). Reuses the embedded-table title typography and the --border token. */
+function BlockDivider({ label }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
+      <span className="payroll-embedded-title">{label}</span>
+      <span style={{ flex: 1, borderTop: '1px solid var(--border)' }} />
+    </div>
+  );
+}
 
 /** Whole months from `startIso` ("YYYY-MM") to `iso` — 0 for the start month itself. */
 function monthDiff(startIso, iso) {
@@ -291,9 +314,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
   const [range, setRange] = useState('default');
   const [collapsedSections, setCollapsedSections] = useState({
     current: false,
-    inflow: false,
-    planning: false,
-    cashIn: false,
+    projection: false,
   });
   const { rows: planned, setRows: setPlanned, hydrated } = usePlannedCustomers();
   const { state: drivers, setState: setDrivers, hydrated: driversHydrated } = useCustomerDrivers();
@@ -472,7 +493,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
     }
   }, [inflowTotalsByMonth]);
 
-  /* ------------------------- Customer Planning handlers ------------------------- */
+  /* ------------------------ Planned-customer handlers ------------------------ */
 
   function addPlannedCustomer() {
     const id = generateId('cust');
@@ -624,7 +645,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
           so this section breaks out wider, exactly like the Payroll tab (.page-wide
           in globals.css). PageHead above stays at the normal page width. */}
       <div className="page-wide">
-        {/* Each of the 4 sections is a CollapsibleSection card — the exact same
+        {/* Each of the 2 sections is a CollapsibleSection card — the exact same
             .pr-outer-section "outer folder" shell the Payroll tab uses for Existing /
             Planned / Total Comp, so both Projection tabs read identically: tinted
             header bar with chevron + colored dot + title + caption, black-headed
@@ -669,18 +690,27 @@ export function CustomerPanel({ glCash, glAccrued }) {
 
         <div style={{ height: 20 }} />
 
-        {/* ------------------------- Cash Inflow Drivers ------------------------- */}
+        {/* ----------------------- Cash Inflow Projection ----------------------- */}
+        {/* ONE card (2026-08-18) merging the former Cash Inflow Drivers + Customer
+            Planning + Cash Coming In cards. Order inside: summary strip (prices +
+            live monthly TOTAL) → current & pipeline driver grids → Planned Customers
+            block (labeled divider, not a separate card) → computed per-customer
+            Cash Coming In detail. */}
         <CollapsibleSection
-          title="Cash Inflow Drivers"
-          subtitle="Campaigns purchased & meetings booked per forecast month — feeds the Cash Flow Projection"
+          title="Cash Inflow Projection"
+          subtitle="Prices & live monthly TOTAL · campaigns/meetings drivers · planned customers — feeds the Cash Flow Projection"
           colorVar="--teal"
-          collapsed={collapsedSections.inflow}
-          onToggle={() => toggleSection('inflow')}
+          collapsed={collapsedSections.projection}
+          onToggle={() => toggleSection('projection')}
         >
           {driversHydrated && drivers ? (
             <>
-              {/* Price assumptions — same AssumptionField strip as the Payroll tab's
-                  assumptions bar, so the pattern reads identically across tabs. */}
+              {/* 1 — SUMMARY STRIP. Price assumptions — same AssumptionField strip as
+                  the Payroll tab's assumptions bar, so the pattern reads identically
+                  across tabs — plus the computed Cash Coming In monthly TOTAL as a
+                  TOTAL-only table (no data rows): it recalculates live as the driver
+                  inputs below change, because it renders the same cashInTotalRow the
+                  detail table at the bottom uses. */}
               <div className="payroll-assumptions">
                 <AssumptionField
                   label="Price per Campaign"
@@ -701,6 +731,19 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 </div>
               </div>
 
+              <PayrollTable
+                title="Cash Coming In — Monthly TOTAL"
+                subtitle="Live summary of everything below (current + pipeline + planned) · forecast TOTALs feed the Cash Flow Projection"
+                tintForecast={false}
+                frozenColumns={SUMMARY_FROZEN_COLUMNS}
+                months={planMonths}
+                todayIso={todayIso}
+                totalRow={cashInTotalRow}
+                rowGroups={[{ key: 'summary', label: null, rows: [] }]}
+              />
+
+              {/* 2 — current & pipeline driver grids (rows from the live GL Cash
+                  roster plus manually added rows). */}
               <DriverGrid
                 title="Current & Pipeline — Campaigns Purchased"
                 subtitle="# of campaigns purchased per customer per month · rows from the live GL Cash roster, plus rows you add"
@@ -727,102 +770,85 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 getCount={(key, iso) => getDriverCount('meetings', key, iso)}
                 onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
               />
-            </>
-          ) : (
-            <div className="cap">Loading saved cash inflow drivers…</div>
-          )}
-        </CollapsibleSection>
 
-        <div style={{ height: 20 }} />
+              {/* 3 — PLANNED CUSTOMERS block. Appended directly below the
+                  current-customer grids in the SAME card — separated only by the
+                  subtle labeled divider, not another section. */}
+              <BlockDivider label="Planned Customers" />
+              {hydrated && planned ? (
+                <>
+                  <PayrollTable
+                    title="Planned Customers"
+                    subtitle={`${planned.length} planned customer${
+                      planned.length === 1 ? '' : 's'
+                    } · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
+                    tintForecast={false}
+                    frozenColumns={PLAN_FROZEN_COLUMNS}
+                    months={planMonths}
+                    todayIso={todayIso}
+                    totalRow={planTotalRow}
+                    rowGroups={[{ key: 'planned', label: null, rows: planRows }]}
+                    headActions={
+                      // Plain .btn (white bg), not .btn.primary — solid black would vanish
+                      // against the card's own black header bar (same contrast fix as the
+                      // Payroll tab's "+ Add Role", 2026-08-05).
+                      <button type="button" className="btn" onClick={addPlannedCustomer}>
+                        + Add Customer
+                      </button>
+                    }
+                  />
 
-        {/* --------------------------- Customer Planning -------------------------- */}
-        <CollapsibleSection
-          title="Customer Planning"
-          subtitle="Planned new customers — what-if amounts, plus their own campaign/meeting driver grids"
-          colorVar="--purple"
-          collapsed={collapsedSections.planning}
-          onToggle={() => toggleSection('planning')}
-        >
-          {hydrated && planned ? (
-            <>
+                  {/* Parallel driver grids for planned customers (2026-08-18) — same
+                      campaigns/meetings shape as the current-customer grids above, rows
+                      keyed to the planning table (add a planned customer there and it
+                      appears here). Kept as separate grids rather than widening the
+                      planning table itself — two more 30-column month sets inside one
+                      table would bury the plan's own five setup columns. */}
+                  {plannedDriverRows.length > 0 && (
+                    <>
+                      <DriverGrid
+                        title="Planned Customers — Campaigns Purchased"
+                        subtitle="# of campaigns purchased per planned customer per month"
+                        rows={plannedDriverRows}
+                        months={planMonths}
+                        isEditableMonth={isEditableMonth}
+                        todayIso={todayIso}
+                        getCount={(key, iso) => getDriverCount('campaigns', key, iso)}
+                        onSetCount={(key, iso, n) => setDriverCount('campaigns', key, iso, n)}
+                      />
+                      <DriverGrid
+                        title="Planned Customers — # of Meetings Booked"
+                        subtitle="# of meetings booked per planned customer per month"
+                        rows={plannedDriverRows}
+                        months={planMonths}
+                        isEditableMonth={isEditableMonth}
+                        todayIso={todayIso}
+                        getCount={(key, iso) => getDriverCount('meetings', key, iso)}
+                        onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
+                      />
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="cap">Loading saved customer plan…</div>
+              )}
+
+              {/* 4 — Cash Coming In per-customer detail (read-only). Its TOTAL row is
+                  the exact same cashInTotalRow already shown as the summary strip at
+                  the top of this card — the strip is the promoted summary, this is
+                  the breakdown behind it. */}
+              <BlockDivider label="Cash Coming In — Detail" />
               <PayrollTable
-                title="Planned Customers"
-                subtitle={`${planned.length} planned customer${
-                  planned.length === 1 ? '' : 's'
-                } · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
+                title="Cash Coming In (computed)"
+                subtitle="Read-only · actual months show real GL Cash receipts for current customers; forecast months are campaigns × price + meetings × price"
                 tintForecast={false}
-                frozenColumns={PLAN_FROZEN_COLUMNS}
+                frozenColumns={CASH_IN_FROZEN_COLUMNS}
                 months={planMonths}
                 todayIso={todayIso}
-                totalRow={planTotalRow}
-                rowGroups={[{ key: 'planned', label: null, rows: planRows }]}
-                headActions={
-                  // Plain .btn (white bg), not .btn.primary — solid black would vanish
-                  // against the card's own black header bar (same contrast fix as the
-                  // Payroll tab's "+ Add Role", 2026-08-05).
-                  <button type="button" className="btn" onClick={addPlannedCustomer}>
-                    + Add Customer
-                  </button>
-                }
+                totalRow={cashInTotalRow}
+                rowGroups={[{ key: 'cashIn', label: null, rows: cashInRows }]}
               />
-
-              {/* Parallel driver grids for planned customers (2026-08-18) — same
-                  campaigns/meetings shape as the current-customer grids above, rows
-                  keyed to the planning table (add a planned customer there and it
-                  appears here). Kept as separate grids rather than widening the
-                  planning table itself — two more 30-column month sets inside one
-                  table would bury the plan's own five setup columns. */}
-              {driversHydrated && drivers && plannedDriverRows.length > 0 && (
-                <>
-                  <DriverGrid
-                    title="Planned Customers — Campaigns Purchased"
-                    subtitle="# of campaigns purchased per planned customer per month"
-                    rows={plannedDriverRows}
-                    months={planMonths}
-                    isEditableMonth={isEditableMonth}
-                    todayIso={todayIso}
-                    getCount={(key, iso) => getDriverCount('campaigns', key, iso)}
-                    onSetCount={(key, iso, n) => setDriverCount('campaigns', key, iso, n)}
-                  />
-                  <DriverGrid
-                    title="Planned Customers — # of Meetings Booked"
-                    subtitle="# of meetings booked per planned customer per month"
-                    rows={plannedDriverRows}
-                    months={planMonths}
-                    isEditableMonth={isEditableMonth}
-                    todayIso={todayIso}
-                    getCount={(key, iso) => getDriverCount('meetings', key, iso)}
-                    onSetCount={(key, iso, n) => setDriverCount('meetings', key, iso, n)}
-                  />
-                </>
-              )}
             </>
-          ) : (
-            <div className="cap">Loading saved customer plan…</div>
-          )}
-        </CollapsibleSection>
-
-        <div style={{ height: 20 }} />
-
-        {/* ----------------------------- Cash Coming In ---------------------------- */}
-        <CollapsibleSection
-          title="Cash Coming In"
-          subtitle="Computed — campaigns × price + meetings × price per customer; TOTAL feeds the Cash Flow Projection"
-          colorVar="--green"
-          collapsed={collapsedSections.cashIn}
-          onToggle={() => toggleSection('cashIn')}
-        >
-          {driversHydrated && drivers ? (
-            <PayrollTable
-              title="Cash Coming In (computed)"
-              subtitle="Read-only · actual months show real GL Cash receipts for current customers; forecast months are campaigns × price + meetings × price"
-              tintForecast={false}
-              frozenColumns={CASH_IN_FROZEN_COLUMNS}
-              months={planMonths}
-              todayIso={todayIso}
-              totalRow={cashInTotalRow}
-              rowGroups={[{ key: 'cashIn', label: null, rows: cashInRows }]}
-            />
           ) : (
             <div className="cap">Loading saved cash inflow drivers…</div>
           )}
