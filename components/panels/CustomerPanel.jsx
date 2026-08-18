@@ -312,9 +312,12 @@ function DriverGrid({ title, subtitle, rows, months, isEditableMonth, todayIso, 
 export function CustomerPanel({ glCash, glAccrued }) {
   const todayIso = currentIsoMonth();
   const [range, setRange] = useState('default');
+  // Both sections start collapsed (2026-08-18, Kayee: "make the section in customer
+  // stay collapsed default when open the page") — the tab opens quiet, the user
+  // expands whichever section they actually want to work in.
   const [collapsedSections, setCollapsedSections] = useState({
-    current: false,
-    projection: false,
+    current: true,
+    projection: true,
   });
   const { rows: planned, setRows: setPlanned, hydrated } = usePlannedCustomers();
   const { state: drivers, setState: setDrivers, hydrated: driversHydrated } = useCustomerDrivers();

@@ -1,31 +1,50 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel } from './CustomerPanel';
 
+const SUB_TABS = [
+  { id: 'pl', label: 'P&L Projection' },
+  { id: 'cf', label: 'Cash Flow Projection' },
+  { id: 'payroll', label: 'Payroll' },
+  { id: 'customer', label: 'Customer' },
+];
+const SUB_TAB_IDS = SUB_TABS.map((t) => t.id);
+const ACTIVE_SUBTAB_STORAGE_KEY = 'fuel_wildcard_projection_subtab';
+
 /**
  * Projection tab — sixth sibling panel (2026-08-17, Kayee: "let's separate projection
  * with reports... in report it will only show actual"). This is a forecast view with
- * four sub-tabs: Payroll, P&L Projection, Cash Flow Projection, Assumptions. Unlike
+ * four sub-tabs: Payroll, P&L Projection, Cash Flow Projection, Customer. Unlike
  * Reports (which shows only actual data, no sidebar, no forecast columns), Projection
  * runs the full Assumptions-driven forecast pipeline.
  *
  * Sub-tab navigation is LOCAL to this panel (not in the main TabNav) — clicking
  * "Reports" in the main bar hides this entire panel and shows the actual-only Reports
  * view instead.
+ *
+ * The active sub-tab is remembered in localStorage (2026-08-18, Kayee: "it should
+ * refresh there show me back to customer. not jumping around") — same pattern as
+ * DashboardApp's ACTIVE_TAB_STORAGE_KEY: render starts on 'pl' (so server/first-client
+ * render match and React doesn't throw a hydration mismatch), then a useEffect right
+ * after mount applies whichever sub-tab was last open, once the main tab has already
+ * restored to 'projection' on the outer level.
  */
 export function ProjectionPanel({ statements, customReports, glCash, glAccrued }) {
   const [projectionSubTab, setProjectionSubTab] = useState('pl');
 
-  const SUB_TABS = [
-    { id: 'pl', label: 'P&L Projection' },
-    { id: 'cf', label: 'Cash Flow Projection' },
-    { id: 'payroll', label: 'Payroll' },
-    { id: 'customer', label: 'Customer' },
-  ];
+  useEffect(() => {
+    const saved = window.localStorage.getItem(ACTIVE_SUBTAB_STORAGE_KEY);
+    if (saved && SUB_TAB_IDS.includes(saved)) setProjectionSubTab(saved);
+  }, []);
+
+  function changeSubTab(tab) {
+    setProjectionSubTab(tab);
+    window.localStorage.setItem(ACTIVE_SUBTAB_STORAGE_KEY, tab);
+  }
 
   return (
     <>
@@ -40,7 +59,7 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
             <button
               key={tab.id}
               className={projectionSubTab === tab.id ? 'active' : undefined}
-              onClick={() => setProjectionSubTab(tab.id)}
+              onClick={() => changeSubTab(tab.id)}
             >
               {tab.label}
             </button>
