@@ -53,7 +53,7 @@ export default async function HomePage() {
       source.getStatement('BS', '24M'),
       source.listCustomReports(),
       safeGLTransactions(source, 'GL Cash'),
-      safeGLTransactions(source, 'GL Accrued'),
+      safeGLTransactions(source, 'GL Accu'), // sheet tab is literally named "GL Accu"
     ]);
 
   return (

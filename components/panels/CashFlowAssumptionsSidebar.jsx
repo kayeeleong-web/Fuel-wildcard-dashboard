@@ -4,30 +4,37 @@ import { useState } from 'react';
 import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 
 /**
- * Cash Flow Assumptions sidebar (2026-08-18 rebuild — the first version was rejected
- * as raw/cosmetic). Visual system copied 1:1 from PLAssumptionsSidebar.jsx: the same
- * collapsed full-height hamburger rail, the same .payroll-card black header bar with
- * an icon+"Hide" toggle, and the existing .sidebar-* card/control classes from
- * globals.css — no new styles invented here.
+ * Cash Flow Assumptions sidebar (2026-08-18 UX redesign — v2 "list every account"
+ * was rejected as too noisy: a full card + "Follow P&L" tag + Configure button per
+ * P&L account buried the handful of accounts that actually have custom timing).
  *
- * Exactly TWO sections — COGS Outflow and OpEx Outflow. The old "Revenue Inflow"
- * section is gone: customer cash-in inputs live on the Customer Cash Flow tab now
- * (CustomerPanel.jsx), which writes its monthly totals to localStorage for the CF
- * projection to read (see lib/cashflow/cashProjection.js CUSTOMER_INFLOW_STORAGE_KEY).
+ * The model now matches how the projection math already works (see
+ * lib/cashflow/cashProjection.js cashOutflowForMonth): Follow P&L is the SILENT
+ * DEFAULT for every account — an account absent from timingByAccount mirrors its
+ * P&L accrual month-by-month, and needs no UI at all. The sidebar only shows the
+ * accounts the user has EXPLICITLY overridden:
  *
- * Each account listed is a real chart-of-account row from the live P&L statement
- * (plus Payroll's injected COGS headcount line and any user-added manual P&L
- * accounts) — see plExpenseAccounts in lib/cashflow/cashProjection.js. Per account:
- *  - default (unconfigured): compact row tagged "Follow P&L" — cash out mirrors the
- *    projected P&L accrual month-by-month
- *  - "Custom interval": pick Monthly/Quarterly/Annually and WHICH month payment lands
- *    (month 1–3 of the quarter, or a calendar month for annual) — the projection
- *    aggregates the cycle's accruals into that payment month
- *  - "Manual input": type the cash $ per forecast month directly; each input shows
- *    the P&L accrual for that month as a small reference so you can see what you're
- *    overriding
- * None of this is cosmetic — ReportsPanel's CF pipeline applies these configs to the
- * projection's CASH PROJECTION rows (withCashFlowProjectionRows).
+ *  - Each section (COGS Outflow / OpEx Outflow) opens with one quiet explainer
+ *    line, then a card per overridden account, then a "+ Set custom timing…" link
+ *    (same visual language as PLAssumptionsSidebar's "+ Schedule a future change").
+ *  - Clicking the link swaps it for a compact select listing only the accounts NOT
+ *    yet configured in that section; picking one immediately creates its config
+ *    card (pre-expanded, default = monthly interval) and drops it from the picker.
+ *  - Each card: account name + "× Remove" in the header, then the same controls as
+ *    before — Custom interval (frequency + payment-month) or Manual input (per-month
+ *    $ with the P&L accrual as reference). "Remove" deletes the account's entry from
+ *    timingByAccount entirely (onSetTiming(id, null)), reverting it to Follow P&L.
+ *
+ * Visual system still copied 1:1 from PLAssumptionsSidebar: the collapsed
+ * full-height hamburger rail, the .payroll-card black header bar, and the existing
+ * .sidebar-* / .pr-schedule-add-link classes from globals.css — nothing hardcoded.
+ *
+ * The old "Revenue Inflow" section stays gone: customer cash-in inputs live on the
+ * Customer Cash Flow tab (CustomerPanel.jsx), handed off via
+ * CUSTOMER_INFLOW_STORAGE_KEY in lib/cashflow/cashProjection.js.
+ *
+ * None of this is cosmetic — ReportsPanel's CF pipeline applies these configs to
+ * the projection's CASH PROJECTION rows (withCashFlowProjectionRows).
  */
 export function CashFlowAssumptionsSidebar({
   collapsed,
@@ -116,23 +123,84 @@ export function CashFlowAssumptionsSidebar({
   );
 }
 
+/**
+ * One section = explainer line + a card per EXPLICITLY overridden account + the
+ * "+ Set custom timing…" affordance. Accounts with no entry in timingByAccount are
+ * simply not rendered — Follow P&L is the implicit default, not a per-account tag.
+ * Any stored entry renders as a card regardless of its mode (even a legacy
+ * mode:'followPL' entry from the old UI — never silently drop user data).
+ */
 function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMonths, accrualFor }) {
+  const [picking, setPicking] = useState(false);
+  // The account just added via the picker starts expanded so the user lands
+  // straight in its controls instead of on a collapsed card.
+  const [justAddedId, setJustAddedId] = useState(null);
+
+  const configured = accounts.filter((a) => timingByAccount?.[a.id] != null);
+  const unconfigured = accounts.filter((a) => timingByAccount?.[a.id] == null);
+
+  function addAccount(accountId) {
+    if (!accountId) return;
+    // Sensible starting config: monthly interval (cash = accrual each month, same
+    // math as Follow P&L) — the card opens expanded so the user immediately picks
+    // the frequency/mode they actually came here to set.
+    onSetTiming(accountId, { mode: 'interval', frequency: 'monthly', payMonth: 1 });
+    setJustAddedId(accountId);
+    setPicking(false);
+  }
+
   return (
     <div className="sidebar-section">
       <h4 className="sidebar-section-label">{label}</h4>
+
       {accounts.length === 0 ? (
-        <div className="cap">No accounts found on the P&amp;L for this section.</div>
+        <div className="sidebar-section-note">No accounts found on the P&amp;L for this section.</div>
       ) : (
-        accounts.map((account) => (
-          <AccountTimingCard
-            key={account.id}
-            account={account}
-            timing={timingByAccount?.[account.id]}
-            onSetTiming={onSetTiming}
-            manualMonths={manualMonths}
-            accrualFor={accrualFor}
-          />
-        ))
+        <>
+          <div className="sidebar-section-note">
+            All accounts follow P&amp;L timing unless overridden below.
+          </div>
+
+          {configured.map((account) => (
+            <AccountTimingCard
+              key={account.id}
+              account={account}
+              timing={timingByAccount[account.id]}
+              onSetTiming={onSetTiming}
+              manualMonths={manualMonths}
+              accrualFor={accrualFor}
+              defaultExpanded={account.id === justAddedId}
+            />
+          ))}
+
+          {unconfigured.length > 0 &&
+            (!picking ? (
+              <button type="button" className="pr-schedule-add-link" onClick={() => setPicking(true)}>
+                + Set custom timing…
+              </button>
+            ) : (
+              <div className="sidebar-add-picker">
+                <select
+                  className="sidebar-select"
+                  defaultValue=""
+                  autoFocus
+                  onChange={(e) => addAccount(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Select account…
+                  </option>
+                  {unconfigured.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.label}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="pr-schedule-add-link" onClick={() => setPicking(false)}>
+                  Cancel
+                </button>
+              </div>
+            ))}
+        </>
       )}
     </div>
   );
@@ -151,6 +219,7 @@ const CALENDAR_MONTHS = [
 
 function timingTag(timing) {
   const mode = timing?.mode || 'followPL';
+  // Only reachable by a legacy stored entry — the new UI never writes followPL.
   if (mode === 'followPL') return 'Follow P&L';
   if (mode === 'manual') return 'Manual input';
   const frequency = timing?.frequency || 'monthly';
@@ -159,19 +228,16 @@ function timingTag(timing) {
   return `Annually · ${CALENDAR_MONTHS[Math.min(12, Math.max(1, Number(timing?.payMonth) || 1)) - 1].slice(0, 3)}`;
 }
 
-/** One P&L account's cash-timing card — compact header row (label + current-mode tag)
- *  with a Configure toggle, expanding to the mode radios and mode-specific controls.
- *  All classes are the existing .sidebar-* set from globals.css. */
-function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrualFor }) {
-  const [expanded, setExpanded] = useState(false);
+/** One OVERRIDDEN account's cash-timing card — header row (name + current-mode tag +
+ *  "×" remove), expanding to the Custom interval / Manual input controls. Removing
+ *  deletes the account's timing entry entirely, reverting it to the implicit Follow
+ *  P&L default. All classes are the existing .sidebar-* set from globals.css. */
+function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrualFor, defaultExpanded }) {
+  const [expanded, setExpanded] = useState(!!defaultExpanded);
   const mode = timing?.mode || 'followPL';
 
   function setMode(nextMode) {
-    if (nextMode === 'followPL') {
-      // Follow P&L is the default — remove the config entirely rather than storing a
-      // redundant entry (onSetTiming(id, null) deletes the key).
-      onSetTiming(account.id, null);
-    } else if (nextMode === 'interval') {
+    if (nextMode === 'interval') {
       onSetTiming(account.id, {
         mode: 'interval',
         frequency: timing?.frequency || 'monthly',
@@ -210,15 +276,22 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
       <div className="sidebar-card-header" onClick={() => setExpanded((e) => !e)}>
         <span className="sidebar-card-label">{account.label}</span>
         <span className="sidebar-card-value">{timingTag(timing)}</span>
+        <button
+          type="button"
+          className="sidebar-card-remove"
+          title="Remove — revert to Follow P&L"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSetTiming(account.id, null);
+          }}
+        >
+          ×
+        </button>
       </div>
 
       {expanded && (
         <div className="sidebar-card-body">
           <div className="sidebar-control-group">
-            <label className="sidebar-radio-label">
-              <input type="radio" checked={mode === 'followPL'} onChange={() => setMode('followPL')} />
-              Follow P&amp;L — cash mirrors the accrual month-by-month
-            </label>
             <label className="sidebar-radio-label">
               <input type="radio" checked={mode === 'interval'} onChange={() => setMode('interval')} />
               Custom interval — pick frequency &amp; payment month
@@ -282,7 +355,7 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
             <div className="sidebar-control-group">
               <label className="sidebar-input-label">Cash out per forecast month</label>
               {manualMonths.length === 0 && (
-                <div className="cap">No forecast months available to edit.</div>
+                <div className="sidebar-section-note">No forecast months available to edit.</div>
               )}
               {manualMonths.map((iso) => (
                 <ManualMonthInput

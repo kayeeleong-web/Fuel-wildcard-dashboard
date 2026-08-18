@@ -1167,6 +1167,47 @@ tr.pr-dragging { opacity: .4; }
   letter-spacing: 0.4px;
 }
 
+/* One quiet explainer line under each CF timing section label (2026-08-18 redesign:
+   Follow P&L is the implicit default, so this sentence replaces a per-account tag) —
+   same size/color voice as chart-panel captions. */
+.sidebar-section-note {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  line-height: 1.45;
+  margin: 0 0 10px 0;
+}
+
+/* The "+ Set custom timing…" picker, once opened — a compact account select with a
+   Cancel link beside it. The select reuses .sidebar-select styling. */
+.sidebar-add-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sidebar-add-picker .sidebar-select { flex: 1; min-width: 0; }
+
+/* Per-card "×" remove in the header — reverts the account to Follow P&L. Same quiet
+   dot-button voice as .pr-schedule-summary-line's remove. */
+.sidebar-card-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted-2);
+  font-size: 14px;
+  line-height: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.sidebar-card-remove:hover {
+  background: var(--pink-soft, rgba(236,72,98,.12));
+  color: var(--pink);
+}
+
 .sidebar-card {
   background: white;
   border: 1px solid var(--border-light);

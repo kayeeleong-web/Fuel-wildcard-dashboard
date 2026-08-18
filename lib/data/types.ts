@@ -65,7 +65,9 @@ export interface CustomReportData {
 }
 
 /** Which raw GL export tab a transaction set came from. */
-export type GLTab = "GL Cash" | "GL Accrued";
+// Actual sheet tab names — the accrual tab is named "GL Accu" in the workbook
+// (2026-08-18: fetch for "GL Accrued" 400'd; screenshot confirmed the real name).
+export type GLTab = "GL Cash" | "GL Accu";
 
 /** One raw GL transaction row, already normalized (columns located by header name,
  *  never by hardcoded index — the export's column order is not part of any contract). */
