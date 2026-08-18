@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
-import { AssumptionsPanel } from './AssumptionsPanel';
 
 /**
  * Projection tab — sixth sibling panel (2026-08-17, Kayee: "let's separate projection
@@ -24,7 +23,6 @@ export function ProjectionPanel({ statements, customReports }) {
     { id: 'pl', label: 'P&L Projection' },
     { id: 'cf', label: 'Cash Flow Projection' },
     { id: 'payroll', label: 'Payroll' },
-    { id: 'assumptions', label: 'Assumptions' },
   ];
 
   return (
@@ -63,10 +61,6 @@ export function ProjectionPanel({ statements, customReports }) {
 
       {projectionSubTab === 'payroll' && (
         <PayrollPanel />
-      )}
-
-      {projectionSubTab === 'assumptions' && (
-        <AssumptionsPanel />
       )}
     </>
   );

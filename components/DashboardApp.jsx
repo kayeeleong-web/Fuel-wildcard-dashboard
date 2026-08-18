@@ -8,14 +8,12 @@ import { KPIReportPanel } from './panels/KPIReportPanel';
 import { DashboardPanel } from './panels/DashboardPanel';
 import { ReportsPanel } from './panels/ReportsPanel';
 import { ProjectionPanel } from './panels/ProjectionPanel';
-import { CustomPanel } from './panels/CustomPanel';
-import { PayrollPanel } from './panels/PayrollPanel';
-import { AssumptionsPanel } from './panels/AssumptionsPanel';
 import { PanelErrorBoundary } from './shell/PanelErrorBoundary';
 
-// 2026-08-17: Removed 'custom' (Kayee: "remove the custom tab in the main bar").
-// Added 'projection' with sub-tabs (Projection instead of Custom).
-const TABS = ['kpi', 'dashboard', 'reports', 'projection', 'payroll', 'assumptions'];
+// 2026-08-17: Removed 'custom', 'payroll', 'assumptions' from main bar (Kayee:
+// "remove the custom tab", and now: "you can now remove these two since you've already
+// move to the projection tab"). Payroll and Assumptions moved as sub-tabs under Projection.
+const TABS = ['kpi', 'dashboard', 'reports', 'projection'];
 const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
 
 /**
@@ -90,18 +88,6 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
         <section className={`panel-view${activeTab === 'projection' ? ' active' : ''}`}>
           <PanelErrorBoundary name="Projection">
             <ProjectionPanel statements={statements} customReports={customReportsList} />
-          </PanelErrorBoundary>
-        </section>
-
-        <section className={`panel-view${activeTab === 'payroll' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="Payroll">
-            <PayrollPanel />
-          </PanelErrorBoundary>
-        </section>
-
-        <section className={`panel-view${activeTab === 'assumptions' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="Assumptions">
-            <AssumptionsPanel />
           </PanelErrorBoundary>
         </section>
       </div>

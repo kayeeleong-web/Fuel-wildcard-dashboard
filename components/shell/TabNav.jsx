@@ -40,25 +40,8 @@ const TABS = [
     ),
     countKey: 'reportsCount',
   },
-  {
-    id: 'payroll',
-    label: 'Payroll',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 7v10M9.5 9.5c0-1.1 1.1-2 2.5-2s2.5.75 2.5 1.75-1 1.5-2.5 1.75-2.5.75-2.5 1.75S10.6 15 12 15s2.5-.9 2.5-2" />
-      </svg>
-    ),
-  },
-  {
-    id: 'assumptions',
-    label: 'Assumptions',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M9 3H5a2 2 0 00-2 2v4M15 3h4a2 2 0 012 2v4M9 21H5a2 2 0 01-2-2v-4M15 21h4a2 2 0 002-2v-4" />
-      </svg>
-    ),
-  },
+  // 2026-08-17: Moved Payroll and Assumptions into Projection sub-tabs (Kayee:
+  // "you can now remove these two since you've already move to the projection tab")
   {
     id: 'projection',
     label: 'Projection',
