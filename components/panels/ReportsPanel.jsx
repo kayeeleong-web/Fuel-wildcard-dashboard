@@ -223,13 +223,15 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Cash Flow cash timing state (2026-08-17, Kayee: "cash timing is different... the
-  // flexibility to select pulling from p&l or controlling cash timing like annually on
-  // which month or quarterly") — separate from Assumptions, stored in browser state.
-  // Row timings are keyed by row key ('total_revenue', 'total_cogs', 'total_opex') with
-  // mode ('followPL' or 'customInterval') + custom interval/payMonthOfCycle if applicable.
-  const [cashFlowTiming, setCashFlowTiming] = useState({
-    rowTimings: {},
+  // Cash Flow Assumptions state (2026-08-17, Kayee: "let's start building out cash
+  // inflow mechanism... current customer total plus projection how many client they have").
+  // Includes: revenue assumptions (customer count + pricing), COGS/OpEx accounts list,
+  // and timing overrides per GL account (follow P&L or custom interval + month).
+  const [cashFlowState, setCashFlowState] = useState({
+    revenue: { currentCustomers: 0, projectedNewCustomers: 0, upfrontPerCustomer: 0, meetingPrice: 0 },
+    cogsAccounts: [], // Will be populated from GL later
+    opexAccounts: [], // Will be populated from GL later
+    timingByAccount: {}, // { glAccountId: { mode, intervalMonths, payMonthOfCycle } }
   });
 
   // Auto-scroll the page while dragging a cost item (2026-08-10, Kayee: "i try to
@@ -354,8 +356,8 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
               <CashFlowAssumptionsSidebar
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-                cashTimingState={cashFlowTiming}
-                onCashTimingChange={setCashFlowTiming}
+                cashFlowState={cashFlowState}
+                onCashFlowChange={setCashFlowState}
               />
             ) : null}
             <div className="reports-main">
