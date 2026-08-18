@@ -7,27 +7,37 @@ import { Footer } from './shell/Footer';
 import { KPIReportPanel } from './panels/KPIReportPanel';
 import { DashboardPanel } from './panels/DashboardPanel';
 import { ReportsPanel } from './panels/ReportsPanel';
+import { ProjectionPanel } from './panels/ProjectionPanel';
 import { CustomPanel } from './panels/CustomPanel';
 import { PayrollPanel } from './panels/PayrollPanel';
 import { AssumptionsPanel } from './panels/AssumptionsPanel';
 import { PanelErrorBoundary } from './shell/PanelErrorBoundary';
 
-const TABS = ['kpi', 'dashboard', 'reports', 'custom', 'payroll', 'assumptions'];
+// 2026-08-17: Removed 'custom' (Kayee: "remove the custom tab in the main bar").
+// Added 'projection' with sub-tabs (Projection instead of Custom).
+const TABS = ['kpi', 'dashboard', 'reports', 'projection', 'payroll', 'assumptions'];
 const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
 
 /**
  * The whole client-facing product, post-Clerk-auth. This IS the "Portal" — there is
  * no separate portal app/repo (see architecture note in CLAUDE.md): the default
- * landing tab is KPI Report, and Dashboard/Reports/Custom/Payroll are sibling tabs in
- * the same shell, not separate pages or deployments.
+ * landing tab is KPI Report, and Dashboard/Reports/Projection/Payroll/Assumptions are
+ * sibling tabs in the same shell, not separate pages or deployments.
  *
- * All data for the GL-backed tabs (KPI/Dashboard/Reports/Custom) is fetched ONCE,
- * server-side, in app/page.js and passed in here as props — switching tabs only toggles
- * which panel is visible (functionality-spec.md §2: "no page reload, no data refetch").
- * Every panel stays mounted; the CSS `.panel-view` / `.panel-view.active` classes
- * control visibility, matching the reference build's behavior exactly. Payroll is the
- * one exception: it's a browser-saved forecast tool, not GL data, so it loads its own
- * state client-side (lib/payroll/usePayrollState.js) rather than receiving props here.
+ * All data for the GL-backed tabs (KPI/Dashboard/Reports) is fetched ONCE, server-side,
+ * in app/page.js and passed in here as props — switching tabs only toggles which panel
+ * is visible (functionality-spec.md §2: "no page reload, no data refetch"). Every panel
+ * stays mounted; the CSS `.panel-view` / `.panel-view.active` classes control visibility,
+ * matching the reference build's behavior exactly.
+ *
+ * Reports (2026-08-17, Kayee: "in report it will only show actual"): shows actual GL
+ * data only, no forecast columns, no Assumptions sidebar — just the real months from
+ * the Google Sheet. Projection: full Assumptions-driven forecast for P&L/CF/Payroll
+ * (sub-tabs) with all controls. Custom reports removed from the main bar (Kayee).
+ *
+ * Payroll is the one exception to the GL-data rule: it's a browser-saved forecast tool,
+ * not GL data, so it loads its own state client-side (lib/payroll/usePayrollState.js)
+ * rather than receiving props here. Appears as both a standalone tab and in Projection.
  *
  * activeTab is remembered in localStorage (ACTIVE_TAB_STORAGE_KEY) so a hard refresh
  * reopens on whichever tab the user was last viewing instead of resetting to KPI
@@ -73,13 +83,13 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
 
         <section className={`panel-view${activeTab === 'reports' ? ' active' : ''}`}>
           <PanelErrorBoundary name="Reports">
-            <ReportsPanel statements={statements} customReports={customReportsList} />
+            <ReportsPanel statements={statements} customReports={customReportsList} mode="actual" />
           </PanelErrorBoundary>
         </section>
 
-        <section className={`panel-view${activeTab === 'custom' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="Custom">
-            <CustomPanel reportsCount={customReportsList.length} />
+        <section className={`panel-view${activeTab === 'projection' ? ' active' : ''}`}>
+          <PanelErrorBoundary name="Projection">
+            <ProjectionPanel statements={statements} customReports={customReportsList} />
           </PanelErrorBoundary>
         </section>
 

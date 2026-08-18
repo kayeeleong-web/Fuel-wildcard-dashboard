@@ -186,8 +186,19 @@ function extendMonthsThrough(months, throughIso) {
  * carries a year class, so the design-rules.md "never hide row labels" rule holds by
  * construction, not by convention.
  */
-export function ReportsPanel({ statements, customReports }) {
-  const [reportType, setReportType] = useState('PL');
+// 2026-08-17 (Kayee: "let's separate projection with reports... in report it will
+// only show actual"). `mode` is the actual/projection split: 'actual' (default) is
+// this same Reports tab, but with NO forecast pipeline run at all — just the real
+// months the sheet returned, no Assumptions sidebar, no drag-and-drop cost-item
+// linking, no Payroll rows injected. 'projection' is a full StatementDoc exactly as
+// it always worked, just now mounted from the new Projection tab
+// (ProjectionPanel.jsx) instead of here. `fixedType` (Projection's P&L/Cash Flow
+// sub-tabs) skips the PL/CF/BS toolbar entirely — the sub-tab click already picked
+// the statement type, so a second selector here would be redundant. Custom is gone
+// entirely (both as a main-bar tab and as a 4th button here) — Kayee: "remove the
+// custom tab in the main bar and inside of reports."
+export function ReportsPanel({ statements, customReports, mode = 'actual', fixedType }) {
+  const [reportType, setReportType] = useState(fixedType || 'PL');
   // Defaults to Jan-2026 through Dec-2028 (2026-08-07 rewrite, Kayee: "show 2026 and up
   // until end of 2028 as default... if I want to see historical let me select
   // historical and it will show everything") — replaces the earlier 2026/6M/12M/24M/∞
@@ -232,7 +243,7 @@ export function ReportsPanel({ statements, customReports }) {
     return () => document.removeEventListener('dragover', handleDragOver);
   }, []);
 
-  const showSidebar = reportType === 'PL';
+  const showSidebar = mode === 'projection' && reportType === 'PL';
 
   // Non-Headcount Costs display order, matching their real P&L row positions
   // (2026-08-07, Kayee: "make this align with what they actually are"). Recomputed
@@ -248,18 +259,24 @@ export function ReportsPanel({ statements, customReports }) {
       <PageHead title="Reports" subtitle="P&L, Cash Flow, Balance Sheet, and saved custom reports" />
 
       <div className="toolbar">
-        <div className="seg">
-          {['PL', 'CF', 'BS', 'custom'].map((type) => (
-            <button
-              key={type}
-              className={reportType === type ? 'active' : undefined}
-              onClick={() => setReportType(type)}
-            >
-              {type === 'custom' ? 'Custom' : STATEMENT_LABELS[type]}
-            </button>
-          ))}
-        </div>
-        {reportType !== 'custom' && (
+        {/* Type selector only shown on Reports (actual) tab — Projection has its own
+            sub-tab nav so a second selector here would be redundant. Custom removed
+            entirely (Kayee, 2026-08-17: "remove the custom tab in the main bar and
+            inside of reports"). */}
+        {!fixedType && (
+          <div className="seg">
+            {['PL', 'CF', 'BS'].map((type) => (
+              <button
+                key={type}
+                className={reportType === type ? 'active' : undefined}
+                onClick={() => setReportType(type)}
+              >
+                {STATEMENT_LABELS[type]}
+              </button>
+            ))}
+          </div>
+        )}
+        {!fixedType && (
           <div className="seg right">
             {/* Two states only (2026-08-07 rewrite): the 3-year default landing view,
                 and Historical — everything, actual and forecast alike, no filtering. */}
@@ -276,8 +293,9 @@ export function ReportsPanel({ statements, customReports }) {
       {/* Legend (2026-08-07, Kayee: "give user an indicator on what cell is
           editable") — the blue box style is otherwise unexplained the first time
           someone sees it; this makes explicit what's a real input vs. a computed or
-          booked figure. P&L-only, since CF/BS/Custom have no editable cells yet. */}
-      {reportType === 'PL' && (
+          booked figure. P&L-only, since CF/BS have no editable cells. Custom and
+          projection sub-tabs are other panels entirely now (2026-08-17). */}
+      {mode === 'actual' && reportType === 'PL' && (
         <div className="report-legend">
           <span className="report-legend-item">
             <span className="report-legend-swatch report-legend-swatch-editable" />
@@ -294,9 +312,7 @@ export function ReportsPanel({ statements, customReports }) {
           so every wide-table tab behaves consistently (Kayee, 2026-08-05: "all pages
           needs to be consistant"). Toolbar/PageHead above stay at the normal page width. */}
       <div className={`page-wide${showSidebar && !sidebarCollapsed ? ' page-wide-reports-open' : ''}`}>
-        {reportType === 'custom' ? (
-          <CustomReportsList reports={customReports} />
-        ) : showSidebar ? (
+        {showSidebar ? (
           // P&L only, for now (Kayee, 2026-08-06: "we work on P&L first") — a 30/70
           // split when the Assumptions sidebar is open, collapsing back to today's
           // full-width table (the exact same StatementDoc, unchanged) when it's
@@ -322,6 +338,7 @@ export function ReportsPanel({ statements, customReports }) {
                 assumptionsState={assumptionsState}
                 setAssumptionsState={setAssumptionsState}
                 assumptionsHydrated={assumptionsHydrated}
+                mode={mode}
               />
             </div>
           </div>
@@ -332,6 +349,7 @@ export function ReportsPanel({ statements, customReports }) {
             assumptionsState={assumptionsState}
             setAssumptionsState={setAssumptionsState}
             assumptionsHydrated={assumptionsHydrated}
+            mode={mode}
           />
         )}
       </div>
@@ -1188,14 +1206,17 @@ function withGrossProfitMarginRow(rows, months) {
   return [...rows.slice(0, gpIdx + 1), marginRow, ...rows.slice(gpIdx + 1)];
 }
 
-function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated }) {
+function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection' }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
   if (!statement) return <div className="cap">No data for this statement yet.</div>;
   // currentMonth = the last ACTUAL month (before any blank padding), so "active-col"
   // still marks the latest real reporting month, not the padded 2030 horizon.
   const currentMonth = statement.months[statement.months.length - 1];
-  const months = extendMonthsThrough(statement.months, PROJECTION_HORIZON);
+  // In actual mode (2026-08-17, Kayee: "in report it will only show actual"), never
+  // extend beyond what the real data has — no forecast columns, no padding. In
+  // projection mode, extend through PROJECTION_HORIZON same as always.
+  const months = mode === 'actual' ? statement.months : extendMonthsThrough(statement.months, PROJECTION_HORIZON);
   const lastActualIndex = statement.months.length - 1;
   const revenue = assumptionsHydrated ? assumptionsState?.revenue : null;
   const costCtx = {
@@ -1203,8 +1224,10 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     costItems: assumptionsHydrated ? assumptionsState?.costItems || [] : [],
     payrollState: payrollHydrated ? payrollState : null,
   };
-  // Every projection step below is derived from whatever's saved in THIS browser's
-  // Assumptions/Payroll localStorage — this Reports panel mounts unconditionally
+  // Projection pipeline (2026-08-17, Kayee: "in report it will only show actual" —
+  // skip ALL of this in actual mode, show just the real months with no forecast)
+  // — every step below is derived from whatever's saved in THIS browser's
+  // Assumptions/Payroll localStorage. This Reports panel mounts unconditionally
   // alongside every other tab (design note at the top of DashboardApp.jsx), so an
   // uncaught error anywhere in this pipeline would crash the ENTIRE app on every page
   // load, not just Reports (already hit once, 2026-08-06). Each step is guarded
@@ -1215,6 +1238,58 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // (including Revenue's) fall back to blank, because one shared try/catch treated a
   // failure anywhere as a failure everywhere.
   let rows = statement.rows;
+  if (mode !== 'projection') {
+    // Actual mode — skip all projection logic, return just the real rows.
+    // No forecast columns to render, no sidebar, no Assumptions-driven values.
+    return (
+      <div id="reports" className="table-wrap report-doc" data-doc={statement.type}>
+        <table>
+          <thead>
+            <tr className="report-year-row">
+              <th></th>
+              {months.map((m, i) => {
+                const year = m.slice(0, 4);
+                const isFirstOfYear = i === 0 || months[i - 1].slice(0, 4) !== year;
+                return (
+                  <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
+                    {isFirstOfYear ? year : ''}
+                  </th>
+                );
+              })}
+            </tr>
+            <tr>
+              <th>Account / Line Item</th>
+              {months.map((m, i) => (
+                <th key={m} className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}`}>
+                  <div className="report-month-label">{formatMonthLabel(m)}</div>
+                  <div className="report-month-status">ACT</div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groupBySection(rows).map(([section, sectionRows]) => (
+              <FragmentRows
+                key={section}
+                section={section}
+                rows={sectionRows}
+                months={months}
+                currentMonth={currentMonth}
+                lastActualIndex={lastActualIndex}
+                revenue={null}
+                costCtx={null}
+                onLinkCostItem={null}
+                onAddManualAccount={null}
+                onRemoveManualAccount={null}
+                onRemoveCostItem={null}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  // Projection mode — run all the forecast pipelines.
   try {
     rows = withRevenueProjections(statement, months, lastActualIndex, revenue);
   } catch (err) {
