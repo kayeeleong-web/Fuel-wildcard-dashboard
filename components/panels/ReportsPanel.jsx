@@ -199,7 +199,14 @@ function extendMonthsThrough(months, throughIso) {
 // entirely (both as a main-bar tab and as a 4th button here) — Kayee: "remove the
 // custom tab in the main bar and inside of reports."
 export function ReportsPanel({ statements, customReports, mode = 'actual', fixedType }) {
+  // If fixedType is set (Projection sub-tabs), lock the type to that value;
+  // otherwise, allow the user to toggle via buttons (Reports tab)
   const [reportType, setReportType] = useState(fixedType || 'PL');
+
+  // Keep reportType in sync with fixedType if it changes (e.g., switching Projection sub-tabs)
+  useEffect(() => {
+    if (fixedType) setReportType(fixedType);
+  }, [fixedType]);
   // Defaults to Jan-2026 through Dec-2028 (2026-08-07 rewrite, Kayee: "show 2026 and up
   // until end of 2028 as default... if I want to see historical let me select
   // historical and it will show everything") — replaces the earlier 2026/6M/12M/24M/∞
