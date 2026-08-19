@@ -1040,6 +1040,12 @@ thead th.pr-month-historical { background: #3a3a3d; }
 .customer-driver-grid .pr-input-month:focus {
   background: #fff; border-color: var(--blue); box-shadow: none;
 }
+/* 2026-08-19: each customer now contributes two rows (# of Campaigns, # of Meetings) —
+   a light bottom border after the second row separates one customer's pair from the
+   next without adding another divider row per customer. The metric label ("# of
+   Campaigns"/"# of Meetings") reads as a muted sub-label, not a second customer name. */
+.customer-driver-grid tr.driver-pair-last td { border-bottom: 1px solid var(--border); }
+.driver-metric-label { color: var(--muted); font-size: 11.5px; }
 /* Sits inside the black .payroll-card-head bar (unlike every other .pr-input, which
    sits on a light table cell) — .pr-input's default pale-green-bg/dark-text combo has
    almost no contrast there (Kayee, 2026-08-05 screenshot: "the font is dark the user
