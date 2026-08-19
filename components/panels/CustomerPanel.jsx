@@ -63,9 +63,16 @@ const WATERFALL_FROZEN_COLUMNS = [
   { key: 'total', label: 'Total', width: 104, align: 'right' },
 ];
 
+// 'qty' added 2026-08-19 (Kayee: "3 of the customer in this pricing, 4 in that
+// pricing... when the planned customer come in as real customer, [need] a way to
+// reduce that planned by 1") — one row can represent a COHORT of planned customers at
+// the same pricing/timing rather than a single named prospect; Upfront/Monthly $ scale
+// by Qty (see plannedAmountFor), and the −1 stepper next to it is how a row shrinks as
+// members of that cohort actually close and show up in the GL roster.
 const PLAN_FROZEN_COLUMNS = [
   { key: 'actions', label: '', width: 44 },
-  { key: 'name', label: 'Customer', width: 190 },
+  { key: 'name', label: 'Customer', width: 170 },
+  { key: 'qty', label: 'Qty', width: 90, align: 'right' },
   { key: 'startMonth', label: 'Start Month', width: 128 },
   { key: 'upfront', label: 'Upfront $', width: 104, align: 'right' },
   { key: 'monthly', label: 'Monthly $', width: 104, align: 'right' },
@@ -106,17 +113,21 @@ function monthDiff(startIso, iso) {
   return (y - sy) * 12 + (m - sm);
 }
 
-/** Projected cash for one planned customer in one month: upfront lands in the start
- *  month; the recurring amount runs from the start month for `numMonths` months
- *  (blank/0 numMonths = ongoing with no end). */
+/** Projected cash for one planned customer ROW (possibly a cohort of several — see
+ *  Qty, 2026-08-19) in one month: upfront lands in the start month; the recurring
+ *  amount runs from the start month for `numMonths` months (blank/0 numMonths =
+ *  ongoing with no end). Everything scales by Qty — a row of "3 at $1,000 upfront"
+ *  produces $3,000 in its start month, not $1,000. */
 function plannedAmountFor(row, iso) {
   if (!row.startMonth || iso < row.startMonth) return 0;
+  const qty = Number(row.qty) || 0;
+  if (qty <= 0) return 0;
   const idx = monthDiff(row.startMonth, iso);
   let amount = 0;
   if (idx === 0) amount += Number(row.upfront) || 0;
   const numMonths = Number(row.numMonths) || 0;
   if (numMonths === 0 || idx < numMonths) amount += Number(row.monthly) || 0;
-  return amount;
+  return amount * qty;
 }
 
 /** Planned-customer rows, persisted to THIS browser's localStorage — same
@@ -309,31 +320,39 @@ function CombinedDriverGrid({ title, subtitle, rows, months, isEditableMonth, to
   }
 
   // Two rows per customer, back to back — the name only shows on the first (Campaigns)
-  // row; the second (Meetings) row leaves it blank so the pair visually reads as one
-  // customer block. `driver-pair-last` gets a bottom border in globals.css so
-  // consecutive customers stay visually separated without another divider row.
-  const dataRows = rows.flatMap((r) => [
-    {
-      id: `${r.key}__campaigns`,
-      className: 'driver-pair-first',
-      cells: {
-        name: r.nameCell ?? r.name,
-        metric: <span className="driver-metric-label"># of Campaigns</span>,
-        price: <MonthInput value={getPrice('campaigns', r.key)} onCommit={(n) => onSetPrice('campaigns', r.key, n)} />,
+  // row; the second (Meetings) row leaves it blank. 2026-08-19 (Kayee: "would your eye
+  // know that the row below is also for Fermat Commerce?" — answer: not with the
+  // default alternating-row striping, which shaded every OTHER ROW rather than every
+  // other CUSTOMER, so a pair could end up split across two different shades). Fixed
+  // by shading BOTH rows of one customer identically and alternating that shared shade
+  // customer-to-customer instead — `driver-pair-even`/`driver-pair-odd` in globals.css.
+  // `driver-pair-last` also gets a bottom border so consecutive customers stay visually
+  // separated without another divider row.
+  const dataRows = rows.flatMap((r, idx) => {
+    const zebra = idx % 2 === 0 ? 'driver-pair-even' : 'driver-pair-odd';
+    return [
+      {
+        id: `${r.key}__campaigns`,
+        className: `driver-pair-first ${zebra}`,
+        cells: {
+          name: r.nameCell ?? r.name,
+          metric: <span className="driver-metric-label"># of Campaigns</span>,
+          price: <MonthInput value={getPrice('campaigns', r.key)} onCommit={(n) => onSetPrice('campaigns', r.key, n)} />,
+        },
+        monthCells: monthCellsFor(r.key, 'campaigns'),
       },
-      monthCells: monthCellsFor(r.key, 'campaigns'),
-    },
-    {
-      id: `${r.key}__meetings`,
-      className: 'driver-pair-last',
-      cells: {
-        name: '',
-        metric: <span className="driver-metric-label"># of Meetings</span>,
-        price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
+      {
+        id: `${r.key}__meetings`,
+        className: `driver-pair-last ${zebra}`,
+        cells: {
+          name: '',
+          metric: <span className="driver-metric-label"># of Meetings</span>,
+          price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
+        },
+        monthCells: monthCellsFor(r.key, 'meetings'),
       },
-      monthCells: monthCellsFor(r.key, 'meetings'),
-    },
-  ]);
+    ];
+  });
 
   function totalRowFor(kind, label) {
     return {
@@ -602,13 +621,21 @@ export function CustomerPanel({ glCash, glAccrued }) {
     const id = generateId('cust');
     setPlanned([
       ...(planned || []),
-      { id, name: '', startMonth: '', upfront: 0, monthly: 0, numMonths: 0 },
+      { id, name: '', qty: 1, startMonth: '', upfront: 0, monthly: 0, numMonths: 0 },
     ]);
     setJustAddedId(id);
   }
 
   function updatePlanned(id, patch) {
     setPlanned((planned || []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  // −1 stepper (2026-08-19, Kayee: "when the planned customer come in as real
+  // customer... a good ui to reduce that planned by 1") — just decrements Qty per her
+  // choice; doesn't touch the Current & Pipeline grid, since that already flows in
+  // from GL on its own. Floors at 0 rather than going negative or auto-removing the row.
+  function decrementPlannedQty(id) {
+    setPlanned((planned || []).map((r) => (r.id === id ? { ...r, qty: Math.max(0, (Number(r.qty) || 0) - 1) } : r)));
   }
 
   function removePlanned(id, name) {
@@ -662,6 +689,20 @@ export function CustomerPanel({ glCash, glAccrued }) {
             }}
           />
         ),
+        qty: (
+          <div className="pr-qty-stepper">
+            <button
+              type="button"
+              className="icon-btn"
+              title="One of this cohort just converted to a real (GL) customer — decrement Qty"
+              disabled={(Number(row.qty) || 0) <= 0}
+              onClick={() => decrementPlannedQty(row.id)}
+            >
+              −
+            </button>
+            <MonthInput value={row.qty ?? 1} onCommit={(n) => updatePlanned(row.id, { qty: Math.max(0, n) })} />
+          </div>
+        ),
         startMonth: (
           <input
             type="month"
@@ -698,10 +739,16 @@ export function CustomerPanel({ glCash, glAccrued }) {
     return 0;
   }
 
-  function buildSubtotalRow(label, rows) {
+  // `tone`: 'grand' (medium grey) for the combined current+planned total, 'sub' (light
+  // grey) for the Current-only / Planned-only rows below it — Kayee, 2026-08-19: "only
+  // the top part up until the date is black. the total for current and planned is
+  // medium grey and then total current and total planned is light grey so that it's
+  // not all black." The card header + month-header row stay the shared black chrome;
+  // only these row backgrounds change.
+  function buildSubtotalRow(label, rows, tone) {
     return {
       id: `subtotal:${label}`,
-      className: 'total',
+      className: tone === 'grand' ? 'summary-grand-total' : 'summary-subtotal',
       cells: { name: <b>{label}</b>, kind: '' },
       monthCells: Object.fromEntries(
         planMonths.map((iso) => {
@@ -725,11 +772,11 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // already show every customer's own numbers, so a third table repeating them was
   // just more sections without more information.
   const summaryRows = [
-    buildSubtotalRow('TOTAL (Current + Planned)', allCashInRows),
-    buildSubtotalRow('Total — Current', currentKindRows),
+    buildSubtotalRow('TOTAL (Current + Planned)', allCashInRows, 'grand'),
+    buildSubtotalRow('Total — Current', currentKindRows, 'sub'),
     // Only shown once there's at least one planned customer — an always-visible
     // "Total — Planned $0" row when the plan is empty would just be noise.
-    ...(plannedKindRows.length > 0 ? [buildSubtotalRow('Total — Planned', plannedKindRows)] : []),
+    ...(plannedKindRows.length > 0 ? [buildSubtotalRow('Total — Planned', plannedKindRows, 'sub')] : []),
   ];
 
   /* ----------------------------------- Render ----------------------------------- */
@@ -851,36 +898,43 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   the old separate "Cash Coming In — Detail" per-customer table was
                   removed; the driver grids below already show every customer's own
                   numbers, so that table was just repeating them. */}
-              <PayrollTable
-                title="Cash Coming In — Summary"
-                subtitle="TOTAL (current + planned), then each broken out — feeds the Cash Flow Projection"
-                tintForecast={false}
-                frozenColumns={SUMMARY_FROZEN_COLUMNS}
-                months={planMonths}
-                todayIso={todayIso}
-                rowGroups={[{ key: 'summary', label: null, rows: summaryRows }]}
-              />
+              {/* Summary + Current & Pipeline grid render as ONE continuous block
+                  (2026-08-19, Kayee: drew an arrow from the Summary down to this grid,
+                  "move this here" → attach them with no gap instead of two separate
+                  cards) — .customer-driver-group in globals.css zeroes the gap between
+                  just these two and joins their corners into a single visual card. */}
+              <div className="customer-driver-group">
+                <PayrollTable
+                  title="Cash Coming In — Summary"
+                  subtitle="TOTAL (current + planned), then each broken out — feeds the Cash Flow Projection"
+                  tintForecast={false}
+                  frozenColumns={SUMMARY_FROZEN_COLUMNS}
+                  months={planMonths}
+                  todayIso={todayIso}
+                  rowGroups={[{ key: 'summary', label: null, rows: summaryRows }]}
+                />
 
-              {/* 2 — current & pipeline driver grid (rows from the live GL Cash
-                  roster plus manually added rows). One grid, two rows per customer
-                  (# of Campaigns / # of Meetings), each with its own price. */}
-              <CombinedDriverGrid
-                title="Current & Pipeline — Campaigns & Meetings"
-                subtitle="Each customer priced individually · counts editable Jan 2026 onward · rows from the live GL Cash roster, plus rows you add"
-                rows={currentDriverRows}
-                months={planMonths}
-                isEditableMonth={isDriverEditableMonth}
-                todayIso={todayIso}
-                getCount={getDriverCount}
-                onSetCount={setDriverCount}
-                getPrice={getCustomerPrice}
-                onSetPrice={setCustomerPrice}
-                headActions={
-                  <button type="button" className="btn" onClick={addManualCustomer}>
-                    + Add Customer Row
-                  </button>
-                }
-              />
+                {/* 2 — current & pipeline driver grid (rows from the live GL Cash
+                    roster plus manually added rows). One grid, two rows per customer
+                    (# of Campaigns / # of Meetings), each with its own price. */}
+                <CombinedDriverGrid
+                  title="Current & Pipeline — Campaigns & Meetings"
+                  subtitle="Each customer priced individually · counts editable Jan 2026 onward · rows from the live GL Cash roster, plus rows you add"
+                  rows={currentDriverRows}
+                  months={planMonths}
+                  isEditableMonth={isDriverEditableMonth}
+                  todayIso={todayIso}
+                  getCount={getDriverCount}
+                  onSetCount={setDriverCount}
+                  getPrice={getCustomerPrice}
+                  onSetPrice={setCustomerPrice}
+                  headActions={
+                    <button type="button" className="btn" onClick={addManualCustomer}>
+                      + Add Customer Row
+                    </button>
+                  }
+                />
+              </div>
 
               {/* 3 — PLANNED CUSTOMERS block. Appended directly below the
                   current-customer grids in the SAME card — separated only by the
@@ -892,7 +946,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                     title="Planned Customers"
                     subtitle={`${planned.length} planned customer${
                       planned.length === 1 ? '' : 's'
-                    } · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
+                    } · Qty scales Upfront/Monthly $ (a row can be a cohort, e.g. "3 at this pricing") · −1 when one converts to a real GL customer · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
                     tintForecast={false}
                     frozenColumns={PLAN_FROZEN_COLUMNS}
                     months={planMonths}

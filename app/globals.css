@@ -1046,6 +1046,49 @@ thead th.pr-month-historical { background: #3a3a3d; }
    Campaigns"/"# of Meetings") reads as a muted sub-label, not a second customer name. */
 .customer-driver-grid tr.driver-pair-last td { border-bottom: 1px solid var(--border); }
 .driver-metric-label { color: var(--muted); font-size: 11.5px; }
+
+/* Shade BOTH rows of one customer the same, alternating customer-to-customer — see the
+   dataRows comment in CustomerPanel.jsx for why (default per-row striping split a pair
+   across two shades, so the eye couldn't tell the Meetings row belonged with the
+   Campaigns row above it). Extra ancestor classes here outrank the generic
+   `.payroll-table tbody tr:not(...):nth-child(even) td.pr-frozen` rule this overrides. */
+.customer-driver-grid .payroll-table tbody tr.driver-pair-even td,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-even td.pr-frozen {
+  background: var(--panel);
+}
+.customer-driver-grid .payroll-table tbody tr.driver-pair-odd td,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-odd td.pr-frozen {
+  background: #F0F2F4;
+}
+
+/* Kayee, 2026-08-19: "no need to have spacing like this... it's like a spreadsheet...
+   stick to one another" — the default Payroll-table row padding read as loose gaps
+   around these small count/price inputs. Tighter, spreadsheet-density padding scoped to
+   just this table. */
+.customer-driver-grid .payroll-table tbody td { padding: 3px 10px; }
+
+/* Kayee, 2026-08-19 (arrow from Summary down to the Current & Pipeline grid): "move
+   this here" — join the Summary card and the grid right below it into one continuous
+   block instead of two separate cards with a gap between them. Zeroes the gap for just
+   these two (the parent .pr-outer-body's normal 20px gap still applies before/after
+   this wrapper) and rounds only the outer corners of the joined pair. */
+/* Cash Coming In — Summary row tones (2026-08-19, Kayee: "only the top part up until
+   the date is black. the total for current and planned is medium grey and then total
+   current and total planned is light grey so that it's not all black") — replaces the
+   default all-black `.total` row treatment for just these three summary rows. The card
+   header + month-header row above them keep the shared black chrome untouched. */
+tr.summary-grand-total td {
+  background: #6B7280 !important; color: #fff !important; font-weight: 700;
+  border-top: 2px solid var(--green); border-bottom: 2px solid var(--green);
+}
+tr.summary-subtotal td {
+  background: #E5E7EB !important; color: var(--text) !important; font-weight: 700;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+
+.customer-driver-group { display: flex; flex-direction: column; gap: 0; }
+.customer-driver-group > .payroll-card:first-child { margin-bottom: 0; border-radius: 14px 14px 0 0; }
+.customer-driver-group > .payroll-card:last-child { margin-top: -1px; border-radius: 0 0 14px 14px; }
 /* Sits inside the black .payroll-card-head bar (unlike every other .pr-input, which
    sits on a light table cell) — .pr-input's default pale-green-bg/dark-text combo has
    almost no contrast there (Kayee, 2026-08-05 screenshot: "the font is dark the user
@@ -1072,6 +1115,13 @@ thead th.pr-month-historical { background: #3a3a3d; }
 .pr-headcount-cost { font-size: 9.5px; color: var(--muted-2); font-family: var(--font-num); white-space: nowrap; }
 
 .pr-row-actions { display: flex; align-items: center; gap: 4px; }
+
+/* Planned Customers "Qty" cell (2026-08-19) — a small "−1" icon-button next to the
+   count input, so a cohort row ("3 at this pricing") can be stepped down one at a time
+   as members of it actually close and appear in the GL roster. */
+.pr-qty-stepper { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+.pr-qty-stepper .icon-btn { flex: none; width: 22px; height: 22px; font-size: 14px; line-height: 1; }
+.pr-qty-stepper .pr-input-month { width: 46px; }
 
 /* Drag handle (Roster rows only) — genuinely draggable, unlike the Fill-Range button
    above it, which just opens a bulk-edit popover and used to (confusingly) share this
