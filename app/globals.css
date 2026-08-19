@@ -1089,13 +1089,17 @@ thead th.pr-month-historical { background: #3a3a3d; }
    the date is black. the total for current and planned is medium grey and then total
    current and total planned is light grey so that it's not all black") — replaces the
    default all-black `.total` row treatment for just these three summary rows. The card
-   header + month-header row above them keep the shared black chrome untouched. */
+   header + month-header row above them keep the shared black chrome untouched.
+   font-weight left at normal here (2026-08-19, Kayee: "the total current and total
+   planned numbers and the entire row the font doesn't need to be bold") — CustomerPanel
+   only wraps the grand TOTAL row's own text in <b>, so .summary-subtotal no longer
+   forces bold at the CSS level either. */
 tr.summary-grand-total td {
-  background: #6B7280 !important; color: #fff !important; font-weight: 700;
+  background: #6B7280 !important; color: #fff !important;
   border-top: 2px solid var(--green); border-bottom: 2px solid var(--green);
 }
 tr.summary-subtotal td {
-  background: #E5E7EB !important; color: var(--text) !important; font-weight: 700;
+  background: #E5E7EB !important; color: var(--text) !important; font-weight: 400;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
 }
 
@@ -1129,12 +1133,14 @@ tr.summary-subtotal td {
 
 .pr-row-actions { display: flex; align-items: center; gap: 4px; }
 
-/* Planned Customers "Qty" cell (2026-08-19) — a small "−1" icon-button next to the
-   count input, so a cohort row ("3 at this pricing") can be stepped down one at a time
-   as members of it actually close and appear in the GL roster. */
-.pr-qty-stepper { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
-.pr-qty-stepper .icon-btn { flex: none; width: 22px; height: 22px; font-size: 14px; line-height: 1; }
-.pr-qty-stepper .pr-input-month { width: 46px; }
+/* Planned-customer name tag (2026-08-19 consolidation) — a small pill next to the name
+   in the combined Cash In Projection grid, the only thing distinguishing a planned row
+   from a current/pipeline row now that they share one table and one pricing model. */
+.pr-tag {
+  flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .3px; color: var(--teal);
+  background: var(--teal-soft, rgba(20,184,166,.12)); border-radius: 20px; padding: 2px 7px;
+  white-space: nowrap;
+}
 
 /* Drag handle (Roster rows only) — genuinely draggable, unlike the Fill-Range button
    above it, which just opens a bulk-edit popover and used to (confusingly) share this

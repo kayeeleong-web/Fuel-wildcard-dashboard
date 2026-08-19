@@ -63,22 +63,6 @@ const WATERFALL_FROZEN_COLUMNS = [
   { key: 'total', label: 'Total', width: 104, align: 'right' },
 ];
 
-// 'qty' added 2026-08-19 (Kayee: "3 of the customer in this pricing, 4 in that
-// pricing... when the planned customer come in as real customer, [need] a way to
-// reduce that planned by 1") — one row can represent a COHORT of planned customers at
-// the same pricing/timing rather than a single named prospect; Upfront/Monthly $ scale
-// by Qty (see plannedAmountFor), and the −1 stepper next to it is how a row shrinks as
-// members of that cohort actually close and show up in the GL roster.
-const PLAN_FROZEN_COLUMNS = [
-  { key: 'actions', label: '', width: 44 },
-  { key: 'name', label: 'Customer', width: 170 },
-  { key: 'qty', label: 'Qty', width: 90, align: 'right' },
-  { key: 'startMonth', label: 'Start Month', width: 128 },
-  { key: 'upfront', label: 'Upfront $', width: 104, align: 'right' },
-  { key: 'monthly', label: 'Monthly $', width: 104, align: 'right' },
-  { key: 'numMonths', label: '# Months', width: 84, align: 'right' },
-];
-
 // 'price' column added 2026-08-19 (Kayee, from her own Google Sheet: each customer has
 // its own negotiated $/campaign and $/meeting rate — Ashby $1,000 upfront/$2,000 per
 // meeting, Amplitude $1,500/$0, etc. — not one flat rate for everyone). 'metric' added
@@ -94,41 +78,6 @@ const DRIVER_FROZEN_COLUMNS = [
 // only needs the one frozen label column — width matches the driver grids below it.
 const SUMMARY_FROZEN_COLUMNS = [{ key: 'name', label: '', width: 230 }];
 
-/** Subtle labeled divider between blocks INSIDE the one Cash Inflow Projection card —
- *  deliberately not another CollapsibleSection (2026-08-18: "one section, one card,
- *  not three"). Reuses the embedded-table title typography and the --border token. */
-function BlockDivider({ label }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
-      <span className="payroll-embedded-title">{label}</span>
-      <span style={{ flex: 1, borderTop: '1px solid var(--border)' }} />
-    </div>
-  );
-}
-
-/** Whole months from `startIso` ("YYYY-MM") to `iso` — 0 for the start month itself. */
-function monthDiff(startIso, iso) {
-  const [sy, sm] = startIso.split('-').map(Number);
-  const [y, m] = iso.split('-').map(Number);
-  return (y - sy) * 12 + (m - sm);
-}
-
-/** Projected cash for one planned customer ROW (possibly a cohort of several — see
- *  Qty, 2026-08-19) in one month: upfront lands in the start month; the recurring
- *  amount runs from the start month for `numMonths` months (blank/0 numMonths =
- *  ongoing with no end). Everything scales by Qty — a row of "3 at $1,000 upfront"
- *  produces $3,000 in its start month, not $1,000. */
-function plannedAmountFor(row, iso) {
-  if (!row.startMonth || iso < row.startMonth) return 0;
-  const qty = Number(row.qty) || 0;
-  if (qty <= 0) return 0;
-  const idx = monthDiff(row.startMonth, iso);
-  let amount = 0;
-  if (idx === 0) amount += Number(row.upfront) || 0;
-  const numMonths = Number(row.numMonths) || 0;
-  if (numMonths === 0 || idx < numMonths) amount += Number(row.monthly) || 0;
-  return amount * qty;
-}
 
 /** Planned-customer rows, persisted to THIS browser's localStorage — same
  *  hydrate-then-save pattern as usePayrollState (and the same reason: this is a
@@ -558,12 +507,41 @@ export function CustomerPanel({ glCash, glAccrued }) {
     })),
   ];
 
-  // Planned-customer driver rows — keyed to the planning table's own rows, so adding
-  // a planned customer there automatically gives it a row in both planned grids.
+  // Planned-customer driver rows (2026-08-19, Kayee: "we dont need a separate section
+  // for plan customer, just put it in the Current & Pipeline section... they can input
+  // the # of campaign and meeting same as the current and pipeline and then just
+  // consolidate it") — planned customers are now rows in the SAME combined grid as
+  // current/pipeline, added the same way (name + campaigns/meetings counts + price),
+  // no more separate Qty/Start Month/Upfront/Monthly economics model. A "Planned" tag
+  // next to the name is the only thing distinguishing them for the Current/Planned
+  // summary split below.
   const plannedDriverRows = (planned || []).map((r) => ({
     key: `plan:${r.id}`,
-    name: r.name || 'Untitled planned customer',
+    name: r.name,
+    nameCell: (
+      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button
+          type="button"
+          className="icon-btn"
+          title="Remove this planned customer"
+          onClick={() => removePlanned(r.id, r.name)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
+          </svg>
+        </button>
+        <TextInput value={r.name} placeholder="Planned customer name" focusOnMount={r.id === justAddedId} onCommit={(v) => {
+          updatePlanned(r.id, { name: v });
+          if (r.id === justAddedId) setJustAddedId(null);
+        }} />
+        <span className="pr-tag">Planned</span>
+      </span>
+    ),
   }));
+
+  // One consolidated set of rows for the single Campaigns & Meetings grid — current,
+  // pipeline, and planned all rendered together (2026-08-19 consolidation).
+  const combinedDriverRows = [...currentDriverRows, ...plannedDriverRows];
 
   const allCashInRows = [
     ...cashWaterfall.customers.map((c) => ({
@@ -577,7 +555,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
       name: c.name || 'Untitled',
       kind: 'Pipeline',
     })),
-    ...plannedDriverRows.map((r) => ({ key: r.key, name: r.name, kind: 'Planned' })),
+    ...(planned || []).map((r) => ({ key: `plan:${r.id}`, name: r.name || 'Untitled planned customer', kind: 'Planned' })),
   ];
 
   /** Computed cash in for one customer key in one FORECAST month:
@@ -623,26 +601,23 @@ export function CustomerPanel({ glCash, glAccrued }) {
   }, [inflowTotalsByMonth]);
 
   /* ------------------------ Planned-customer handlers ------------------------ */
+  // Simplified 2026-08-19 (Kayee: "we dont need a separate section for plan customer...
+  // they can input the # of campaign and meeting same as the current and pipeline and
+  // then just consolidate it") — a planned customer is now just a name; it's priced and
+  // driven exactly like a pipeline row (campaigns × price + meetings × price) in the
+  // same combined grid. The old Qty/Start Month/Upfront $/Monthly $/# Months cohort
+  // model is gone — it was a second, disconnected way to price a planned customer that
+  // never actually fed the Cash Coming In totals (those always used the driver-grid
+  // campaigns/meetings math), so it was pure redundancy.
 
   function addPlannedCustomer() {
     const id = generateId('cust');
-    setPlanned([
-      ...(planned || []),
-      { id, name: '', qty: 1, startMonth: '', upfront: 0, monthly: 0, numMonths: 0 },
-    ]);
+    setPlanned([...(planned || []), { id, name: '' }]);
     setJustAddedId(id);
   }
 
   function updatePlanned(id, patch) {
     setPlanned((planned || []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  }
-
-  // −1 stepper (2026-08-19, Kayee: "when the planned customer come in as real
-  // customer... a good ui to reduce that planned by 1") — just decrements Qty per her
-  // choice; doesn't touch the Current & Pipeline grid, since that already flows in
-  // from GL on its own. Floors at 0 rather than going negative or auto-removing the row.
-  function decrementPlannedQty(id) {
-    setPlanned((planned || []).map((r) => (r.id === id ? { ...r, qty: Math.max(0, (Number(r.qty) || 0) - 1) } : r)));
   }
 
   function removePlanned(id, name) {
@@ -662,79 +637,6 @@ export function CustomerPanel({ glCash, glAccrued }) {
     }
   }
 
-  const planRows = (planned || []).map((row) => {
-    const monthCells = {};
-    for (const iso of planMonths) {
-      monthCells[iso] = formatPayrollAmount(plannedAmountFor(row, iso));
-    }
-    return {
-      id: row.id,
-      monthCells,
-      cells: {
-        actions: (
-          <div className="pr-row-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              title="Remove planned customer"
-              onClick={() => removePlanned(row.id, row.name)}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
-              </svg>
-            </button>
-          </div>
-        ),
-        name: (
-          <TextInput
-            value={row.name}
-            placeholder="Customer name"
-            focusOnMount={row.id === justAddedId}
-            onCommit={(v) => {
-              updatePlanned(row.id, { name: v });
-              if (row.id === justAddedId) setJustAddedId(null);
-            }}
-          />
-        ),
-        qty: (
-          <div className="pr-qty-stepper">
-            <button
-              type="button"
-              className="icon-btn"
-              title="One of this cohort just converted to a real (GL) customer — decrement Qty"
-              disabled={(Number(row.qty) || 0) <= 0}
-              onClick={() => decrementPlannedQty(row.id)}
-            >
-              −
-            </button>
-            <MonthInput value={row.qty ?? 1} onCommit={(n) => updatePlanned(row.id, { qty: Math.max(0, n) })} />
-          </div>
-        ),
-        startMonth: (
-          <input
-            type="month"
-            className="pr-input pr-input-date"
-            value={row.startMonth || ''}
-            onChange={(e) => updatePlanned(row.id, { startMonth: e.target.value })}
-          />
-        ),
-        upfront: <MonthInput value={row.upfront} onCommit={(n) => updatePlanned(row.id, { upfront: n })} />,
-        monthly: <MonthInput value={row.monthly} onCommit={(n) => updatePlanned(row.id, { monthly: n })} />,
-        numMonths: <MonthInput value={row.numMonths} onCommit={(n) => updatePlanned(row.id, { numMonths: n })} />,
-      },
-    };
-  });
-
-  const planTotalRow = {
-    cells: { name: <b>TOTAL</b> },
-    monthCells: Object.fromEntries(
-      planMonths.map((iso) => {
-        const sum = (planned || []).reduce((acc, r) => acc + plannedAmountFor(r, iso), 0);
-        return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
-      })
-    ),
-  };
-
   /* ------------------------- Cash Coming In (computed) ------------------------- */
 
   /** One customer row's cash-in amount for a month — same rule everywhere: real GL
@@ -753,14 +655,20 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // not all black." The card header + month-header row stay the shared black chrome;
   // only these row backgrounds change.
   function buildSubtotalRow(label, rows, tone) {
+    // 2026-08-19, Kayee: "the total current and total planned numbers and the entire
+    // row the font doesn't need to be bold" — only the grand TOTAL (current+planned)
+    // row stays bold; the Current-only / Planned-only rows below it render as plain
+    // weight text (still their own light-grey row tone, just not bold).
+    const bold = tone === 'grand';
+    const wrap = (node) => (bold ? <b>{node}</b> : node);
     return {
       id: `subtotal:${label}`,
-      className: tone === 'grand' ? 'summary-grand-total' : 'summary-subtotal',
-      cells: { name: <b>{label}</b>, kind: '' },
+      className: bold ? 'summary-grand-total' : 'summary-subtotal',
+      cells: { name: wrap(label), kind: '' },
       monthCells: Object.fromEntries(
         planMonths.map((iso) => {
           const sum = rows.reduce((acc, row) => acc + amountFor(row, iso), 0);
-          return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
+          return [iso, <span key={iso}>{wrap(formatPayrollAmount(sum) || '$0')}</span>];
         })
       ),
     };
@@ -877,14 +785,13 @@ export function CustomerPanel({ glCash, glAccrued }) {
           collapsed={collapsedSections.projection}
           onToggle={() => toggleSection('projection')}
         >
-          {driversHydrated && drivers ? (
+          {driversHydrated && drivers && hydrated && planned ? (
             <>
               {/* 1 — SUMMARY STRIP. Price assumptions — same AssumptionField strip as
-                  the Payroll tab's assumptions bar, so the pattern reads identically
-                  across tabs — plus the computed Cash Coming In monthly TOTAL as a
-                  TOTAL-only table (no data rows): it recalculates live as the driver
-                  inputs below change, because it renders the same cashInTotalRow the
-                  detail table at the bottom uses. */}
+                  the Payroll tab's assumptions bar. No explanatory paragraph anymore
+                  (2026-08-19, Kayee: "the text is wasting space with the explanation,
+                  just remove it") — the field labels themselves already say who the
+                  default is for. */}
               <div className="payroll-assumptions">
                 <AssumptionField
                   label="Planned Customer Price per Campaign"
@@ -898,24 +805,14 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   suffix="$"
                   onCommit={(v) => setDrivers({ ...drivers, meetingPrice: v })}
                 />
-                <div className="pr-assumption-note">
-                  These two defaults are a planning assumption for Planned Customers only — every current/pipeline
-                  customer is priced individually in its own Price column below (each one is different, so there&apos;s
-                  no shared rate for them). Cash Coming In = campaigns × that row&apos;s campaign price + meetings ×
-                  that row&apos;s meeting price. Campaign/meeting counts are editable from Jan 2026 onward even where
-                  actuals already exist, for plan-vs-actual comparison.
-                </div>
               </div>
 
               {/* SUMMARY — one place at the top for the totals (2026-08-19, Kayee:
                   "there are too many sections... just have one at the top for summary.
                   like summary total of both current and planned customer and then
                   below by [tier] like total of current customer and then followed by
-                  planned customer"). Three stacked TOTAL-style rows, nothing else —
-                  the old separate "Cash Coming In — Detail" per-customer table was
-                  removed; the driver grids below already show every customer's own
-                  numbers, so that table was just repeating them. */}
-              {/* Summary + Current & Pipeline grid render as ONE continuous block
+                  planned customer"). Three stacked TOTAL-style rows, nothing else. */}
+              {/* Summary + the combined grid render as ONE continuous block
                   (2026-08-19, Kayee: drew an arrow from the Summary down to this grid,
                   "move this here" → attach them with no gap instead of two separate
                   cards) — .customer-driver-group in globals.css zeroes the gap between
@@ -931,13 +828,20 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   rowGroups={[{ key: 'summary', label: null, rows: summaryRows }]}
                 />
 
-                {/* 2 — current & pipeline driver grid (rows from the live GL Cash
-                    roster plus manually added rows). One grid, two rows per customer
-                    (# of Campaigns / # of Meetings), each with its own price. */}
+                {/* ONE combined grid for current, pipeline, AND planned customers
+                    (2026-08-19 consolidation, Kayee: "we dont need a separate section
+                    for plan customer, just put it in the Current & Pipeline
+                    section... rename it to cash in projection or something... they can
+                    input the # of campaign and meeting same as the current and
+                    pipeline and then just consolidate it"). Planned rows sit at the
+                    bottom of the same table, tagged "Planned" next to their name, and
+                    are added with their own button so it's still clear which kind of
+                    row you're creating — but priced/driven identically to every other
+                    row here (campaigns × price + meetings × price). */}
                 <CombinedDriverGrid
-                  title="Current & Pipeline — Campaigns & Meetings"
-                  subtitle="Each customer priced individually · counts editable Jan 2026 onward · rows from the live GL Cash roster, plus rows you add"
-                  rows={currentDriverRows}
+                  title="Cash In Projection — Campaigns & Meetings"
+                  subtitle="Each customer priced individually · counts editable Jan 2026 onward · Current & Pipeline from the live GL Cash roster, plus rows you add · Planned rows tagged below"
+                  rows={combinedDriverRows}
                   months={planMonths}
                   isEditableMonth={isDriverEditableMonth}
                   todayIso={todayIso}
@@ -946,63 +850,17 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   getPrice={getCustomerPrice}
                   onSetPrice={setCustomerPrice}
                   headActions={
-                    <button type="button" className="btn" onClick={addManualCustomer}>
-                      + Add Customer Row
-                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button type="button" className="btn" onClick={addManualCustomer}>
+                        + Add Customer Row
+                      </button>
+                      <button type="button" className="btn" onClick={addPlannedCustomer}>
+                        + Add Planned Customer
+                      </button>
+                    </div>
                   }
                 />
               </div>
-
-              {/* 3 — PLANNED CUSTOMERS block. Appended directly below the
-                  current-customer grids in the SAME card — separated only by the
-                  subtle labeled divider, not another section. */}
-              <BlockDivider label="Planned Customers" />
-              {hydrated && planned ? (
-                <>
-                  <PayrollTable
-                    title="Planned Customers"
-                    subtitle={`${planned.length} planned customer${
-                      planned.length === 1 ? '' : 's'
-                    } · Qty scales Upfront/Monthly $ (a row can be a cohort, e.g. "3 at this pricing") · −1 when one converts to a real GL customer · upfront lands in the start month, recurring runs for # Months (blank = ongoing)`}
-                    tintForecast={false}
-                    frozenColumns={PLAN_FROZEN_COLUMNS}
-                    months={planMonths}
-                    todayIso={todayIso}
-                    totalRow={planTotalRow}
-                    rowGroups={[{ key: 'planned', label: null, rows: planRows }]}
-                    headActions={
-                      // Plain .btn (white bg), not .btn.primary — solid black would vanish
-                      // against the card's own black header bar (same contrast fix as the
-                      // Payroll tab's "+ Add Role", 2026-08-05).
-                      <button type="button" className="btn" onClick={addPlannedCustomer}>
-                        + Add Customer
-                      </button>
-                    }
-                  />
-
-                  {/* Parallel driver grid for planned customers (2026-08-18/19) — same
-                      combined campaigns+meetings shape as the current-customer grid
-                      above, rows keyed to the planning table (add a planned customer
-                      there and it appears here). Price defaults to the shared
-                      assumption above until a planned row gets its own rate. */}
-                  {plannedDriverRows.length > 0 && (
-                    <CombinedDriverGrid
-                      title="Planned Customers — Campaigns & Meetings"
-                      subtitle="Price defaults to the Planned Customer assumption above until overridden per row"
-                      rows={plannedDriverRows}
-                      months={planMonths}
-                      isEditableMonth={isDriverEditableMonth}
-                      todayIso={todayIso}
-                      getCount={getDriverCount}
-                      onSetCount={setDriverCount}
-                      getPrice={getCustomerPrice}
-                      onSetPrice={setCustomerPrice}
-                    />
-                  )}
-                </>
-              ) : (
-                <div className="cap">Loading saved customer plan…</div>
-              )}
             </>
           ) : (
             <div className="cap">Loading saved cash inflow drivers…</div>
