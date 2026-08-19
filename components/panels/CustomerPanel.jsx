@@ -589,34 +589,75 @@ export function CustomerPanel({ glCash, glAccrued }) {
 
   /* ------------------------- Cash Coming In (computed) ------------------------- */
 
-  const cashInRows = allCashInRows.map((row) => {
+  /** One customer row's cash-in amount for a month — same rule everywhere: real GL
+   *  cash on actual months for current customers, campaigns×price + meetings×price
+   *  on forecast months (current, pipeline, and planned rows alike). */
+  function amountFor(row, iso) {
+    if (row.glByMonth && !isEditableMonth(iso)) return row.glByMonth[iso] || 0;
+    if (isEditableMonth(iso)) return cashInFor(row.key, iso);
+    return 0;
+  }
+
+  function buildDetailRow(row) {
     const monthCells = {};
     for (const iso of planMonths) {
-      if (row.glByMonth && !isEditableMonth(iso)) {
-        // Actual months for a current (GL) customer: the real cash received, read-only.
-        monthCells[iso] = formatPayrollAmount(row.glByMonth[iso]);
-      } else if (isEditableMonth(iso)) {
-        monthCells[iso] = formatPayrollAmount(cashInFor(row.key, iso));
-      } else {
-        monthCells[iso] = '';
-      }
+      const showBlank = !row.glByMonth && !isEditableMonth(iso);
+      monthCells[iso] = showBlank ? '' : formatPayrollAmount(amountFor(row, iso));
     }
     return {
       id: row.key,
       monthCells,
       cells: { name: row.name, kind: row.kind },
     };
-  });
+  }
+
+  function buildSubtotalRow(label, rows) {
+    return {
+      id: `subtotal:${label}`,
+      className: 'total',
+      cells: { name: <b>{label}</b>, kind: '' },
+      monthCells: Object.fromEntries(
+        planMonths.map((iso) => {
+          const sum = rows.reduce((acc, row) => acc + amountFor(row, iso), 0);
+          return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
+        })
+      ),
+    };
+  }
+
+  // Split into Current (GL customers + manual pipeline rows) vs Planned — Kayee
+  // (2026-08-18): "move planned customer to the bottom of the cash coming in... total
+  // for current customer and then followed by total for planned customer" — one table,
+  // two labeled bands (reuses the app's existing section-tint convention for the
+  // color distinction) instead of a separate section per kind.
+  const currentKindRows = allCashInRows.filter((r) => r.kind !== 'Planned');
+  const plannedKindRows = allCashInRows.filter((r) => r.kind === 'Planned');
+
+  const cashInRowGroups = [
+    {
+      key: 'current',
+      label: 'Current Customers',
+      rows: [...currentKindRows.map(buildDetailRow), buildSubtotalRow('Total — Current', currentKindRows)],
+    },
+    // Only shown once there's at least one planned customer — an always-visible
+    // "Total — Planned $0" band when the plan is empty would just be noise.
+    ...(plannedKindRows.length > 0
+      ? [
+          {
+            key: 'planned',
+            label: 'Planned Customers',
+            rows: [...plannedKindRows.map(buildDetailRow), buildSubtotalRow('Total — Planned', plannedKindRows)],
+          },
+        ]
+      : []),
+  ];
 
   const cashInTotalRow = {
     cells: { name: <b>TOTAL</b> },
     monthCells: Object.fromEntries(
       planMonths.map((iso) => {
         let sum = 0;
-        for (const row of allCashInRows) {
-          if (row.glByMonth && !isEditableMonth(iso)) sum += row.glByMonth[iso] || 0;
-          else if (isEditableMonth(iso)) sum += cashInFor(row.key, iso);
-        }
+        for (const row of allCashInRows) sum += amountFor(row, iso);
         return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
       })
     ),
@@ -849,7 +890,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 months={planMonths}
                 todayIso={todayIso}
                 totalRow={cashInTotalRow}
-                rowGroups={[{ key: 'cashIn', label: null, rows: cashInRows }]}
+                rowGroups={cashInRowGroups}
               />
             </>
           ) : (
