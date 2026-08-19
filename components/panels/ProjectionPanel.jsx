@@ -1,7 +1,6 @@
 'use client';
 
 import { useLayoutEffect, useState } from 'react';
-import { PageHead } from '../ui/PageHead';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel } from './CustomerPanel';
@@ -55,8 +54,6 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
 
   return (
     <>
-      <PageHead title="Projection" />
-
       {/* Sub-tab navigation — local to this panel only, separate from the main
           TabNav in the shell. Clicking "Reports" in the main bar entirely hides
           this panel and switches to actual-data-only view. */}

@@ -305,6 +305,12 @@ function DriverGrid({ title, subtitle, rows, months, isEditableMonth, todayIso, 
       totalRow={totalRow}
       rowGroups={[{ key: 'rows', label: null, rows: tableRows }]}
       headActions={headActions}
+      // Kayee, 2026-08-19: "I dont like the input box bubble... more simple like a
+      // spreadsheet" — scopes a flatter, faint-gridline input style to just these
+      // driver grids (Current/Planned Campaigns/Meetings) without touching the blue
+      // pill `.pr-input` style used everywhere else (Payroll, P&L sidebar). See
+      // .customer-driver-grid in globals.css.
+      className="customer-driver-grid"
     />
   );
 }

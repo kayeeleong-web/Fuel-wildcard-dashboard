@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { PageHead } from '../ui/PageHead';
 import { DrillPopover } from '../ui/DrillPopover';
 import { MonthInput } from '../payroll/PayrollTable';
 import { PLAssumptionsSidebar } from '../reports/PLAssumptionsSidebar';
@@ -332,8 +331,6 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
 
   return (
     <>
-      <PageHead title="Reports" />
-
       <div className="toolbar">
         {/* Type selector only shown on Reports (actual) tab — Projection has its own
             sub-tab nav so a second selector here would be redundant. Custom removed
@@ -465,6 +462,14 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
 function rangeClasses(monthIndex, lastActualIndex, month) {
   const classes = ['r-all'];
   if (month) classes.push(`y${month.slice(0, 4)}`);
+  // Kayee, 2026-08-19: "the toggle of 2026-2028 is pretty much useless. because it's
+  // showing historical even if i selected 2026-2028" — the toggle only ever filtered
+  // which months are hidden, it never colored anything, so historical (pre-2026) months
+  // mixed into the 2026-2028 view read as if the toggle wasn't doing anything. Instead
+  // of relying on the toggle to hide them, every header cell for a month before Jan-2026
+  // now gets a distinct dark-grey treatment (see .r-historical in globals.css) so
+  // historical vs. 2026+ columns are visually obvious no matter which toggle is active.
+  if (month && month < '2026-01') classes.push('r-historical');
   return classes.join(' ');
 }
 

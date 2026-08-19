@@ -476,7 +476,13 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    for assumption") — a 4-column table (Name/$/Cadence/Delete) split across two cards
    needs less raw width than the old single 6-column table did, so the P&L can take
    that room back instead. */
-.reports-sidebar { flex: 0 0 34%; max-width: 34%; min-width: 340px; display: flex; flex-direction: column; gap: 18px; }
+/* Narrowed by 3cm (2026-08-18, Kayee: "can you make the left narrower? by 3 cm... so
+   that right side is longer") — calc() instead of a smaller flat percentage so the
+   cut is a real, fixed 3cm regardless of viewport width (a percentage alone would
+   shrink/grow with the window instead of staying "3cm less"). 1cm = 37.8px at the
+   standard 96dpi CSS reference. .reports-main is flex:1 1 0%, so it automatically
+   reclaims every pixel given up here — no separate change needed on the table side. */
+.reports-sidebar { flex: 0 0 calc(34% - 113px); max-width: calc(34% - 113px); min-width: 300px; display: flex; flex-direction: column; gap: 18px; }
 .reports-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
 .reports-sidebar-rail { display: flex; align-self: stretch; }
@@ -524,17 +530,21 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    flex:1 makes it claim exactly the height align-items:stretch gives it. */
 .reports-with-sidebar .reports-main .table-wrap { flex: 1 1 auto; max-height: none; }
 
-/* Because that table-wrap above has max-height:none (no internal scrollbar), the
-   PAGE scrolls instead of the table — so thead's normal `top: 0` sticky rule pins the
-   month-header row exactly at the very top of the viewport, right underneath the
-   fixed .topbar (64px) + .tabnav-wrap (~65px), which sit on top of it (z-index 20/15
-   vs thead's 3). Net effect: scroll down and the dates disappear under the nav chrome
-   (Kayee, 2026-08-18: "please freeze dates in all tab, I want to scroll down and be
-   able to look at the date of each column"). Give it the real offset instead so it
-   sticks just below that fixed stack, staying visible the whole scroll. Approximate
-   (topbar/tabnav aren't fixed-px in code) but close enough that the header never gets
-   fully hidden. */
-.reports-with-sidebar .reports-main thead th { top: 130px; }
+/* 2026-08-18: tried giving thead a non-zero sticky `top` here (to keep the month
+   header visible under the fixed topbar+tabnav while scrolling) and it broke the
+   table outright — Kayee: "the account/line item covering revenue, like it should be
+   at the top... you were trying to fix that and messed it up." Root cause: a sticky
+   element "sticks" as soon as (scrollTop-of-its-containing-block + top) exceeds its
+   OWN static offset — thead's static offset is 0 (it's the very first thing in the
+   table), so ANY positive `top` value makes it stick immediately, at that many px
+   down from the top of whatever box it's sticky relative to, even with zero scroll.
+   That shoved the header down into the table (rendering below REVENUE/Transaction
+   Revenue instead of above them) — the opposite of the intended fix. Reverted to the
+   plain `thead th { top: 0 }` from the base ruleset (see line ~392), which is the only
+   value that can never do this. The "header hides behind the fixed nav on a long
+   page-scrolling table" issue from that request is still open — needs a proper fix
+   (e.g. JS-measured offset, or keeping these tables on their own internal scrollbar
+   instead of page-level scroll) rather than a guessed pixel constant. */
 
 /* Widen the whole two-column area into the gutter room .page-wide normally reserves,
    ONLY while the sidebar is expanded (2026-08-07, Kayee: "when hamburger is open you
@@ -819,6 +829,15 @@ tr.report-driver-row .pr-input { padding: 4px 6px; font-size: 11px; }
 .report-month-status { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; color: var(--on-black-muted); margin-top: 3px; }
 .report-month-status.fcst { color: var(--blue); }
 
+/* Historical months (anything before Jan-2026) — Kayee, 2026-08-19: the 2026-2028/
+   Historical toggle doesn't hide these columns in every table (the waterfalls always
+   show every GL month), so it read as if the toggle did nothing. Give historical
+   header cells their own dark-grey shade, distinct from the standard near-black header,
+   so historical vs. 2026+ columns are obvious at a glance regardless of which toggle
+   is selected. Body cells are untouched — only the year/month header row changes. */
+.report-year-row th.r-historical,
+thead tr:not(.report-year-row) th.r-historical { background: #3a3a3d; }
+
 /* Projected (padded, no-actual-data-yet) months — same soft-blue forecast tint the
    Payroll tab already uses for a future month, so the visual language matches across
    the app instead of inventing a second "this is a forecast" color. */
@@ -974,6 +993,11 @@ td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
 .pr-year-start { border-left: 2px solid var(--border); }
 thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 
+/* Same historical-month dark-grey header treatment as Reports' .r-historical, applied
+   to PayrollTable-based tables (Payroll, Customer waterfalls/driver grids) — see
+   isHistoricalMonth() in PayrollTable.jsx. */
+thead th.pr-month-historical { background: #3a3a3d; }
+
 /* ---- Editable cells ---- */
 /* Blue, not green (2026-08-07, Kayee: "make editable boxes blue instead of green") —
    green was already spoken for elsewhere in the app (the live-status dot on
@@ -991,6 +1015,20 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 .pr-input-month, .pr-input-assumption { text-align: right; font-family: var(--font-num); }
 .pr-input-date { font-family: var(--font-num); font-size: 11.5px; padding: 5px 6px; }
 .pr-select { appearance: auto; cursor: pointer; }
+
+/* Customer tab driver grids (Current/Planned Campaigns/Meetings) — Kayee, 2026-08-19:
+   "I dont like the input box bubble... more simple like a spreadsheet... reduce the
+   height also it's a little too wide." Scoped to .customer-driver-grid (set via
+   PayrollTable's className prop) so the blue rounded-pill .pr-input everywhere else
+   (Payroll, P&L sidebar) is untouched. Flat cell, faint gray gridline instead of a
+   pill background/border, shorter and narrower than the default .pr-input-month. */
+.customer-driver-grid .pr-input-month {
+  width: 100%; padding: 2px 5px; font-size: 11.5px; line-height: 1.3;
+  background: transparent; border: 1px solid var(--border-soft); border-radius: 0;
+}
+.customer-driver-grid .pr-input-month:focus {
+  background: #fff; border-color: var(--blue); box-shadow: none;
+}
 /* Sits inside the black .payroll-card-head bar (unlike every other .pr-input, which
    sits on a light table cell) — .pr-input's default pale-green-bg/dark-text combo has
    almost no contrast there (Kayee, 2026-08-05 screenshot: "the font is dark the user

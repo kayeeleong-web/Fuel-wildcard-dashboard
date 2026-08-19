@@ -45,6 +45,11 @@ export function PayrollTable({
   // should be in one box") — defaults to false so Roster/Bonus/Total Comp, which DO
   // want to be their own distinct collapsible cards, are completely unaffected.
   embedded = false,
+  // Extra class on the outer card/embedded wrapper, purely for scoping a one-off visual
+  // override from outside this shared component (e.g. Customer tab's driver grids
+  // wanting flatter, narrower "spreadsheet" cells — see .customer-driver-grid in
+  // globals.css) without touching every other table that reuses PayrollTable.
+  className,
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -127,7 +132,7 @@ export function PayrollTable({
 
   if (embedded) {
     return (
-      <div className="payroll-embedded">
+      <div className={`payroll-embedded${className ? ` ${className}` : ''}`}>
         {(title || subtitle || headActions) && (
           <div className="payroll-embedded-head">
             {title && <span className="payroll-embedded-title">{title}</span>}
@@ -141,7 +146,7 @@ export function PayrollTable({
   }
 
   return (
-    <div className="payroll-card">
+    <div className={`payroll-card${className ? ` ${className}` : ''}`}>
       {/* The collapse toggle is its own <button> (title + chevron only) rather than
           wrapping the whole header — headActions can contain a <select>/<button> of its
           own (e.g. Bonus's "+ Add bonus for…" picker), and nesting interactive elements
@@ -166,13 +171,23 @@ export function PayrollTable({
 }
 
 function monthHeadClass(iso, todayIso, tintForecast) {
-  return `pr-month-head ${monthTintClass(iso, todayIso, tintForecast)}`;
+  return `pr-month-head ${monthTintClass(iso, todayIso, tintForecast)}${isHistoricalMonth(iso) ? ' pr-month-historical' : ''}`;
 }
 
 function monthTintClass(iso, todayIso, tintForecast) {
   let cls = tintForecast && iso > todayIso ? 'pr-fcst' : 'pr-act';
   if (iso.endsWith('-01')) cls += ' pr-year-start';
   return cls;
+}
+
+// Kayee, 2026-08-19: the 2026-2028/Historical toggle doesn't actually hide historical
+// months (some tables — like the Cash/Accrued waterfalls — deliberately always show
+// every GL month regardless of the toggle), so it read as "useless." Instead, give any
+// month before Jan-2026 a visibly distinct dark-grey header treatment everywhere, so
+// historical vs. 2026+ columns are obvious at a glance without needing the toggle to
+// actually filter anything.
+function isHistoricalMonth(iso) {
+  return iso < '2026-01';
 }
 
 function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso, tintForecast }) {
