@@ -1004,6 +1004,14 @@ td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
 .pr-year-start { border-left: 2px solid var(--border); }
 thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
 
+/* Reports/Projection year-boundary divider (2026-08-19, Kayee: "put some line between
+   the year"), and the same treatment for every other table in the app (Payroll,
+   Customer) via .pr-year-start above — one continuous vertical rule running the full
+   height of the table (header rows + every body row), not just the year-band row. */
+.report-doc th.y-boundary,
+.report-doc td.y-boundary { border-left: 2px solid var(--border); }
+.report-doc thead th.y-boundary { border-left: 2px solid rgba(255,255,255,.28); }
+
 /* Same historical-month dark-grey header treatment as Reports' .r-historical, applied
    to PayrollTable-based tables (Payroll, Customer waterfalls/driver grids) — see
    isHistoricalMonth() in PayrollTable.jsx. */

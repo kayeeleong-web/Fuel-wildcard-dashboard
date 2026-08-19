@@ -470,7 +470,33 @@ function rangeClasses(monthIndex, lastActualIndex, month) {
   // now gets a distinct dark-grey treatment (see .r-historical in globals.css) so
   // historical vs. 2026+ columns are visually obvious no matter which toggle is active.
   if (month && month < '2026-01') classes.push('r-historical');
+  // Kayee, 2026-08-19: "put some line between the year. and then the year should be
+  // center align" — a vertical divider at every year boundary, running the full height
+  // of the table (header + every body row), not just the year-band row itself. Months
+  // here are always a continuous monthly sequence, so "first month of a year" is simply
+  // January — no need to compare against the previous month.
+  if (month && month.endsWith('-01') && monthIndex > 0) classes.push('y-boundary');
   return classes.join(' ');
+}
+
+/** Which month-index in each calendar-year run should carry the year label, so it
+ *  reads as roughly centered over that year's columns (2026-08-19, Kayee: "the year
+ *  should be center align"). Deliberately NOT a <th colSpan> across the year — a
+ *  colSpan year cell was tried before and reintroduced a real bug (2026-08-04: a
+ *  range-toggle hide could desync the colSpan cell from the individual month columns
+ *  below it once some months in the run were hidden). Keeping one <th> per month and
+ *  just moving WHICH cell shows the text keeps the exact same column structure as the
+ *  row below it — zero desync risk — while still visually centering the label. */
+function yearLabelIndices(months) {
+  const indices = new Set();
+  let runStart = 0;
+  for (let i = 1; i <= months.length; i++) {
+    if (i === months.length || months[i].slice(0, 4) !== months[runStart].slice(0, 4)) {
+      indices.add(runStart + Math.floor((i - runStart - 1) / 2));
+      runStart = i;
+    }
+  }
+  return indices;
 }
 
 /** Other line items in the same section as `row`, at one specific month — the real
@@ -1514,6 +1540,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // (including Revenue's) fall back to blank, because one shared try/catch treated a
   // failure anywhere as a failure everywhere.
   let rows = statement.rows;
+  const yearLabels = yearLabelIndices(months);
   if (mode !== 'projection') {
     // Actual mode — skip all projection logic, return just the real rows.
     // No forecast columns to render, no sidebar, no Assumptions-driven values.
@@ -1523,15 +1550,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
           <thead>
             <tr className="report-year-row">
               <th></th>
-              {months.map((m, i) => {
-                const year = m.slice(0, 4);
-                const isFirstOfYear = i === 0 || months[i - 1].slice(0, 4) !== year;
-                return (
-                  <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
-                    {isFirstOfYear ? year : ''}
-                  </th>
-                );
-              })}
+              {months.map((m, i) => (
+                <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
+                  {yearLabels.has(i) ? m.slice(0, 4) : ''}
+                </th>
+              ))}
             </tr>
             <tr>
               <th>Account / Line Item</th>
@@ -1755,22 +1778,19 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
         <thead>
           <tr className="report-year-row">
             <th></th>
-            {months.map((m, i) => {
+            {months.map((m, i) => (
               // One real cell per month — same column model as the row below, so a
-              // range-toggle hide can never desync the two rows (a colSpan cell
-              // here previously caused exactly that: see 2026-08-04 bug where a
-              // hidden month left this row's year label sitting over the wrong
-              // column). Only the first month of each year run shows the year
-              // text; every cell in that run shares the same background, so
-              // consecutive same-year cells still read as one continuous band.
-              const year = m.slice(0, 4);
-              const isFirstOfYear = i === 0 || months[i - 1].slice(0, 4) !== year;
-              return (
-                <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
-                  {isFirstOfYear ? year : ''}
-                </th>
-              );
-            })}
+              // range-toggle hide can never desync the two rows (a colSpan cell here
+              // previously caused exactly that: see 2026-08-04 bug where a hidden
+              // month left this row's year label sitting over the wrong column).
+              // The year TEXT only renders on the center month of its year's run
+              // (yearLabelIndices, 2026-08-19: "the year should be center align") —
+              // every cell in the run still shares the same background, so
+              // consecutive same-year cells read as one continuous band either way.
+              <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
+                {yearLabels.has(i) ? m.slice(0, 4) : ''}
+              </th>
+            ))}
           </tr>
           <tr>
             <th>Account / Line Item</th>
