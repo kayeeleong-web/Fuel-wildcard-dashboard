@@ -1415,8 +1415,45 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
     netValues[iso] = (inflow || 0) - outflow;
   }
 
+  // Roll Beginning/Net Change/Ending Cash forward through every forecast month
+  // (2026-08-19, Kayee: "the beginning cash of july is the ending cash of june...
+  // beginning cash of august is ending cash of july... net cash activity is the total
+  // cash in and cash out"). Chains off the SAME netValues this function already
+  // computed just above, so "Net Change in Cash" here is always identical to the
+  // "Net Projected Cash Flow" total appended below it — never two competing numbers.
+  // Seeds from the Ending Cash row's own last ACTUAL month (real GL balance), then
+  // walks forward: beginning[this month] = ending[prior month]; ending[this month] =
+  // beginning[this month] + netChange[this month]. Only touches forecast months —
+  // real GL history for Beginning/Net Change/Ending stays exactly as reported.
+  const rowsWithRollforward = (() => {
+    const beginningIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.beginning.test(r.label));
+    const netChangeIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.netChange.test(r.label));
+    const endingIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.ending.test(r.label));
+    if (beginningIdx === -1 || netChangeIdx === -1 || endingIdx === -1) return rows;
+
+    const lastActualMonth = months[lastActualIndex];
+    let priorEnding = lastActualMonth != null ? Number(rows[endingIdx].values?.[lastActualMonth]) || 0 : 0;
+
+    const beginningValues = { ...rows[beginningIdx].values };
+    const netChangeValues = { ...rows[netChangeIdx].values };
+    const endingValues = { ...rows[endingIdx].values };
+    for (const iso of forecastMonths) {
+      const netChange = Number(netValues[iso]) || 0;
+      beginningValues[iso] = priorEnding;
+      netChangeValues[iso] = netChange;
+      endingValues[iso] = priorEnding + netChange;
+      priorEnding = endingValues[iso];
+    }
+
+    const next = [...rows];
+    next[beginningIdx] = { ...rows[beginningIdx], values: beginningValues };
+    next[netChangeIdx] = { ...rows[netChangeIdx], values: netChangeValues };
+    next[endingIdx] = { ...rows[endingIdx], values: endingValues };
+    return next;
+  })();
+
   return [
-    ...rows,
+    ...rowsWithRollforward,
     { key: 'cfproj_inflow', label: 'Customer Cash Inflow', section, isTotal: false, values: inflowValues },
     { key: 'cfproj_net', label: 'Net Projected Cash Flow', section, isTotal: true, values: netValues },
   ];
