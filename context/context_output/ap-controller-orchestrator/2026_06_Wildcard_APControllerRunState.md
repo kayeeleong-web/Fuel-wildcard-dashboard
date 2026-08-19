@@ -19,7 +19,7 @@
 
 Client Mems Studio, Inc. DBA Wildcard / period 2026-06 / read
 `…\Wildcard Vercel Project\context\` + Google Sheet `wildcard-fuel` / write
-`…\Wildcard Vercel Project\outputs\`. FM-confirmed 2026-08-19, nothing inferred.
+`…\Wildcard Vercel Project\context\context_output\`. FM-confirmed 2026-08-19, nothing inferred.
 
 ## Step 2 — Validate trigger — PASSED
 

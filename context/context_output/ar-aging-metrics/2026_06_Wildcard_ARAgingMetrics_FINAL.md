@@ -17,7 +17,7 @@
 ## Step 1 — Client Isolation Check [HARD BLOCK] — PASSED
 
 Client Wildcard / period 2026-06 / read `…\Wildcard Vercel Project\context\` + Google Sheet
-`wildcard-fuel` tab `GL Accu` / write `…\Wildcard Vercel Project\outputs\`. FM-confirmed
+`wildcard-fuel` tab `GL Accu` / write `…\Wildcard Vercel Project\context\context_output\`. FM-confirmed
 2026-08-19, not inferred.
 
 ## Step 2 — Pre-flight gate — PASSED (Option B override)

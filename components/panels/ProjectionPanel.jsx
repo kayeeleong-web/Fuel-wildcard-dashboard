@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { PageHead } from '../ui/PageHead';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
@@ -29,14 +29,21 @@ const ACTIVE_SUBTAB_STORAGE_KEY = 'fuel_wildcard_projection_subtab';
  * The active sub-tab is remembered in localStorage (2026-08-18, Kayee: "it should
  * refresh there show me back to customer. not jumping around") — same pattern as
  * DashboardApp's ACTIVE_TAB_STORAGE_KEY: render starts on 'pl' (so server/first-client
- * render match and React doesn't throw a hydration mismatch), then a useEffect right
- * after mount applies whichever sub-tab was last open, once the main tab has already
- * restored to 'projection' on the outer level.
+ * render match and React doesn't throw a hydration mismatch), then the saved sub-tab
+ * is restored right after mount, once the main tab has already restored to 'projection'
+ * on the outer level.
+ *
+ * Uses useLayoutEffect, not useEffect (2026-08-18, Kayee, again: "I refresh... it will
+ * jump to KPI report first and then jump back... it's just annoying" — same flash, one
+ * level down: a plain useEffect here fired after the browser already painted 'P&L
+ * Projection', so refreshing on Customer visibly flashed P&L Projection first even
+ * once the outer DashboardApp tab was fixed. useLayoutEffect corrects it before paint,
+ * so nothing wrong is ever shown on screen.
  */
 export function ProjectionPanel({ statements, customReports, glCash, glAccrued }) {
   const [projectionSubTab, setProjectionSubTab] = useState('pl');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const saved = window.localStorage.getItem(ACTIVE_SUBTAB_STORAGE_KEY);
     if (saved && SUB_TAB_IDS.includes(saved)) setProjectionSubTab(saved);
   }, []);

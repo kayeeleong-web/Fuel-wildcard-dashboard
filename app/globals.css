@@ -524,6 +524,18 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    flex:1 makes it claim exactly the height align-items:stretch gives it. */
 .reports-with-sidebar .reports-main .table-wrap { flex: 1 1 auto; max-height: none; }
 
+/* Because that table-wrap above has max-height:none (no internal scrollbar), the
+   PAGE scrolls instead of the table — so thead's normal `top: 0` sticky rule pins the
+   month-header row exactly at the very top of the viewport, right underneath the
+   fixed .topbar (64px) + .tabnav-wrap (~65px), which sit on top of it (z-index 20/15
+   vs thead's 3). Net effect: scroll down and the dates disappear under the nav chrome
+   (Kayee, 2026-08-18: "please freeze dates in all tab, I want to scroll down and be
+   able to look at the date of each column"). Give it the real offset instead so it
+   sticks just below that fixed stack, staying visible the whole scroll. Approximate
+   (topbar/tabnav aren't fixed-px in code) but close enough that the header never gets
+   fully hidden. */
+.reports-with-sidebar .reports-main thead th { top: 130px; }
+
 /* Widen the whole two-column area into the gutter room .page-wide normally reserves,
    ONLY while the sidebar is expanded (2026-08-07, Kayee: "when hamburger is open you
    can use the space on the left and right") — collapsing back to the rail drops this

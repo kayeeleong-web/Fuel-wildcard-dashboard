@@ -13,7 +13,7 @@
 
 ## Step 1 — Client Isolation Check [HARD BLOCK] — PASSED
 
-Wildcard / 2026-06 / read `…\context\` + `wildcard-fuel` / write `…\outputs\`. FM-confirmed
+Wildcard / 2026-06 / read `…\context\` + `wildcard-fuel` / write `…\context\context_output\`. FM-confirmed
 2026-08-19.
 
 ## Step 2 — Pre-flight gate — PASSED

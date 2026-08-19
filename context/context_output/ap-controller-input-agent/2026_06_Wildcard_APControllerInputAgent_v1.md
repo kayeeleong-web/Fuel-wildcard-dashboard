@@ -21,7 +21,7 @@
 | Client | Mems Studio, Inc. DBA Wildcard (single legal entity, USD only) |
 | Period | 2026-06 |
 | Read path | `C:\Users\kayee\OneDrive\Desktop\Wildcard Vercel Project\context\` |
-| Write path | `C:\Users\kayee\OneDrive\Desktop\Wildcard Vercel Project\outputs\` |
+| Write path | `C:\Users\kayee\OneDrive\Desktop\Wildcard Vercel Project\context\context_output\` |
 | Confirmed by | FM (Ka Yee), 2026-08-19, explicit selection — not inferred |
 
 ---

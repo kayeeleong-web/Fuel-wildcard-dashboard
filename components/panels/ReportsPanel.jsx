@@ -546,20 +546,14 @@ function costCalcExplanation(rowLabel, ctx) {
         'Cash Coming In monthly TOTAL from the Cash Inflow Projection section on the Customer Cash Flow tab (campaigns × price per campaign + meetings × price per meeting, current + planned customers). Edit it there — a blank cell means that tab has not been filled in on this browser yet.',
     };
   }
-  if (rowLabel === 'COGS Cash Outflow') {
-    return {
-      calcNote:
-        "Every P&L COGS account's projected accrual, run through its cash-timing setting in the Cash Flow Assumptions sidebar — Follow P&L (cash = accrual month-by-month), Custom interval (cycle's accruals land in the chosen payment month), or Manual input.",
-    };
-  }
-  if (rowLabel === 'OpEx Cash Outflow') {
-    return {
-      calcNote:
-        "Every P&L OpEx account's projected accrual (incl. Payroll's salaries/taxes/benefits/bonuses), run through its cash-timing setting in the Cash Flow Assumptions sidebar.",
-    };
-  }
+  // "COGS Cash Outflow" / "OpEx Cash Outflow" notes removed 2026-08-19 along with the
+  // rows themselves — each real COGS/OpEx line now carries its own cash-out $ (see
+  // withCFExpenseCashOutflowRows), summed by the statement's own Total bands.
   if (rowLabel === 'Net Projected Cash Flow') {
-    return { calcNote: 'Customer Cash Inflow − COGS Cash Outflow − OpEx Cash Outflow, forecast months only.' };
+    return {
+      calcNote:
+        "Customer Cash Inflow − every COGS/OpEx account's projected cash outflow, forecast months only. Each account follows its P&L projection $ 1:1 by default; set a custom cash timing per account in the Cash Flow Assumptions sidebar to change when its cash goes out.",
+    };
   }
   if (!ctx.revenue) return null;
   if (rowLabel === 'Total COGS') {
@@ -1263,23 +1257,111 @@ function withReorderedCashFlowRows(rows) {
   return [...orderedTopRows, ...rest];
 }
 
-/** Cash Flow forecast rows (2026-08-18) — the CF projection had no forecast pipeline
- *  at all before this (every CF-specific transform was PL-only), so the sidebar's
- *  cash-timing controls and the Customer tab's cash-in plan had nothing to land on.
- *  The live CF sheet's own account rows have no confirmed key/label mapping to P&L
- *  accounts yet, so rather than guess-patching real sheet rows (a wrong number that
- *  looks booked is the worst failure mode here), this appends one clearly-labeled
- *  "CASH PROJECTION" section with four rows, forecast months only:
+/** CF expense rows follow the P&L by default (2026-08-19, Kayee: "I want the
+ *  projection to fill in the numbers from p&l projection. by default. but only cash
+ *  out... all of the cogs and opex. by default follow the same pattern. and only if i
+ *  want to change cash timing i use the hamburger on the left hand side").
+ *
+ *  Patches the CF statement's own REAL COGS/OpEx line items (Processor Fees, Cost of
+ *  campaigns, etc. — the same account labels the P&L carries) with
+ *  cashOutflowForMonth() for every FORECAST month, exactly the same
+ *  live-row-patching convention withPayrollHeadcountRows / withNamedCostItemProjections
+ *  use on the P&L side. With no timing override, cashOutflowForMonth defaults to
+ *  `followPL` → plAccrualForMonth(), so each row shows the identical $ its P&L
+ *  projection row shows for that month; a per-account timing config from the CF
+ *  sidebar (interval / manual) is the ONLY thing that makes it differ. Matching is by
+ *  exact row label — the same `account.label ===` rule plAccrualForMonth itself uses —
+ *  so a CF-only row with no P&L twin (nothing to follow) is left completely alone
+ *  rather than fabricated. Actual months are never touched: real GL cash history stays
+ *  exactly as the sheet reported it.
+ *
+ *  The synthetic "Headcount (Payroll)" COGS account (id `payroll_headcount_cogs`) has
+ *  no real sheet row by definition — the P&L injects that row itself
+ *  (withPayrollHeadcountRows, which is PL-only). So when no real CF row matches it,
+ *  this injects the same "Headcount (Payroll)" line right above CF's own Total COGS
+ *  band (same slot convention as the P&L injection) — that keeps CF's Total COGS
+ *  reconcilable with P&L's Total COGS instead of silently missing the payroll cash
+ *  out. Falls back to the end of the COGS section if no Total COGS row exists; if the
+ *  CF sheet has no COGS section at all, the row is skipped here and the $ still lands
+ *  in "Net Projected Cash Flow" below (never silently dropped from the net). */
+function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjection) {
+  const { expenseAccounts, timingByAccount, accrualCtx } = cfProjection;
+  const forecastMonths = months.slice(lastActualIndex + 1);
+  if (forecastMonths.length === 0) return rows;
+  const forecastSet = new Set(forecastMonths);
+
+  const accountByLabel = new Map();
+  for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
+    const label = String(account.label ?? '').trim();
+    if (label && !accountByLabel.has(label)) accountByLabel.set(label, account);
+  }
+
+  const matchedIds = new Set();
+  let next = rows.map((row) => {
+    if (row.isTotal) return row;
+    const account = accountByLabel.get(String(row.label ?? '').trim());
+    if (!account) return row;
+    matchedIds.add(account.id);
+    const values = { ...row.values };
+    for (const iso of forecastMonths) {
+      values[iso] = cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
+    }
+    return { ...row, values };
+  });
+
+  const payrollAccount = expenseAccounts.cogsAccounts.find((a) => a.synthetic === 'payrollCogs');
+  if (payrollAccount && !matchedIds.has(payrollAccount.id)) {
+    let insertAt = -1;
+    let section = null;
+    const totalIdx = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.CoGS.includes(r.label));
+    if (totalIdx !== -1) {
+      insertAt = totalIdx;
+      section = next[totalIdx].section;
+    } else {
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (String(next[i].section ?? '').trim().toUpperCase() === 'COGS') {
+          insertAt = i + 1;
+          section = next[i].section;
+          break;
+        }
+      }
+    }
+    if (insertAt !== -1) {
+      const values = {};
+      for (const iso of forecastMonths) {
+        values[iso] = cashOutflowForMonth(payrollAccount, timingByAccount[payrollAccount.id], iso, forecastSet, accrualCtx);
+      }
+      next = [
+        ...next.slice(0, insertAt),
+        { key: 'cf_payroll_headcount_cogs', label: 'Headcount (Payroll)', section, isTotal: false, values },
+        ...next.slice(insertAt),
+      ];
+    }
+  }
+
+  return next;
+}
+
+/** Cash Flow forecast summary rows (2026-08-18, reshaped 2026-08-19). Originally this
+ *  appended FOUR rows because the real CF sheet rows weren't being patched at all;
+ *  now that withCFExpenseCashOutflowRows above fills every real COGS/OpEx line item
+ *  (and withSectionTotalRollups sums them into CF's own Total COGS / Total OpEx
+ *  bands), the old "COGS Cash Outflow" / "OpEx Cash Outflow" rollup rows here were
+ *  REMOVED — they duplicated the statement's own Total bands and showing the same $
+ *  twice invites double-count readings. What remains, forecast months only:
  *
  *   - Customer Cash Inflow — the computed Cash Coming In monthly TOTAL from the
- *     Customer Cash Flow tab's Cash Inflow Projection section (campaigns × price +
- *     meetings × price), read
- *     from localStorage (CUSTOMER_INFLOW_STORAGE_KEY — see CustomerPanel.jsx, which
- *     writes it on every input change). Blank (not $0) if that tab has never saved.
- *   - COGS Cash Outflow / OpEx Cash Outflow — every P&L expense account's projected
- *     accrual run through its cash-timing config from the CF sidebar (Follow P&L /
- *     custom interval / manual — see lib/cashflow/cashProjection.js).
- *   - Net Projected Cash Flow — inflow − both outflows, rendered as a Total band.
+ *     Customer Cash Flow tab's Cash Inflow Projection section, read from localStorage
+ *     (CUSTOMER_INFLOW_STORAGE_KEY — see CustomerPanel.jsx, which writes it on every
+ *     input change). Blank (not $0) if that tab has never saved. Revenue-side wiring
+ *     is deliberately untouched by the 2026-08-19 reshape (Kayee scoped it to "only
+ *     cash out... all of the cogs and opex").
+ *   - Net Projected Cash Flow — inflow − total COGS/OpEx cash out, kept as a Total
+ *     band. Still computed by summing cashOutflowForMonth over every expense account
+ *     (not by re-reading the displayed Total rows) — mathematically identical to the
+ *     displayed totals for every account that has a CF row, and it also still counts
+ *     an account with NO matching CF row (whose $ has nowhere visible to land), so
+ *     the net is never understated by a missing sheet row.
  *
  *  Actual months are never touched — real GL cash history stays exactly as the sheet
  *  reported it. */
@@ -1291,30 +1373,20 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
   const section = 'CASH PROJECTION';
 
   const inflowValues = {};
-  const cogsValues = {};
-  const opexValues = {};
   const netValues = {};
   for (const iso of forecastMonths) {
     const inflow = customerInflowTotals ? Number(customerInflowTotals[iso]) || 0 : null;
-    let cogs = 0;
-    for (const account of expenseAccounts.cogsAccounts) {
-      cogs += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
-    }
-    let opex = 0;
-    for (const account of expenseAccounts.opexAccounts) {
-      opex += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
+    let outflow = 0;
+    for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
+      outflow += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
     }
     if (inflow != null) inflowValues[iso] = inflow;
-    cogsValues[iso] = cogs;
-    opexValues[iso] = opex;
-    netValues[iso] = (inflow || 0) - cogs - opex;
+    netValues[iso] = (inflow || 0) - outflow;
   }
 
   return [
     ...rows,
     { key: 'cfproj_inflow', label: 'Customer Cash Inflow', section, isTotal: false, values: inflowValues },
-    { key: 'cfproj_cogs_outflow', label: 'COGS Cash Outflow', section, isTotal: false, values: cogsValues },
-    { key: 'cfproj_opex_outflow', label: 'OpEx Cash Outflow', section, isTotal: false, values: opexValues },
     { key: 'cfproj_net', label: 'Net Projected Cash Flow', section, isTotal: true, values: netValues },
   ];
 }
@@ -1340,7 +1412,12 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
  *  rows) is left completely alone; this only ever fills a genuinely blank cell, never
  *  overwrites one, so it can't clash with or double up on an existing formula. */
 function withSectionTotalRollups(statementType, rows, months, lastActualIndex) {
-  if (statementType !== 'PL') return rows;
+  // CF allowed too as of 2026-08-19 — once withCFExpenseCashOutflowRows fills the CF
+  // statement's real COGS/OpEx line items for forecast months, the exact same
+  // fill-only-blank-Total-cells rollup makes CF's own Total COGS / Total OpEx bands
+  // sum them, same as it always did for the P&L. Still can't clash with real data:
+  // it only ever fills a genuinely blank forecast cell, never an actual month's.
+  if (statementType !== 'PL' && statementType !== 'CF') return rows;
   return rows.map((row) => {
     if (!row.isTotal) return row;
     const siblings = rows.filter((r) => !r.isTotal && r.section === row.section);
@@ -1581,6 +1658,19 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     }
   }
   if (statement.type === 'CF' && cfProjection) {
+    // Order matters: fill the real COGS/OpEx rows first, then roll those into CF's own
+    // Total bands, then append the summary section — each step guarded separately,
+    // same isolation rule as the P&L pipeline above.
+    try {
+      rows = withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjection);
+    } catch (err) {
+      console.warn('Cash Flow expense cash-outflow projection failed:', err);
+    }
+    try {
+      rows = withSectionTotalRollups(statement.type, rows, months, lastActualIndex);
+    } catch (err) {
+      console.warn('Cash Flow section Total rollup failed:', err);
+    }
     try {
       rows = withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection);
     } catch (err) {

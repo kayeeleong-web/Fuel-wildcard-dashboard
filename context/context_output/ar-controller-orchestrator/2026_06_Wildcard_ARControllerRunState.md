@@ -23,7 +23,7 @@
 | Client | Mems Studio, Inc. DBA Wildcard |
 | Period | 2026-06 |
 | Read path | `C:\Users\kayee\OneDrive\Desktop\Wildcard Vercel Project\context\` + Google Sheet `wildcard-fuel` tab `GL Accu` |
-| Write path | `C:\Users\kayee\OneDrive\Desktop\Wildcard Vercel Project\outputs\` |
+| Write path | `C:\Users\kayee\OneDrive\Desktop\Wildcard Vercel Project\context\context_output\` |
 | Confirmed by | FM (Ka Yee), 2026-08-19, explicit selection — nothing inferred |
 
 ## Step 2 — Validate trigger — PASSED

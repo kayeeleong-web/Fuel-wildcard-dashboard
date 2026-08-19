@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { Topbar } from './shell/Topbar';
 import { TabNav } from './shell/TabNav';
 import { Footer } from './shell/Footer';
@@ -41,13 +41,21 @@ const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
  * reopens on whichever tab the user was last viewing instead of resetting to KPI
  * Report. The initial render still has to start on 'kpi' (server and first client
  * render must match, or React throws a hydration mismatch) — the saved tab is applied
- * in a useEffect right after mount, which is the standard way to read a browser-only
- * API without breaking SSR.
+ * right after mount, which is the standard way to read a browser-only API without
+ * breaking SSR.
+ *
+ * 2026-08-18 (Kayee: "I refresh and then it will jump to KPI report first and then
+ * jump back... it's just annoying"): that restore was originally a plain useEffect,
+ * which React runs AFTER the browser has already painted — so on every refresh the
+ * user visibly saw the wrong tab (KPI) for a frame before it snapped to the saved one.
+ * useLayoutEffect runs synchronously before paint instead, so the correction happens
+ * before anything is shown on screen: same hydration-safe 'kpi' first render, but no
+ * visible flash/jump afterward.
  */
 export function DashboardApp({ clientName, kpiData, dashboardSummary, statements, customReportsList, glCash, glAccrued }) {
   const [activeTab, setActiveTab] = useState('kpi');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const saved = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
     if (saved && TABS.includes(saved)) setActiveTab(saved);
   }, []);

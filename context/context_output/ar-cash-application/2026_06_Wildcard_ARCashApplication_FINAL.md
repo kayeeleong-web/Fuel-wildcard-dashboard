@@ -16,7 +16,7 @@
 
 ## Step 1 — Client Isolation Check [HARD BLOCK] — PASSED
 
-Wildcard / 2026-06 / read `…\context\` + `wildcard-fuel` tab `GL Accu` / write `…\outputs\`.
+Wildcard / 2026-06 / read `…\context\` + `wildcard-fuel` tab `GL Accu` / write `…\context\context_output\`.
 FM-confirmed 2026-08-19.
 
 ## Step 2 — Pre-flight gate — PASSED (Option B override)
