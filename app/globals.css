@@ -494,6 +494,11 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    standard 96dpi CSS reference. .reports-main is flex:1 1 0%, so it automatically
    reclaims every pixel given up here — no separate change needed on the table side. */
 .reports-sidebar { flex: 0 0 calc(34% - 113px); max-width: calc(34% - 113px); min-width: 300px; display: flex; flex-direction: column; gap: 18px; }
+/* Cash Flow Assumptions only (2026-08-19, Kayee: "make the cash flow assumption
+   narrowing it's a little too wide") — narrower than the shared .reports-sidebar width
+   the P&L Assumptions sidebar still uses, since CF's controls now need far less room
+   (no per-month manual list, no Monthly option, no Done button). */
+.cf-assumptions-sidebar { flex: 0 0 calc(34% - 200px); max-width: calc(34% - 200px); min-width: 240px; }
 .reports-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
 .reports-sidebar-rail { display: flex; align-self: stretch; }

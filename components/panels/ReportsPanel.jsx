@@ -432,6 +432,7 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                         timingByAccount: (cashTimingHydrated && cashTimingState?.timingByAccount) || {},
                         customerInflowTotals,
                         accrualCtx: cfAccrualCtx,
+                        onSetTiming: handleSetTiming,
                       }
                     : null
                 }
@@ -1315,8 +1316,32 @@ function withReorderedCashFlowRows(rows) {
  *  out. Falls back to the end of the COGS section if no Total COGS row exists; if the
  *  CF sheet has no COGS section at all, the row is skipped here and the $ still lands
  *  in "Net Projected Cash Flow" below (never silently dropped from the net). */
+/** Builds BOTH the real numeric value (always — Total rollups, the calc popover, and
+ *  the Net Change in Cash math all need a real number, never a React node) and, for an
+ *  account explicitly set to Manual in the sidebar, a `monthCells` override with a live
+ *  editable <MonthInput> for that cell — 2026-08-19, Kayee: "manual input should be
+ *  like in the screenshot... if I input manual then I should be able to put it in the
+ *  cash flow monthly section" — instead of typing into a separate list of month rows
+ *  buried in the sidebar card. Both places read/write the exact same
+ *  `timing.manualByMonth`, so switching a row between the sidebar and inline editing
+ *  never loses or forks the data. Non-manual accounts get no monthCells entry, so the
+ *  table's usual formatted-$ rendering applies unchanged. */
+function cfOutflowCell(account, timing, iso, forecastSet, accrualCtx, onSetTiming) {
+  const value = cashOutflowForMonth(account, timing, iso, forecastSet, accrualCtx);
+  if (timing?.mode !== 'manual' || !onSetTiming) return { value, cell: undefined };
+  const cell = (
+    <MonthInput
+      value={Number(timing?.manualByMonth?.[iso]) || 0}
+      onCommit={(n) =>
+        onSetTiming(account.id, { ...timing, mode: 'manual', manualByMonth: { ...(timing?.manualByMonth || {}), [iso]: n } })
+      }
+    />
+  );
+  return { value, cell };
+}
+
 function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjection) {
-  const { expenseAccounts, timingByAccount, accrualCtx } = cfProjection;
+  const { expenseAccounts, timingByAccount, accrualCtx, onSetTiming } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
   if (forecastMonths.length === 0) return rows;
   const forecastSet = new Set(forecastMonths);
@@ -1334,10 +1359,19 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
     if (!account) return row;
     matchedIds.add(account.id);
     const values = { ...row.values };
+    const monthCells = { ...(row.monthCells || {}) };
+    let hasManualCell = false;
     for (const iso of forecastMonths) {
-      values[iso] = cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
+      const { value, cell } = cfOutflowCell(account, timingByAccount[account.id], iso, forecastSet, accrualCtx, onSetTiming);
+      values[iso] = value;
+      if (cell !== undefined) {
+        monthCells[iso] = cell;
+        hasManualCell = true;
+      } else {
+        delete monthCells[iso];
+      }
     }
-    return { ...row, values };
+    return hasManualCell || row.monthCells ? { ...row, values, monthCells } : { ...row, values };
   });
 
   const payrollAccount = expenseAccounts.cogsAccounts.find((a) => a.synthetic === 'payrollCogs');
@@ -1359,12 +1393,15 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
     }
     if (insertAt !== -1) {
       const values = {};
+      const monthCells = {};
       for (const iso of forecastMonths) {
-        values[iso] = cashOutflowForMonth(payrollAccount, timingByAccount[payrollAccount.id], iso, forecastSet, accrualCtx);
+        const { value, cell } = cfOutflowCell(payrollAccount, timingByAccount[payrollAccount.id], iso, forecastSet, accrualCtx, onSetTiming);
+        values[iso] = value;
+        if (cell !== undefined) monthCells[iso] = cell;
       }
       next = [
         ...next.slice(0, insertAt),
-        { key: 'cf_payroll_headcount_cogs', label: 'Headcount (Payroll)', section, isTotal: false, values },
+        { key: 'cf_payroll_headcount_cogs', label: 'Headcount (Payroll)', section, isTotal: false, values, monthCells },
         ...next.slice(insertAt),
       ];
     }

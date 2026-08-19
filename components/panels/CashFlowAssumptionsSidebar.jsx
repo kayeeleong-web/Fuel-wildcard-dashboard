@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { formatMonthLabel } from '../../lib/calc/dashboardMetrics';
 
 /**
  * Cash Flow Assumptions sidebar (2026-08-18 UX redesign — v2 "list every account"
@@ -79,7 +78,11 @@ export function CashFlowAssumptionsSidebar({
   }
 
   return (
-    <div className="reports-sidebar">
+    // 'cf-assumptions-sidebar' (2026-08-19, Kayee: "make the cash flow assumption
+    // narrowing it's a little too wide") narrows JUST this sidebar, scoped separately
+    // from .reports-sidebar's shared width so the P&L Assumptions sidebar (which still
+    // needs its own room for the Revenue/Cost cards) is untouched.
+    <div className="reports-sidebar cf-assumptions-sidebar">
       <div className="payroll-card">
         <div className="payroll-card-head">
           <span className="payroll-card-title-btn" style={{ cursor: 'default' }}>
@@ -141,10 +144,12 @@ function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMo
 
   function addAccount(accountId) {
     if (!accountId) return;
-    // Sensible starting config: monthly interval (cash = accrual each month, same
-    // math as Follow P&L) — the card opens expanded so the user immediately picks
-    // the frequency/mode they actually came here to set.
-    onSetTiming(accountId, { mode: 'interval', frequency: 'monthly', payMonth: 1 });
+    // Starting config: quarterly interval (2026-08-19 — "Monthly" was dropped as an
+    // interval choice since it's already identical to the implicit Follow P&L default,
+    // so offering it here was a redundant, confusing extra step). The card opens
+    // expanded so the user immediately picks the frequency/mode they actually came
+    // here to set.
+    onSetTiming(accountId, { mode: 'interval', frequency: 'quarterly', payMonth: 3 });
     setJustAddedId(accountId);
     setPicking(false);
   }
@@ -240,8 +245,8 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
     if (nextMode === 'interval') {
       onSetTiming(account.id, {
         mode: 'interval',
-        frequency: timing?.frequency || 'monthly',
-        payMonth: timing?.payMonth || 1,
+        frequency: timing?.frequency && timing.frequency !== 'monthly' ? timing.frequency : 'quarterly',
+        payMonth: timing?.payMonth || 3,
       });
     } else {
       onSetTiming(account.id, {
@@ -261,15 +266,13 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
     onSetTiming(account.id, { ...timing, mode: 'interval', payMonth });
   }
 
-  function setManualAmount(iso, amount) {
-    onSetTiming(account.id, {
-      ...timing,
-      mode: 'manual',
-      manualByMonth: { ...(timing?.manualByMonth || {}), [iso]: amount },
-    });
-  }
-
-  const frequency = timing?.frequency || 'monthly';
+  // "Monthly" dropped as a Custom interval choice (2026-08-19, Kayee: "custom interval
+  // doesn't need monthly because P&L is already monthly") — it was mathematically
+  // identical to the implicit Follow P&L default, so it was just a confusing extra
+  // step. A legacy stored 'monthly' entry still displays correctly (falls through to
+  // quarterly/annually's sibling logic via cashOutflowForMonth's own default), it's
+  // just no longer offered as a fresh choice here.
+  const frequency = timing?.frequency && timing.frequency !== 'monthly' ? timing.frequency : 'quarterly';
 
   return (
     <div className="sidebar-card">
@@ -298,7 +301,7 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
             </label>
             <label className="sidebar-radio-label">
               <input type="radio" checked={mode === 'manual'} onChange={() => setMode('manual')} />
-              Manual input — type cash $ per month
+              Manual input — type cash $ directly in the Cash Flow grid
             </label>
           </div>
 
@@ -310,7 +313,6 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
               >
-                <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
                 <option value="annually">Annually</option>
               </select>
@@ -352,66 +354,24 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
           )}
 
           {mode === 'manual' && (
+            // 2026-08-19, Kayee: "manual input should be like in the screenshot... if I
+            // input manual then I should be able to put it in the cash flow monthly
+            // section" — typing now happens directly in this account's row in the CF
+            // table below (every forecast month becomes a live input there), not in a
+            // second list of month rows here. This card just confirms the mode is set.
             <div className="sidebar-control-group">
-              <label className="sidebar-input-label">Cash out per forecast month</label>
-              {manualMonths.length === 0 && (
-                <div className="sidebar-section-note">No forecast months available to edit.</div>
-              )}
-              {manualMonths.map((iso) => (
-                <ManualMonthInput
-                  key={iso}
-                  iso={iso}
-                  value={timing?.manualByMonth?.[iso]}
-                  accrual={accrualFor(account, iso)}
-                  onCommit={(n) => setManualAmount(iso, n)}
-                />
-              ))}
+              <div className="sidebar-section-note">
+                {account.label}&apos;s forecast months are now editable directly in the Cash Flow table below — type
+                the actual cash $ right in each month&apos;s cell.
+              </div>
             </div>
           )}
         </div>
       )}
-
-      <button type="button" className="sidebar-card-toggle" onClick={() => setExpanded((e) => !e)}>
-        {expanded ? '▼ Done' : '▶ Configure'}
-      </button>
     </div>
   );
 }
 
-/** One manual-mode month row: label, commit-on-blur $ input (same convention as every
- *  other editable cell in the app), and the P&L accrual for that account+month shown
- *  as a small reference right under the input — what the typed cash $ is overriding. */
-function ManualMonthInput({ iso, value, accrual, onCommit }) {
-  const [draft, setDraft] = useState(value != null && value !== 0 ? String(Math.round(value)) : '');
-  const [focused, setFocused] = useState(false);
-
-  const display = focused ? draft : value != null && value !== 0 ? String(Math.round(value)) : '';
-
-  return (
-    <div style={{ marginBottom: 6 }}>
-      <label className="sidebar-input-label">{formatMonthLabel(iso)}</label>
-      <input
-        type="text"
-        inputMode="decimal"
-        className="sidebar-input"
-        placeholder="0"
-        value={display}
-        onFocus={(e) => {
-          const current = value != null && value !== 0 ? String(Math.round(value)) : '';
-          setDraft(current);
-          setFocused(true);
-          e.target.select();
-        }}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          const n = Number(String(draft).replace(/[^0-9.-]/g, '')) || 0;
-          setFocused(false);
-          onCommit(n);
-        }}
-      />
-      <span className="sidebar-card-value">
-        P&amp;L accrual: ${Math.round(accrual || 0).toLocaleString('en-US')}
-      </span>
-    </div>
-  );
-}
+// ManualMonthInput removed 2026-08-19 — manual-mode typing moved into the actual Cash
+// Flow table (see cfOutflowCell in ReportsPanel.jsx), so this sidebar no longer renders
+// a second per-month input list.

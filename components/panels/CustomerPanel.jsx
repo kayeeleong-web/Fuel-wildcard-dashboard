@@ -398,6 +398,13 @@ function CombinedDriverGrid({ title, subtitle, rows, months, isEditableMonth, to
 export function CustomerPanel({ glCash, glAccrued }) {
   const todayIso = currentIsoMonth();
   const [range, setRange] = useState('default');
+  // Cash vs Accrued waterfall toggle (2026-08-19, Kayee: "instead of having two
+  // section can you just create a toggle in an obvious place? like switch between
+  // accrual and cash... so that it's not that redundant and clunky") — one table shown
+  // at a time instead of both stacked, switched via a toggle right on the section's
+  // own header (CollapsibleSection's headActions slot), same obvious placement as the
+  // 2026-2028/Historical toggle elsewhere in the app.
+  const [waterfallView, setWaterfallView] = useState('cash');
   // Both sections start collapsed (2026-08-18, Kayee: "make the section in customer
   // stay collapsed default when open the page") — the tab opens quiet, the user
   // expands whichever section they actually want to work in.
@@ -811,26 +818,36 @@ export function CustomerPanel({ glCash, glAccrued }) {
         {/* -------------------------- Current Customers -------------------------- */}
         <CollapsibleSection
           title="Current Customers"
-          subtitle="Waterfall by start month — Cash (received) vs Accrued (recognized) · GL accounts 4xxxx"
+          subtitle="Waterfall by start month — Cash (received) or Accrued (recognized) · GL accounts 4xxxx"
           colorVar="--blue"
           collapsed={collapsedSections.current}
           onToggle={() => toggleSection('current')}
+          headActions={
+            <div className="seg" onClick={(e) => e.stopPropagation()}>
+              <button className={waterfallView === 'cash' ? 'active' : undefined} onClick={() => setWaterfallView('cash')}>
+                Cash
+              </button>
+              <button className={waterfallView === 'accrued' ? 'active' : undefined} onClick={() => setWaterfallView('accrued')}>
+                Accrued
+              </button>
+            </div>
+          }
         >
-          {glCash?.error ? (
-            <MisconfiguredNotice tab="GL Cash" message={glCash.error} />
-          ) : (
-            <WaterfallTable
-              title="Cash Waterfall — GL Cash"
-              subtitle={`${cashWaterfall.customers.length} customer${
-                cashWaterfall.customers.length === 1 ? '' : 's'
-              } · cash received per month, ordered by start month`}
-              waterfall={cashWaterfall}
-              months={cashMonths}
-              todayIso={todayIso}
-            />
-          )}
-
-          {glAccrued?.error ? (
+          {waterfallView === 'cash' ? (
+            glCash?.error ? (
+              <MisconfiguredNotice tab="GL Cash" message={glCash.error} />
+            ) : (
+              <WaterfallTable
+                title="Cash Waterfall — GL Cash"
+                subtitle={`${cashWaterfall.customers.length} customer${
+                  cashWaterfall.customers.length === 1 ? '' : 's'
+                } · cash received per month, ordered by start month`}
+                waterfall={cashWaterfall}
+                months={cashMonths}
+                todayIso={todayIso}
+              />
+            )
+          ) : glAccrued?.error ? (
             <MisconfiguredNotice tab="GL Accrued" message={glAccrued.error} />
           ) : (
             <WaterfallTable
