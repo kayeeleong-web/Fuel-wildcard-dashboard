@@ -66,6 +66,32 @@ that day comes; it requires a dedicated domain per app and is not set up by defa
 - Service account keys live only in this repo's env vars (`GOOGLE_SERVICE_ACCOUNT_EMAIL`,
   `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` base64-encoded, `GOOGLE_SHEET_ID`). Never commit a
   key file.
+- `middleware.js` already wires `clerkMiddleware` + `auth.protect()` across every route —
+  this is live and working. Login stays on Clerk (2026-08-19 decision, Kayee): a sibling
+  client (Hampton) uses a Supabase magic-link email allow-list instead of Clerk, but that
+  predates Clerk becoming the company standard — it's not the pattern to copy forward.
+  Don't replace or touch this middleware to add Supabase; see "Planning data storage"
+  below for what Supabase is actually for on this project.
+
+## Planning data storage (Supabase)
+
+- 2026-08-19 decision (Kayee, per Olek/Christy): a dedicated Supabase project (under the
+  Fuelfinance org, one project per client — same isolation principle as the Clerk app and
+  Google Service Account above) is being added to persist the planning/what-if data that
+  today only lives in each visitor's own browser localStorage — Payroll (roster, bonus,
+  hiring plan), Assumptions (revenue rates, cost items), and the Customer tab (driver
+  counts/prices, manual & planned customer rows). None of this is GL/actuals data — the
+  Google Sheet via `getDataSource()` stays the only source for that, untouched.
+- Scope is explicitly storage only, NOT auth — do not wire Supabase Auth, a login page,
+  or an email allow-list into this repo; that would duplicate/conflict with the working
+  Clerk gate above.
+- Supabase project/env vars aren't wired into this repo yet as of 2026-08-19 — once the
+  project exists and its keys are added to this Vercel project's env vars (via the
+  official Supabase-Vercel integration), the plan is a small abstraction (parallel to
+  `lib/data/index.ts`'s `getDataSource()`) that each existing localStorage hook
+  (`useCustomerDrivers`, `usePlannedCustomers`, `usePayrollState`, `useAssumptionsState`,
+  etc.) reads/writes through instead of `window.localStorage` directly — not a rewrite of
+  those hooks' shape, just swapping their storage backend.
 
 ## Deployment & domain
 

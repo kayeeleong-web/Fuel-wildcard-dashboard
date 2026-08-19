@@ -199,7 +199,11 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
         </span>
         <span className="payroll-card-sub">{items.length} items</span>
         <span className="payroll-card-actions">
-          <button type="button" className="btn primary" onClick={addItem}>
+          {/* Plain .btn (white bg), not .btn.primary — this sits on the card's own
+              black header bar, where solid black-on-black would be invisible (same
+              contrast fix already applied to Payroll's "+ Add Role"/"+ Add Hire",
+              2026-08-05/19). */}
+          <button type="button" className="btn" onClick={addItem}>
             {addLabel || '+ Add Cost'}
           </button>
         </span>

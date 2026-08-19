@@ -165,13 +165,16 @@ export function DashboardPanel({ summary, plStatement, kpiData }) {
         />
       </div>
 
-      {/* Three small supporting charts (design-rules.md §4: trend / new-vs-churned / aging
-          composition). The third slot (composition donut) needs its own chart component —
-          TrendChart only does bar/line — build that when a client actually needs it. */}
+      {/* Three small supporting charts (design-rules.md §4). All three render the same
+          real TrendChart-per-account-row pattern — a dedicated composition/donut chart
+          component doesn't exist yet, and shipping a placeholder "TODO" card here isn't
+          acceptable per CLAUDE.md's "never ship a control that visibly does nothing"
+          rule, so this slot uses a real account trend instead until a donut component
+          is actually built. */}
       <div className="grid-mini-charts">
         {plStatement.rows
           .filter((r) => !r.isTotal && r.key !== revenueRow.key)
-          .slice(0, 2)
+          .slice(0, 3)
           .map((row) => {
             const series = seriesForRow(plStatement, row.key, 6);
             const first = series[0]?.value ?? 0;
@@ -196,10 +199,6 @@ export function DashboardPanel({ summary, plStatement, kpiData }) {
               </div>
             );
           })}
-        <div className="chart-panel mini">
-          <h3>Composition — TODO</h3>
-          <div className="cap">Donut/composition chart component not built yet</div>
-        </div>
       </div>
     </>
   );

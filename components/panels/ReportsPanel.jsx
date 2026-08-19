@@ -1835,8 +1835,17 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // has no real GL row to attach to, so "remove this row" and "delete this cost item"
   // are the same action here (unlike a manual account, which can outlive the item that
   // was linked to it).
-  function handleRemoveCostItem(itemId) {
+  function handleRemoveCostItem(itemId, label) {
     if (!assumptionsState?.costItems) return;
+    // Same confirm() guard every other row-delete in the app already has (Roster,
+    // Bonus, Hiring Plan, Customer tab rows, and the Assumptions sidebar's own trash
+    // icon for this exact item) — this entry point was missing it (2026-08-19 audit).
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Delete ${label || 'this cost item'}? This removes it everywhere it's used.`)
+    ) {
+      return;
+    }
     setAssumptionsState({
       ...assumptionsState,
       costItems: assumptionsState.costItems.filter((i) => i.id !== itemId),
@@ -2076,7 +2085,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                   type="button"
                   className="report-manual-account-remove"
                   title="Delete this cost item"
-                  onClick={() => onRemoveCostItem(row.key.replace('custom_cost_', ''))}
+                  onClick={() => onRemoveCostItem(row.key.replace('custom_cost_', ''), row.label)}
                 >
                   ×
                 </button>
@@ -2105,7 +2114,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
               // 0.0% is still a real, worth-showing number, not noise to blank out.
               let cellText;
               if (row.isPercent) {
-                cellText = row.values[m] != null ? `${row.values[m].toFixed(1)}%` : '';
+                cellText = row.values[m] != null ? `${row.values[m].toFixed(2)}%` : '';
               } else {
                 const rounded = row.values[m] != null ? Math.round(row.values[m]) : 0;
                 cellText = rounded ? `$${rounded.toLocaleString('en-US')}` : '';
