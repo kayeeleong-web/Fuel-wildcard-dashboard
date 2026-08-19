@@ -66,7 +66,7 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
   }
 
   return (
-    <>
+    <div className="app-shell">
       <Topbar clientName={clientName} onLogoClick={() => changeTab('kpi')} />
       <TabNav activeTab={activeTab} onChange={changeTab} reportsCount={customReportsList.length + 3} />
 
@@ -101,6 +101,6 @@ export function DashboardApp({ clientName, kpiData, dashboardSummary, statements
       </div>
 
       <Footer />
-    </>
+    </div>
   );
 }

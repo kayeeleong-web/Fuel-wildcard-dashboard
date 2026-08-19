@@ -145,7 +145,18 @@ a {
 /* ==================== Page shell ==================== */
 /* Top padding keeps the page title clear of the sticky tab nav above it (design-rules.md §2) —
    without it, h1 sits flush against the black pill nav on every tab. */
-.page { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 28px 32px 40px; }
+/* Kayee, 2026-08-19: with the Customer tab's sections collapsed by default, there's
+   little content on the page, and without this the black footer band sat right below
+   the collapsed cards — visually "rising up" toward the middle of the screen instead
+   of staying anchored to the bottom. .app-shell is a full-viewport-height flex column
+   (Topbar/TabNav/.page/.Footer stacked) with .page as the only flexible child, so on a
+   short page .page's flex:1 stretches to fill the remaining space and the footer stays
+   pinned to the bottom of the viewport; on a tall page .page just grows past 100vh and
+   the footer scrolls down with it as before — no change to that existing behavior. */
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.app-shell .page { flex: 1 1 auto; }
+
+.page { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 28px 32px 40px; width: 100%; }
 .panel-view { display: none; animation: fade .35s ease; }
 .panel-view.active { display: block; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
