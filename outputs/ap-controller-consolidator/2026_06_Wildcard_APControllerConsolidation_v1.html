@@ -1,0 +1,76 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AP Controller — Consolidated Report — 2026-06 Wildcard</title>
+<style>
+:root{--bg:#fbfaf8;--fg:#1b1b1a;--muted:#5f5e5b;--line:#e3e0da;--card:#fff;--accent:#1b1b1a}
+@media (prefers-color-scheme:dark){:root{--bg:#17181a;--fg:#eceae6;--muted:#a4a29d;--line:#33353a;--card:#1f2124;--accent:#eceae6}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px 20px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:1.5rem;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .l{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .v{font-size:1.5rem;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums}
+h2{font-size:1rem;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:720px}
+th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+code{font:.82em ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(128,128,128,.13);padding:1px 5px;border-radius:4px}
+.sev{font-weight:650;white-space:nowrap}
+.note{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:14px 16px;margin:18px 0;font-size:.9rem}
+.note strong{font-weight:650}
+ul{margin:8px 0 0 18px;padding:0}li{margin:4px 0}
+</style></head><body><div class="wrap">
+<h1>AP Controller — Consolidated Report — 2026-06 Wildcard</h1>
+<div class="sub">AP Controller Workflow &middot; Mems Studio, Inc. DBA Wildcard &middot; period 2026-06 &middot; generated 2026-08-19 &middot; read-only overview, paired with <code>v1.xlsx</code></div>
+<div class="kpis">
+<div class="kpi"><div class="l">Controller Score</div><div class="v">100%</div></div>
+<div class="kpi"><div class="l">If all confirmed</div><div class="v">59%</div></div>
+<div class="kpi"><div class="l">Critical</div><div class="v">4</div></div>
+<div class="kpi"><div class="l">Mid</div><div class="v">3</div></div>
+<div class="kpi"><div class="l">Low</div><div class="v">0</div></div>
+</div>
+<div class="note"><strong>Why the score is 100%.</strong> The Controller Score counts only <em>confirmed</em>
+findings &mdash; those the FM has marked <code>Error</code> in the paired <code>.xlsx</code>. This is the first run
+for Wildcard, so every finding below is <strong>open</strong>, not confirmed, and none has lowered the score yet.
+Potential additional impact if all 7 are confirmed: <strong>&minus;41 points &rarr; 59%</strong>.
+Do not read 100% as assurance.</div>
+<div class="note"><strong>The headline finding is an absence, not a discrepancy.</strong>
+Wildcard operates no accounts-payable subledger: Balance Sheet AP is $0.00 in all 27 months, the chart of accounts
+has no AP category, and the only payable-named account among 65 is the Amex card. Every AP control below therefore
+has nothing to test. The FM held <code>dataSource</code> on 2026-08-19 rather than substitute a proxy.</div>
+<h2>Declined alternative &mdash; card-payable proxy</h2>
+<div class="scroll"><table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>
+<tr><td>Amex 21001 balance owed at 2026-06</td><td><strong>$73,358.65</strong></td></tr>
+<tr><td>Vendor identity recoverable via Journal Entry ID join, 2026-06</td><td><strong>875 of 884 lines (99.0%)</strong></td></tr>
+<tr><td>Distinct vendors / gross spend, 2026-06</td><td><strong>216 vendors / $81,621.02</strong></td></tr>
+<tr><td>Top vendors</td><td>eBay 12,885.32 &middot; Amazon 9,220.82 &middot; Etsy 9,038.99 &middot; FEDEX 4,464.05</td></tr>
+<tr><td>Diagnostic duplicate scan (not findings)</td><td>1,239 pairs within 10 days; 87 same-day across different journal entries</td></tr>
+</tbody></table></div>
+<div class="note">This proxy would measure <strong>card float, not vendor payment behaviour</strong>. Recorded so the
+option is available; not run as AP Controller output.</div>
+<h2>Findings (7) &mdash; all open</h2>
+<div class="scroll"><table><thead><tr><th>ID</th><th>Sub-agent</th><th>Type</th><th>Severity</th><th>Finding</th><th>Evidence</th></tr></thead><tbody>
+<tr><td><code>APM-2026-06-001</code></td><td>ap-aging-metrics</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>Wildcard operates no accounts-payable subledger</td><td>BS AP = 0.00 in all 27 months; no AP category in the COA tab; 25100 Accrued Expenses has 4 lines ever, 0.00 balance; only payable-named account is the Amex card.</td></tr>
+<tr><td><code>APM-2026-06-002</code></td><td>ap-aging-metrics</td><td>judgment</td><td class="sev" style="color:#8a6100">Mid</td><td>Vendor obligations recognised only at payment, not at invoice</td><td>ctx_12: 150-300 campaign purchases/month on Amex by individual team members; recurring vendors paid direct by bank. Period-end accrual completeness rests on card-statement timing.</td></tr>
+<tr><td><code>APX-2026-06-001</code></td><td>ap-duplicate-detection</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>Duplicate-bill detection has no dataset</td><td>No bills, no billNum, no paymentStatus in any Wildcard source.</td></tr>
+<tr><td><code>APD-2026-06-001</code></td><td>ap-discount-capture</td><td>judgment</td><td class="sev" style="color:#8a6100">Mid</td><td>No early-payment discount terms exist for any Wildcard vendor</td><td>All 6 ctx_12 vendors pay by bank or card with no stated discount terms; card charges carry no terms by nature. A zero result here is plausibly correct rather than a gap.</td></tr>
+<tr><td><code>APA-2026-06-001</code></td><td>ap-approval-controls</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No approval workflow is captured in any Wildcard system</td><td>approvalStatus / approvalTier do not exist as fields; ctx_05 lists no approval or spend-management platform.</td></tr>
+<tr><td><code>APA-2026-06-002</code></td><td>ap-approval-controls</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No approval policy exists to test against</td><td>ctx_03 records approval logic, expense thresholds and reimbursement rules all MISSING; ctx_19 carries only FM-flagged provisional tiers.</td></tr>
+<tr><td><code>APA-2026-06-003</code></td><td>ap-approval-controls</td><td>judgment</td><td class="sev" style="color:#8a6100">Mid</td><td>Spend authority is distributed with no recorded control</td><td>884 card lines across 216 vendors, $81,621.02 gross in 2026-06, charged by individual team members with no approval evidence.</td></tr>
+</tbody></table></div>
+<h2>Sub-agent execution</h2>
+<div class="scroll"><table><thead><tr><th>Sub-agent</th><th>Coverage</th><th>Run status</th><th>Exec. completeness</th><th>Weakest upstream link</th><th>Remediation action</th></tr></thead><tbody>
+<tr><td><code>ap-controller-input-agent</code></td><td>fresh</td><td>needs_review</td><td style="font-variant-numeric:tabular-nums">0.85</td><td>none (Pre-Agent, opens the chain)</td><td>Decide whether Wildcard should book vendor bills to AP</td></tr>
+<tr><td><code>ap-aging-metrics</code></td><td>fresh</td><td>escalated</td><td style="font-variant-numeric:tabular-nums">0.8</td><td>ap-controller-input-agent (0.85)</td><td>No AP dataset. DPO = 0.00 days, arithmetically true and analytically empty</td></tr>
+<tr><td><code>ap-discount-capture</code></td><td>fresh</td><td>escalated</td><td style="font-variant-numeric:tabular-nums">0.8</td><td>ap-controller-input-agent (0.85)</td><td>Candidate to switch OFF - the one enabled AP flag whose zero result is likely genuine</td></tr>
+<tr><td><code>ap-duplicate-detection</code></td><td>fresh</td><td>escalated</td><td style="font-variant-numeric:tabular-nums">0.75</td><td>ap-controller-input-agent (0.85)</td><td>Highest-value flag once AP exists. Diagnostic card scan withheld from findings by design</td></tr>
+<tr><td><code>ap-approval-controls</code></td><td>fresh</td><td>escalated</td><td style="font-variant-numeric:tabular-nums">0.7</td><td>ap-controller-input-agent (0.85)</td><td>Get real approval logic from Brennan Keough; remove provisional tiers from ctx_19</td></tr>
+<tr><td><code>ap-three-way-match</code></td><td>skipped by config</td><td>not run</td><td style="font-variant-numeric:tabular-nums">&mdash;</td><td>n/a</td><td>threeWayMatch OFF in ctx_19 - no PO or receiving system exists; poRequiredThreshold deliberately unset</td></tr>
+</tbody></table></div>
+<div class="note"><strong>Every severity and completeness figure above is relayed from the Sub-agent that
+produced it.</strong> This Consolidator recomputes exactly one number itself &mdash; the Controller Score.</div>
+</div></body></html>

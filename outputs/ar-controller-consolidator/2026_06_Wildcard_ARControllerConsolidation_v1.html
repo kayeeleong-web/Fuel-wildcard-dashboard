@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AR Controller — Consolidated Report — 2026-06 Wildcard</title>
+<style>
+:root{--bg:#fbfaf8;--fg:#1b1b1a;--muted:#5f5e5b;--line:#e3e0da;--card:#fff;--accent:#1b1b1a}
+@media (prefers-color-scheme:dark){:root{--bg:#17181a;--fg:#eceae6;--muted:#a4a29d;--line:#33353a;--card:#1f2124;--accent:#eceae6}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px 20px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:1.5rem;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:26px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .l{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi .v{font-size:1.5rem;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums}
+h2{font-size:1rem;margin:28px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:720px}
+th{text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+code{font:.82em ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(128,128,128,.13);padding:1px 5px;border-radius:4px}
+.sev{font-weight:650;white-space:nowrap}
+.note{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:14px 16px;margin:18px 0;font-size:.9rem}
+.note strong{font-weight:650}
+ul{margin:8px 0 0 18px;padding:0}li{margin:4px 0}
+</style></head><body><div class="wrap">
+<h1>AR Controller — Consolidated Report — 2026-06 Wildcard</h1>
+<div class="sub">AR Controller Workflow &middot; Mems Studio, Inc. DBA Wildcard &middot; period 2026-06 &middot; generated 2026-08-19 &middot; read-only overview, paired with <code>v1.xlsx</code></div>
+<div class="kpis">
+<div class="kpi"><div class="l">Controller Score</div><div class="v">100%</div></div>
+<div class="kpi"><div class="l">If all confirmed</div><div class="v">49%</div></div>
+<div class="kpi"><div class="l">Critical</div><div class="v">6</div></div>
+<div class="kpi"><div class="l">Mid</div><div class="v">1</div></div>
+<div class="kpi"><div class="l">Low</div><div class="v">0</div></div>
+</div>
+<div class="note"><strong>Why the score is 100%.</strong> The Controller Score counts only <em>confirmed</em>
+findings &mdash; those the FM has marked <code>Error</code> in the paired <code>.xlsx</code>. This is the first run
+for Wildcard, so every finding below is <strong>open</strong>, not confirmed, and none has lowered the score yet.
+Potential additional impact if all 7 are confirmed: <strong>&minus;51 points &rarr; 49%</strong>.
+Do not read 100% as assurance.</div>
+<h2>What verified this period</h2>
+<div class="scroll"><table><thead><tr><th>Check</th><th>Result</th></tr></thead><tbody>
+<tr><td>AR control total 2026-06, GL vs Balance Sheet</td><td><strong>$237,000.00 both &mdash; 0.00 variance</strong></td></tr>
+<tr><td>AR control total 2026-05, GL vs Balance Sheet</td><td><strong>$250,900.00 both &mdash; 0.00 variance</strong></td></tr>
+<tr><td>AR rollforward 2026-06 (250,900 + 292,000 issued &minus; 305,900 received)</td><td><strong>= 237,000.00 &mdash; ties exactly</strong></td></tr>
+<tr><td>Balance Sheet balances at 2026-06</td><td>Assets 519,363.38 = Liabilities 116,358.64 + Equity 403,004.74</td></tr>
+<tr><td>DSO</td><td><strong>19.53 days</strong> &mdash; revenue used as credit-sales proxy, treat as a floor</td></tr>
+<tr><td>CEI</td><td><code>null</code> &mdash; needs Ending Current AR, which needs a valid aging</td></tr>
+<tr><td>Top-5 customer concentration</td><td>Not computable &mdash; no customer on any AR line</td></tr>
+<tr><td>Aging buckets</td><td>Not computable &mdash; no due date, no invoice-level balance</td></tr>
+</tbody></table></div>
+<div class="note"><strong>The AR control total is trustworthy; the detail beneath it is not.</strong>
+The balance ties to the Balance Sheet exactly and the rollforward proves out to the cent. What is missing is
+who owes the $237,000, since when, and against which invoice.</div>
+<h2>Findings (7) &mdash; all open</h2>
+<div class="scroll"><table><thead><tr><th>ID</th><th>Sub-agent</th><th>Type</th><th>Severity</th><th>Finding</th><th>Evidence</th></tr></thead><tbody>
+<tr><td><code>ARM-2026-06-001</code></td><td>ar-aging-metrics</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No due date on any AR record</td><td>335 of 335 AR GL lines (2024-04 to 2026-06) carry no due-date field. Aging not computable for any period.</td></tr>
+<tr><td><code>ARM-2026-06-002</code></td><td>ar-aging-metrics</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No customer name on any AR record</td><td>0 of 335 AR lines have Counterparty Name, vs 40.7% populated across the wider GL. Concentration and the configured customer dimension unavailable.</td></tr>
+<tr><td><code>ARM-2026-06-003</code></td><td>ar-aging-metrics</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No invoice-to-payment linkage</td><td>Event External ID unique per line (335 IDs / 335 lines); 0 overlap between June 16 issues and 13 payments; Journal Memo empty on all 29 June lines. No invoice-level open balance derivable.</td></tr>
+<tr><td><code>ARM-2026-06-004</code></td><td>ar-aging-metrics</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No invoice number on any AR record</td><td>335 of 335 lines. Individual invoices cannot be identified or traced to a contract.</td></tr>
+<tr><td><code>ARP-2026-06-001</code></td><td>ar-cash-application</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>Cash application is unverifiable</td><td>All 13 June payments ($305,900.00) lack any invoice link: no applied-invoice field, no shared external ID, no memo, no counterparty.</td></tr>
+<tr><td><code>ARP-2026-06-002</code></td><td>ar-cash-application</td><td>deterministic</td><td class="sev" style="color:#b3261e">Critical</td><td>No payment can be attributed to a customer</td><td>Counterparty Name empty on all 13 payments; 0 of 13 recoverable via Journal Entry ID join.</td></tr>
+<tr><td><code>ARP-2026-06-003</code></td><td>ar-cash-application</td><td>judgment</td><td class="sev" style="color:#8a6100">Mid</td><td>Configured feed is the GL, not a payments feed</td><td>Stripe and Chase both live per ctx_05; ctx_03 records most customers pay by ACH. GL holds the accounting entry but no remittance detail.</td></tr>
+</tbody></table></div>
+<h2>Sub-agent execution</h2>
+<div class="scroll"><table><thead><tr><th>Sub-agent</th><th>Coverage</th><th>Run status</th><th>Exec. completeness</th><th>Weakest upstream link</th><th>Remediation action</th></tr></thead><tbody>
+<tr><td><code>ar-controller-input-agent</code></td><td>fresh</td><td>needs_review</td><td style="font-variant-numeric:tabular-nums">0.85</td><td>none (Pre-Agent, opens the chain)</td><td>Supply invoice-grain AR source; record materiality in ctx_17</td></tr>
+<tr><td><code>ar-aging-metrics</code></td><td>fresh</td><td>needs_review</td><td style="font-variant-numeric:tabular-nums">0.7</td><td>ar-controller-input-agent (0.85)</td><td>Source lacks due date / invoice no. / invoice-level balance / customer - replace source</td></tr>
+<tr><td><code>ar-collections-review</code></td><td>skipped by config</td><td>not run</td><td style="font-variant-numeric:tabular-nums">&mdash;</td><td>n/a</td><td>collectionsWorkflow OFF in ctx_18 - no follow-up or promise-to-pay tracking exists at Wildcard</td></tr>
+<tr><td><code>ar-dispute-credit-review</code></td><td>skipped by config</td><td>not run</td><td style="font-variant-numeric:tabular-nums">&mdash;</td><td>n/a</td><td>disputeCreditHold OFF in ctx_18 - no dispute status, credit limits or credit-hold policy documented</td></tr>
+<tr><td><code>ar-cash-application</code></td><td>fresh</td><td>escalated</td><td style="font-variant-numeric:tabular-nums">0.65</td><td>ar-controller-input-agent (0.85)</td><td>Below 0.70 threshold. Connect Chase (or Chase + Stripe) with remittance detail, or switch cashApplication OFF</td></tr>
+</tbody></table></div>
+<div class="note"><strong>Every severity and completeness figure above is relayed from the Sub-agent that
+produced it.</strong> This Consolidator recomputes exactly one number itself &mdash; the Controller Score.</div>
+</div></body></html>

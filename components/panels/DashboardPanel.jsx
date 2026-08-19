@@ -65,7 +65,7 @@ export function DashboardPanel({ summary, plStatement, kpiData }) {
 
   return (
     <>
-      <PageHead title="Dashboard" subtitle="Financial performance overview">
+      <PageHead title="Dashboard">
         <button className="btn" onClick={() => window.print()}>Export PDF</button>
       </PageHead>
 

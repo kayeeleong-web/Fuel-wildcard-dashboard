@@ -140,7 +140,7 @@ export function KPIReportPanel({ kpiData }) {
 
   return (
     <>
-      <PageHead title="KPI Report" subtitle="Operating metrics vs. plan and benchmark">
+      <PageHead title="KPI Report">
         <div className="kpi-controls">
           <div className="seg">
             {['mom', 'yoy'].map((mode) => (

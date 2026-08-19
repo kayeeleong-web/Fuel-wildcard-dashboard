@@ -332,7 +332,7 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
 
   return (
     <>
-      <PageHead title="Reports" subtitle="P&L, Cash Flow, Balance Sheet, and saved custom reports" />
+      <PageHead title="Reports" />
 
       <div className="toolbar">
         {/* Type selector only shown on Reports (actual) tab — Projection has its own

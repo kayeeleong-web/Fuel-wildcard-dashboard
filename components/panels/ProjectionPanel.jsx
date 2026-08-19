@@ -48,7 +48,7 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
 
   return (
     <>
-      <PageHead title="Projection" subtitle="Full-month forecast with Assumptions sidebar — edit and project forward" />
+      <PageHead title="Projection" />
 
       {/* Sub-tab navigation — local to this panel only, separate from the main
           TabNav in the shell. Clicking "Reports" in the main bar entirely hides

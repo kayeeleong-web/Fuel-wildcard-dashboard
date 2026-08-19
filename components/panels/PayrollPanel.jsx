@@ -75,7 +75,7 @@ export function PayrollPanel() {
   if (!hydrated || !state) {
     return (
       <>
-        <PageHead title="Payroll" subtitle="Employee roster, bonus, and total comp forecast" />
+        <PageHead title="Payroll" />
         <div className="cap">Loading saved roster…</div>
       </>
     );
@@ -95,7 +95,7 @@ export function PayrollPanel() {
 
   return (
     <>
-      <PageHead title="Payroll" subtitle="Employee roster, bonus, and total comp forecast — saved to this browser">
+      <PageHead title="Payroll">
         <button type="button" className="btn" onClick={() => window.print()}>
           Export PDF
         </button>

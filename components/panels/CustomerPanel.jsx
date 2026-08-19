@@ -336,14 +336,15 @@ export function CustomerPanel({ glCash, glAccrued }) {
     [glAccrued]
   );
 
-  // Range toggle: default hides pre-2026 history; Historical shows every month the GL
-  // actually has (same 2026-2028/Historical pair as Payroll & Reports).
-  function visibleGLMonths(allMonths) {
-    if (range === 'all') return allMonths;
-    return allMonths.filter((m) => m >= '2026-01');
-  }
-  const cashMonths = visibleGLMonths(cashWaterfall.months);
-  const accruedMonths = visibleGLMonths(accruedWaterfall.months);
+  // The Cash/Accrued waterfalls always show every month the GL actually has — Kayee
+  // (2026-08-18): "this is ugly, the white space... I think we can show all months for
+  // the cash and accrual waterfall." Filtering these to 2026+ left most customers
+  // (started back in 2024) showing only a handful of real months, so the table was
+  // much narrower than its .page-wide container — a wall of dead white space to the
+  // right of a 6-column table. The 2026-2028/Historical toggle still governs the
+  // driver grids and planning tables below, which are forward-looking by nature.
+  const cashMonths = cashWaterfall.months;
+  const accruedMonths = accruedWaterfall.months;
 
   // Planning/driver-grid months come from the shared payroll horizon (2026-01..2028-12
   // by default, full range on Historical) — forward-looking grids must extend past the
@@ -667,10 +668,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
 
   return (
     <>
-      <PageHead
-        title="Customer Cash Flow"
-        subtitle="Current customers from GL Cash & GL Accrued — plus campaign/meeting cash-in drivers feeding the Cash Flow Projection"
-      />
+      <PageHead title="Customer Cash Flow" />
 
       {/* Same 2026-2028/Historical pair as Payroll & Reports — one piece of state
           drives the visible-month window of every table at once. */}
