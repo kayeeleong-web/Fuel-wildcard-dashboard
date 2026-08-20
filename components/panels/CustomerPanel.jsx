@@ -129,6 +129,13 @@ function seedDrivers() {
     meetingPrice: 2000,
     // User-added rows that aren't in the GL roster yet: [{ id, name }]
     manualCustomers: [],
+    // GL-roster customers the user has hidden from the projection grid (2026-08-20,
+    // Kayee: "where did you get this list... brex? i want to have the option to
+    // remove them too"). The GL roster is auto-built from every 4xxxx counterparty in
+    // GL Cash, so a row like Brex can't be DELETED (it's real GL data) — hiding it
+    // here just drops it from the planning grid; its actuals still show everywhere
+    // else. Stored by name (the GL key), restorable via the header button.
+    hiddenGlCustomers: [],
     // Per-customer monthly driver counts, keyed 'gl:<name>' | 'manual:<id>' |
     // 'plan:<id>' → { campaigns: { iso: n }, meetings: { iso: n } }
     driversByKey: {},
@@ -306,7 +313,12 @@ function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months,
             // is fermat") — reverses the 2026-08-19 "blank on the second row" decision;
             // with plain alternating grey/white banding replacing the old per-row tint,
             // a repeated name is what actually ties the pair together now.
-            name: r.nameCell ?? r.name,
+            // Plain text here, NOT r.nameCell (2026-08-20 follow-up, Kayee: "I dont
+            // want to fill in the name twice... make the second row just use the first
+            // row") — for manual/planned rows, nameCell is an EDITABLE input (+ delete
+            // button), so repeating it gave two separate name boxes per customer. The
+            // Meetings row now just mirrors whatever the Campaigns row's input says.
+            name: r.name,
             metric: <span className="driver-metric-label"># of Meetings</span>,
             price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
           },
@@ -520,15 +532,65 @@ export function CustomerPanel({ glCash, glAccrued }) {
     });
   }
 
+  // Hide a GL-roster row from the projection grid (2026-08-20, Kayee: "brex? i want
+  // to have the option to remove them too") — not a delete: the name goes into
+  // drivers.hiddenGlCustomers and the row disappears from this grid only. Their real
+  // GL actuals are untouched (waterfall, Cash Coming In actual months). Restorable
+  // via the "Restore hidden" header button.
+  function hideGlCustomer(name) {
+    if (!drivers) return;
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Hide ${name} from this projection grid? Their GL actuals stay everywhere else; you can restore them with the "Restore hidden" button.`)
+    ) {
+      return;
+    }
+    setDrivers({ ...drivers, hiddenGlCustomers: [...(drivers.hiddenGlCustomers || []), name] });
+  }
+
+  function restoreHiddenGlCustomers() {
+    if (!drivers) return;
+    setDrivers({ ...drivers, hiddenGlCustomers: [] });
+  }
+
+  const hiddenGlCustomers = drivers?.hiddenGlCustomers || [];
+
   // Current & pipeline driver rows: the live GL Cash roster (pre-populated,
-  // name read-only — it IS the GL counterparty name) + manually added rows.
+  // name read-only — it IS the GL counterparty name, but hideable) + manually added
+  // rows (fully editable/removable).
   const currentDriverRows = [
-    ...cashWaterfall.customers.map((c) => ({ key: `gl:${c.name}`, name: c.name })),
+    ...cashWaterfall.customers
+      .filter((c) => !hiddenGlCustomers.includes(c.name))
+      .map((c) => ({
+        key: `gl:${c.name}`,
+        name: c.name,
+        nameCell: (
+          // Same layout as manual rows below — name first, trash on the right — but
+          // the name is plain text (it's the GL counterparty, not editable) and the
+          // trash HIDES rather than deletes (see hideGlCustomer above).
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'space-between' }}>
+            <span>{c.name}</span>
+            <button
+              type="button"
+              className="icon-btn"
+              title="Hide this GL customer from the projection grid (restorable)"
+              onClick={() => hideGlCustomer(c.name)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
+              </svg>
+            </button>
+          </span>
+        ),
+      })),
     ...(drivers?.manualCustomers || []).map((c) => ({
       key: `manual:${c.id}`,
       name: c.name,
       nameCell: (
+        // Trash on the RIGHT of the name input (2026-08-20, Kayee: "make the trash
+        // can to the right, not on the left") — same order as the planned rows below.
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <TextInput value={c.name} placeholder="Customer name" onCommit={(v) => renameManualCustomer(c.id, v)} />
           <button
             type="button"
             className="icon-btn"
@@ -539,7 +601,6 @@ export function CustomerPanel({ glCash, glAccrued }) {
               <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
             </svg>
           </button>
-          <TextInput value={c.name} placeholder="Customer name" onCommit={(v) => renameManualCustomer(c.id, v)} />
         </span>
       ),
     })),
@@ -557,7 +618,14 @@ export function CustomerPanel({ glCash, glAccrued }) {
     key: `plan:${r.id}`,
     name: r.name,
     nameCell: (
+      // Trash on the RIGHT (2026-08-20, Kayee) — input, then the Planned tag, then
+      // delete last, so the destructive control isn't the first thing in the cell.
       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <TextInput value={r.name} placeholder="Planned customer name" focusOnMount={r.id === justAddedId} onCommit={(v) => {
+          updatePlanned(r.id, { name: v });
+          if (r.id === justAddedId) setJustAddedId(null);
+        }} />
+        <span className="pr-tag">Planned</span>
         <button
           type="button"
           className="icon-btn"
@@ -568,11 +636,6 @@ export function CustomerPanel({ glCash, glAccrued }) {
             <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
           </svg>
         </button>
-        <TextInput value={r.name} placeholder="Planned customer name" focusOnMount={r.id === justAddedId} onCommit={(v) => {
-          updatePlanned(r.id, { name: v });
-          if (r.id === justAddedId) setJustAddedId(null);
-        }} />
-        <span className="pr-tag">Planned</span>
       </span>
     ),
   }));
