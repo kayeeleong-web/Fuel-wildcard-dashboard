@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { AssumptionField } from '../payroll/AssumptionsBar';
 import { CostItemsCard } from '../assumptions/CostItemsCard';
 import { ScheduledRateField } from './RateScheduleControl';
@@ -20,6 +21,13 @@ import { ScheduledRateField } from './RateScheduleControl';
  * lot of major websites... if I click a button you can hide it into a hamburger").
  */
 export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange, costItemOrder }) {
+  // 2026-08-20 (Kayee: "make it collapsable so that it's not just fit into one page...
+  // keep it default collapse for each section, that way you can keep each and stay
+  // when scroll") — collapsed by default so Revenue Assumptions + the CoGS/OpEx cost
+  // cards below it stack to a short list inside the sticky sidebar (globals.css
+  // .reports-sidebar) instead of overflowing/clipping past viewport height. Local to
+  // this component, not persisted — reopens fresh each time the tab mounts.
+  const [revenueOpen, setRevenueOpen] = useState(false);
   if (collapsed) {
     // Full-height, black/white rail (2026-08-07, Kayee: "make hamburger more obvious
     // because user might miss it") — a lone 28px icon square floating in an otherwise
@@ -58,9 +66,15 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
     <div className="reports-sidebar">
       <div className="payroll-card">
         <div className="payroll-card-head">
-          <span className="payroll-card-title-btn" style={{ cursor: 'default' }}>
+          <button
+            type="button"
+            className="payroll-card-title-btn"
+            onClick={() => setRevenueOpen((o) => !o)}
+            aria-expanded={revenueOpen}
+          >
+            <span className={`payroll-chevron${revenueOpen ? ' open' : ''}`}>▸</span>
             Revenue Assumptions
-          </span>
+          </button>
           <span className="payroll-card-actions">
             {/* Text label alongside the icon (2026-08-07) — same "make it obvious"
                 reasoning as the collapsed rail; a bare icon in a black header bar full
@@ -74,6 +88,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           </span>
         </div>
 
+        {revenueOpen && (
         <div className="pr-assumption-sidebar-list">
           {/* Grouped + ordered to match the P&L itself (2026-08-07, Kayee: "arrange the
               boxes of revenue assumptions so that it will align with what's on the
@@ -177,6 +192,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           </div>
 
         </div>
+        )}
       </div>
 
       {/* Split into one card per Category (2026-08-10, Kayee: "can you divide non
@@ -194,6 +210,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         category="CoGS"
         title="Non-Headcount Cost - CoGS"
         addLabel="+ Add CoGS Cost"
+        defaultCollapsed
       />
       <CostItemsCard
         costItems={costItems}
@@ -202,6 +219,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
         category="OpEx"
         title="Non-Headcount Cost - OpEx"
         addLabel="+ Add OpEx Cost"
+        defaultCollapsed
       />
       {costItems.some((i) => i.category === 'Other') && (
         <CostItemsCard
@@ -211,6 +229,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           category="Other"
           title="Non-Headcount Cost - Other"
           addLabel="+ Add Cost"
+          defaultCollapsed
         />
       )}
     </div>

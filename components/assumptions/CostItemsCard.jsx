@@ -155,8 +155,16 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
  * component filters to its own `category` purely for display, so saving never drops
  * another card's items.
  */
-export function CostItemsCard({ costItems, onChange, itemOrder, category, title, addLabel }) {
+export function CostItemsCard({ costItems, onChange, itemOrder, category, title, addLabel, defaultCollapsed = false }) {
   const [scheduleOpenId, setScheduleOpenId] = useState(null);
+  // 2026-08-20 (Kayee: the sidebar's cards no longer fit in one page — "make it
+  // collapsable so that it's not just fit into one page... keep it default collapse
+  // for each section, that way you can keep each and stay when scroll"). Collapsed by
+  // default so the Revenue Assumptions + CoGS + OpEx cards stacked in the sticky
+  // sidebar (globals.css .reports-sidebar) sum to a short, natural-height list instead
+  // of relying on one card force-growing to fill leftover space (the bug that was
+  // clipping the OpEx card's rows).
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   const items = costItems.filter((i) => i.category === category);
 
@@ -194,9 +202,15 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
   return (
     <div className="payroll-card">
       <div className="payroll-card-head">
-        <span className="payroll-card-title-btn" style={{ cursor: 'default' }}>
+        <button
+          type="button"
+          className="payroll-card-title-btn"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+        >
+          <span className={`payroll-chevron${collapsed ? '' : ' open'}`}>▸</span>
           {title}
-        </span>
+        </button>
         <span className="payroll-card-sub">{items.length} items</span>
         <span className="payroll-card-actions">
           {/* Plain .btn (white bg), not .btn.primary — this sits on the card's own
@@ -209,6 +223,7 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
         </span>
       </div>
 
+      {!collapsed && (
       <div className="payroll-table-wrap">
         <table className="payroll-table assump-cost-table">
           <thead>
@@ -337,10 +352,13 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
           </tbody>
         </table>
       </div>
+      )}
 
+      {!collapsed && (
       <div className="payroll-card-footer assump-cost-note">
         Quarterly items spread their total ÷ 3 across each month. Drag a row onto its P&L line to link it.
       </div>
+      )}
     </div>
   );
 }
