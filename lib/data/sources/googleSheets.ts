@@ -146,14 +146,21 @@ export class GoogleSheetsDataSource implements DataSource {
    *   Section | Key | Label | Unit | Type | Benchmark | IsTotal | <month 1> | <month 2>...
    * (cols A-G, then H onward — Type is "flow" [sum for YTD/TTM], "stock" [point-in-time,
    * never summed], or "ratio" [%, also point-in-time]). There is no longer a Y1 cell to
-   * read the report month from — the app determines "current month" itself, as the
-   * LAST month column that has a real (non-null) value anywhere in the sheet, same
-   * "never trust a stale hardcoded date" principle the PL/CF/BS range logic already
-   * follows. Fixes the 2026-08-20 bug where the app was still reading the OLD schema
-   * against this NEW sheet layout (Kayee: "I have no data because it's a wrong month" —
-   * Y1 no longer held a date at all once the sheet was rebuilt, so the picker/table
-   * anchored on garbage). Current/Prior/PriorYear/YTD/TTM are all derived here from the
-   * month columns, per row Type — never read from a cell that doesn't exist anymore. */
+   * read the report month from — the app determines "current month" itself.
+   *
+   * 2026-08-20 follow-up bug (Kayee: "why do you only show 2028... should only show Jan
+   * 2026 up until last close month which is June 2026"): the first version of this
+   * anchored on the LAST column ANY row had a non-null value in — but rows like New
+   * Customers/Churn Rate/Expansion MRR (COUNTIF/SUMPRODUCT-based formulas) don't error
+   * out for a future month with no real GL data yet, they just correctly compute a real
+   * "0" — which is non-null, so that logic kept walking all the way to the sheet's last
+   * header column (however far the month headers happen to extend, e.g. Dec-2028) even
+   * though nothing real had happened there yet. Anchoring on "total_revenue" specifically
+   * instead — its formula is an IFERROR(...,"") lookup straight off the PL sheet, which
+   * genuinely goes BLANK (not zero) once real GL data runs out — so it can only ever
+   * point at a month that's actually closed. Falls back to the old "any row" logic only
+   * if no total_revenue row exists at all, so a sheet missing that exact Key still gets
+   * *a* current month instead of none. */
   async getKPIData(): Promise<KPIReportData> {
     const header = await getValues(this.sheetId, "KPI_Report!1:1");
     const monthCols = (header[0] ?? []).slice(7); // columns after Section|Key|Label|Unit|Type|Benchmark|IsTotal
@@ -161,12 +168,14 @@ export class GoogleSheetsDataSource implements DataSource {
 
     const body = await getValues(this.sheetId, `KPI_Report!A2:${colLetter(6 + monthCols.length)}`);
 
-    // Current month = the last column ANY row has a real number in — never a fixed/
-    // stale cell, so a sheet that hasn't been updated for the newest month yet still
-    // anchors on the last month it genuinely has data for.
+    const anchorRow = body.find((r) => String(r[1] ?? "").trim().toLowerCase() === "total_revenue");
+
     let currentIdx = -1;
     for (let i = monthCols.length - 1; i >= 0; i--) {
-      if (body.some((r) => toNumberOrNull(r[7 + i]) !== null)) {
+      const hasData = anchorRow
+        ? toNumberOrNull(anchorRow[7 + i]) !== null
+        : body.some((r) => toNumberOrNull(r[7 + i]) !== null);
+      if (hasData) {
         currentIdx = i;
         break;
       }
