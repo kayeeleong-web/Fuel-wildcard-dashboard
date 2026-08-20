@@ -257,7 +257,7 @@ function WaterfallTable({ title, subtitle, waterfall, months, todayIso }) {
  *  and CF feed still use). `getCount`/`onSetCount` take (kind, key, iso);
  *  `getPrice`/`onSetPrice` take (kind, key) — generic signatures so one component
  *  covers both the campaigns row and the meetings row per customer. */
-function CombinedDriverGrid({ title, subtitle, rows, months, isEditableMonth, todayIso, getCount, onSetCount, getPrice, onSetPrice, headActions }) {
+function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months, isEditableMonth, todayIso, getCount, onSetCount, getPrice, onSetPrice, headActions }) {
   function monthCellsFor(key, kind) {
     return Object.fromEntries(
       months.map((iso) => [
@@ -275,54 +275,59 @@ function CombinedDriverGrid({ title, subtitle, rows, months, isEditableMonth, to
     );
   }
 
-  // Two rows per customer, back to back — the name only shows on the first (Campaigns)
-  // row; the second (Meetings) row leaves it blank. 2026-08-19 (Kayee: "would your eye
-  // know that the row below is also for Fermat Commerce?" — answer: not with the
-  // default alternating-row striping, which shaded every OTHER ROW rather than every
-  // other CUSTOMER, so a pair could end up split across two different shades). Fixed
-  // by shading BOTH rows of one customer identically and alternating that shared shade
-  // customer-to-customer instead — `driver-pair-even`/`driver-pair-odd` in globals.css.
-  // `driver-pair-last` also gets a bottom border so consecutive customers stay visually
-  // separated without another divider row.
-  const dataRows = rows.flatMap((r, idx) => {
-    const zebra = idx % 2 === 0 ? 'driver-pair-even' : 'driver-pair-odd';
-    return [
-      {
-        id: `${r.key}__campaigns`,
-        className: `driver-pair-first ${zebra}`,
-        cells: {
-          name: r.nameCell ?? r.name,
-          metric: <span className="driver-metric-label"># of Campaigns</span>,
-          price: <MonthInput value={getPrice('campaigns', r.key)} onCommit={(n) => onSetPrice('campaigns', r.key, n)} />,
+  // Two rows per customer, back to back — 2026-08-20: both rows now repeat the
+  // customer name (see the cells.name comment below). Shading BOTH rows of one
+  // customer identically and alternating that shared shade customer-to-customer
+  // (`driver-pair-even`/`driver-pair-odd` in globals.css) is what makes a pair read as
+  // one visual block rather than two independently-striped rows.
+  // `startIdx` lets the zebra shading continue counting across the Current/Planned
+  // split below instead of resetting to "even" at the top of each group.
+  function buildPairs(list, startIdx) {
+    return list.flatMap((r, i) => {
+      const idx = startIdx + i;
+      const zebra = idx % 2 === 0 ? 'driver-pair-even' : 'driver-pair-odd';
+      return [
+        {
+          id: `${r.key}__campaigns`,
+          className: `driver-pair-first ${zebra}`,
+          cells: {
+            name: r.nameCell ?? r.name,
+            metric: <span className="driver-metric-label"># of Campaigns</span>,
+            price: <MonthInput value={getPrice('campaigns', r.key)} onCommit={(n) => onSetPrice('campaigns', r.key, n)} />,
+          },
+          monthCells: monthCellsFor(r.key, 'campaigns'),
         },
-        monthCells: monthCellsFor(r.key, 'campaigns'),
-      },
-      {
-        id: `${r.key}__meetings`,
-        className: `driver-pair-last ${zebra}`,
-        cells: {
-          // 2026-08-20 (Kayee: "you can repeat the customer name in both row so next
-          // for # of campaign you will have fermat as well as # of meetings next to it
-          // is fermat") — reverses the 2026-08-19 "blank on the second row" decision;
-          // with plain alternating grey/white banding replacing the old per-row tint,
-          // a repeated name is what actually ties the pair together now.
-          name: r.nameCell ?? r.name,
-          metric: <span className="driver-metric-label"># of Meetings</span>,
-          price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
+        {
+          id: `${r.key}__meetings`,
+          className: `driver-pair-last ${zebra}`,
+          cells: {
+            // 2026-08-20 (Kayee: "you can repeat the customer name in both row so next
+            // for # of campaign you will have fermat as well as # of meetings next to it
+            // is fermat") — reverses the 2026-08-19 "blank on the second row" decision;
+            // with plain alternating grey/white banding replacing the old per-row tint,
+            // a repeated name is what actually ties the pair together now.
+            name: r.nameCell ?? r.name,
+            metric: <span className="driver-metric-label"># of Meetings</span>,
+            price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
+          },
+          monthCells: monthCellsFor(r.key, 'meetings'),
         },
-        monthCells: monthCellsFor(r.key, 'meetings'),
-      },
-    ];
-  });
+      ];
+    });
+  }
+
+  const currentPairs = buildPairs(currentRows, 0);
+  const plannedPairs = buildPairs(plannedRows, currentRows.length);
 
   function totalRowFor(kind, label) {
+    const allRows = [...currentRows, ...plannedRows];
     return {
       id: `total:${kind}`,
       className: 'total',
       cells: { name: <b>{label}</b>, metric: '', price: '' },
       monthCells: Object.fromEntries(
         months.map((iso) => {
-          const sum = rows.reduce((acc, r) => acc + (getCount(kind, r.key, iso) || 0), 0);
+          const sum = allRows.reduce((acc, r) => acc + (getCount(kind, r.key, iso) || 0), 0);
           return [iso, <b key={iso}>{sum ? sum.toLocaleString('en-US') : ''}</b>];
         })
       ),
@@ -343,7 +348,14 @@ function CombinedDriverGrid({ title, subtitle, rows, months, isEditableMonth, to
           label: null,
           rows: [totalRowFor('campaigns', 'TOTAL Campaigns'), totalRowFor('meetings', 'TOTAL Meetings')],
         },
-        { key: 'rows', label: null, rows: dataRows },
+        // 2026-08-20 (Kayee: "separate out planned and current customer... current
+        // customer sort and then a line separating and then planned customer") — split
+        // into two row groups instead of one flat sorted list; a `label` on a group
+        // renders a full-width divider band (the same section-band convention Payroll's
+        // Roster uses for its own sub-groups), so "Planned Customers" reads as a clear
+        // line between the two, not just a sort-order coincidence.
+        { key: 'current', label: null, rows: currentPairs },
+        { key: 'planned', label: 'Planned Customers', rows: plannedPairs },
       ]}
       headActions={headActions}
       // Kayee, 2026-08-19: "I dont like the input box bubble... more simple like a
@@ -565,9 +577,24 @@ export function CustomerPanel({ glCash, glAccrued }) {
     ),
   }));
 
-  // One consolidated set of rows for the single Campaigns & Meetings grid — current,
-  // pipeline, and planned all rendered together (2026-08-19 consolidation).
-  const combinedDriverRows = [...currentDriverRows, ...plannedDriverRows];
+  // Current/Pipeline and Planned stay as two SEPARATE groups in the grid (2026-08-20,
+  // Kayee: "separate out planned and current customer... current customer sort and
+  // then a line separating and then planned customer" — reverses the 2026-08-19
+  // "one consolidated list" decision), each sorted alphabetically by name on its own
+  // (2026-08-20: "arrange this in alphabet order"). The no-counterparty reconciling
+  // bucket stays pinned to the very bottom of the Current group regardless of where
+  // "U" would otherwise sort, matching the same pin used in
+  // lib/data/customerData.js's waterfall — it's not a real customer name.
+  const UNCATEGORIZED_DRIVER_NAME = 'Uncategorized (no counterparty)';
+  function alphabetical(list) {
+    return [...list].sort((a, b) => {
+      if (a.name === UNCATEGORIZED_DRIVER_NAME) return 1;
+      if (b.name === UNCATEGORIZED_DRIVER_NAME) return -1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+  }
+  const sortedCurrentDriverRows = alphabetical(currentDriverRows);
+  const sortedPlannedDriverRows = alphabetical(plannedDriverRows);
 
   const allCashInRows = [
     ...cashWaterfall.customers.map((c) => ({
@@ -973,8 +1000,9 @@ export function CustomerPanel({ glCash, glAccrued }) {
                     row here (campaigns × price + meetings × price). */}
                 <CombinedDriverGrid
                   title="Cash In Projection — Campaigns & Meetings"
-                  subtitle="Each customer priced individually · counts editable Jan 2026 onward · Current & Pipeline from the live GL Cash roster, plus rows you add · Planned rows tagged below"
-                  rows={combinedDriverRows}
+                  subtitle="Each customer priced individually, alphabetically · counts editable Jan 2026 onward · Current & Pipeline from the live GL Cash roster, plus rows you add · Planned customers in their own group below"
+                  currentRows={sortedCurrentDriverRows}
+                  plannedRows={sortedPlannedDriverRows}
                   months={planMonths}
                   isEditableMonth={isDriverEditableMonth}
                   todayIso={todayIso}

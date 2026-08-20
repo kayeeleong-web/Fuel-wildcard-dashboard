@@ -254,7 +254,11 @@ export function MonthInput({ value, onCommit }) {
   const [draft, setDraft] = useState(value ? String(Math.round(value)) : '');
   const [focused, setFocused] = useState(false);
 
-  const display = focused ? draft : value ? String(Math.round(value)) : '';
+  // Thousands separators while NOT actively editing (2026-08-20, Kayee: "give it a ,
+  // for the thousands") — mid-edit still shows the raw digit string (no commas), since
+  // reformatting on every keystroke would fight the cursor position and make typing
+  // feel broken. toLocaleString only touches the read/blurred display.
+  const display = focused ? draft : value ? Math.round(value).toLocaleString('en-US') : '';
 
   return (
     <input
