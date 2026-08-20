@@ -1311,7 +1311,7 @@ tr.pr-dragging { opacity: .4; }
 .sidebar-section {
   margin-bottom: 20px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border);
 }
 
 .sidebar-section:last-child {
@@ -1368,9 +1368,17 @@ tr.pr-dragging { opacity: .4; }
   color: var(--pink);
 }
 
+/* 2026-08-20, Kayee: "the boxes can be a little darker but not too dark so that it
+   doesn't get blended into the background, so that I can clearly see this is a box" —
+   these were nearly invisible against the sidebar's white page background for two
+   reasons: the border was `var(--border-light)`, a token that was never actually
+   defined anywhere in this file (fixed above, now `var(--border)`), and the card body
+   itself was plain white-on-white. Background bumped to `--panel-2` (the app's
+   standard light-gray card fill, same tone used elsewhere for panel-on-page
+   contrast) — one step darker than white, not dark enough to compete with real data. */
 .sidebar-card {
-  background: white;
-  border: 1px solid var(--border-light);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 10px;
   overflow: hidden;
@@ -1386,14 +1394,14 @@ tr.pr-dragging { opacity: .4; }
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.01);
-  border-bottom: 1px solid var(--border-light);
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
   gap: 8px;
 }
 
 .sidebar-card-header:hover {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .sidebar-card-label {
@@ -1454,7 +1462,7 @@ tr.pr-dragging { opacity: .4; }
 .sidebar-input {
   width: 100%;
   padding: 7px 8px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 12px;
   background: white;
@@ -1479,7 +1487,7 @@ tr.pr-dragging { opacity: .4; }
   width: 100%;
   padding: 8px 0;
   background: none;
-  border-top: 1px solid var(--border-light);
+  border-top: 1px solid var(--border);
   color: var(--blue);
   font-size: 11px;
   font-weight: 600;

@@ -13,7 +13,6 @@ import {
   plExpenseAccounts,
   plAccrualForMonth,
   cashOutflowForMonth,
-  readCustomerInflowTotals,
 } from '../../lib/cashflow/cashProjection';
 import {
   headcountCostByCostType,
@@ -242,16 +241,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // both fold in Payroll's headcount costs, same as the P&L projection does.
   const { state: cfPayrollState, hydrated: cfPayrollHydrated } = usePayrollState();
 
-  // Customer tab → CF projection handoff: CustomerPanel (a sibling sub-tab that
-  // unmounts on tab switch) writes the "Cash Coming In" monthly TOTALs from its
-  // Cash Inflow Projection section to
-  // localStorage whenever its inputs change; this panel reads that key once on mount
-  // (remounting on every sub-tab switch, so it always sees the latest save). See
-  // lib/cashflow/cashProjection.js + CustomerPanel.jsx for the other half of the link.
-  const [customerInflowTotals, setCustomerInflowTotals] = useState(null);
-  useEffect(() => {
-    setCustomerInflowTotals(readCustomerInflowTotals());
-  }, []);
+  // 2026-08-20: CF's own Transaction/Subscription Revenue rows and the "Customer Cash
+  // Inflow"/rollforward calc below now derive straight from cfAccrualCtx.revenue (the
+  // same Assumptions-tab revenue object the P&L projection itself reads) instead of
+  // the Customer Cash Flow tab's localStorage handoff — that tab only has real numbers
+  // once someone fills in its own per-customer driver grid, which isn't how revenue
+  // actually gets forecast here. See withCFRevenueInflowRows/withCashFlowProjectionRows
+  // below.
 
   // The COGS/OpEx account lists the CF sidebar shows timing controls for — the actual
   // chart-of-account rows from the live P&L statement (plus Payroll's injected COGS
@@ -439,7 +435,6 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                     ? {
                         expenseAccounts,
                         timingByAccount: (cashTimingHydrated && cashTimingState?.timingByAccount) || {},
-                        customerInflowTotals,
                         accrualCtx: cfAccrualCtx,
                         onSetTiming: handleSetTiming,
                       }
@@ -540,36 +535,24 @@ function siblingValuesAtMonth(rows, row, month) {
 function revenueCalcExplanation(rowKey, revenue) {
   if (!revenue) return null;
   if (rowKey === 'revenue_subscription_revenue') {
-    return { calcNote: 'Subscription Revenue = # of Campaigns × Upfront Rate. Both editable on the Assumptions tab.' };
+    return { calcNote: 'Subscription Revenue = # of Campaigns × Upfront Rate' };
   }
   if (rowKey === 'revenue_transaction_revenue') {
-    return {
-      calcNote:
-        'Transaction Revenue = # of Meetings × Per Meeting Rate. If Meetings isn\'t entered for a month, it\'s auto-suggested as round(Meeting Conversion% × Campaigns from N months ago) — editable on the Assumptions tab.',
-    };
+    return { calcNote: 'Transaction Revenue = # of Meetings × Per Meeting Rate' };
   }
   if (rowKey === 'total_revenue') {
-    return {
-      calcNote:
-        'Total Revenue = (Subscription $ + Transaction $) − Risk Buffer % of that sum — same net-of-risk figure as "Gross Collected Revenue" on the real sheet. Risk Buffer % editable on the Assumptions tab.',
-    };
+    return { calcNote: 'Total Revenue = (Subscription + Transaction) × (1 − Risk Buffer %)' };
   }
   // The embedded driver rows (2026-08-07, Kayee: "# of meeting should also show how
   // the calculation come about as well the meeting conversion time and stuff") — same
-  // formula-only convention as every other calc-note here (see file header note on
-  // 2026-08-07: no live numbers, just the formula), just attached to these two rows
-  // too now that they sit in the P&L instead of only on the Assumptions tab.
+  // formula-only convention as every other calc-note here, condensed 2026-08-20 (Kayee:
+  // "keep it precise, like a math formula, what multiplied by what") to just the
+  // expression itself, no surrounding prose.
   if (rowKey === '__driver_meetings') {
-    return {
-      calcNote:
-        '# of Meetings = round(Meeting Conversion% × # of Campaigns from Meeting Conversion Time months ago) — always a formula for forecast months, never typed in directly. Both rates editable on the Assumptions tab.',
-    };
+    return { calcNote: '# of Meetings = round(Meeting Conversion % × Campaigns, N months ago)' };
   }
   if (rowKey === '__driver_campaigns') {
-    return {
-      calcNote:
-        '# of Campaigns is the one manual driver here — type a forecast month\'s count directly into its blue box. An actual month has a hamburger toggle to switch it to projection too, so a real count can replace a hardcoded default that\'s feeding # of Meetings\' lag calculation.',
-    };
+    return { calcNote: '# of Campaigns — manual input' };
   }
   return null;
 }
@@ -582,41 +565,32 @@ function costCalcExplanation(rowLabel, ctx) {
   // CASH PROJECTION rows (CF projection only, 2026-08-18) — see
   // withCashFlowProjectionRows for where these rows come from.
   if (rowLabel === 'Customer Cash Inflow') {
-    return {
-      calcNote:
-        'Cash Coming In monthly TOTAL from the Cash Inflow Projection section on the Customer Cash Flow tab (campaigns × price per campaign + meetings × price per meeting, current + planned customers). Edit it there — a blank cell means that tab has not been filled in on this browser yet.',
-    };
+    return { calcNote: 'Customer Cash Inflow = Σ(Campaigns × Campaign Price + Meetings × Meeting Price)' };
   }
   // "COGS Cash Outflow" / "OpEx Cash Outflow" notes removed 2026-08-19 along with the
   // rows themselves — each real COGS/OpEx line now carries its own cash-out $ (see
   // withCFExpenseCashOutflowRows), summed by the statement's own Total bands.
   if (rowLabel === 'Net Projected Cash Flow') {
-    return {
-      calcNote:
-        "Customer Cash Inflow − every COGS/OpEx account's projected cash outflow, forecast months only. Each account follows its P&L projection $ 1:1 by default; set a custom cash timing per account in the Cash Flow Assumptions sidebar to change when its cash goes out.",
-    };
+    return { calcNote: 'Net Projected Cash Flow = Customer Cash Inflow − Total COGS/OpEx Cash Outflow' };
   }
   if (!ctx.revenue) return null;
   if (rowLabel === 'Total COGS') {
-    return { calcNote: 'Total COGS = Cost Per Campaign + Non-Headcount Cost items tagged CoGS + Payroll headcount tagged CoGS. Editable on the Assumptions and Payroll tabs.' };
+    return { calcNote: 'Total COGS = Cost of Campaigns + Non-Headcount CoGS + Payroll CoGS' };
   }
   if (['Total OpEx', 'Total OPEX', 'Total Operating Expenses'].includes(rowLabel)) {
-    return { calcNote: 'Total OpEx = Non-Headcount Cost items tagged OpEx + Payroll headcount tagged OpEx. Editable on the Assumptions and Payroll tabs.' };
+    return { calcNote: 'Total OpEx = Non-Headcount OpEx + Payroll OpEx' };
   }
   if (['Gross Profit', 'Gross Margin'].includes(rowLabel)) {
-    return { calcNote: 'Gross Profit = Total Revenue − Total COGS.' };
+    return { calcNote: 'Gross Profit = Total Revenue − Total COGS' };
   }
   if (['Operating Profit', 'Operating Income', 'Operating Margin'].includes(rowLabel)) {
-    return { calcNote: 'Operating Profit = Total Revenue − Total COGS − Total OpEx.' };
+    return { calcNote: 'Operating Profit = Total Revenue − Total COGS − Total OpEx' };
   }
   if (rowLabel === 'Gross Profit Margin %') {
-    return {
-      calcNote:
-        'Gross Profit Margin % = Gross Profit ÷ Total Revenue × 100 — computed for every month, actual and projected alike (not forecast-only like most other rows on this tab).',
-    };
+    return { calcNote: 'Gross Profit Margin % = Gross Profit ÷ Total Revenue × 100' };
   }
   if (rowLabel === 'Cost of campaigns') {
-    return { calcNote: "Cost of campaigns = last month's # of Campaigns × Cost Per Campaign rate. Both editable on the Assumptions tab." };
+    return { calcNote: 'Cost of Campaigns = Campaigns (prior month) × Cost Per Campaign' };
   }
   // Plural now (2026-08-10, Kayee: "I dragged Central - Bookkeeping and Central -
   // Payroll both to Tax and Accounting... it will add the amount") — more than one
@@ -624,8 +598,7 @@ function costCalcExplanation(rowLabel, ctx) {
   const matchedItems = matchedCostItemsForRowLabel(rowLabel, ctx.costItems);
   if (matchedItems.length > 0) {
     const names = matchedItems.map((i) => `"${i.name}"`).join(' + ');
-    const suffix = matchedItems.length > 1 ? ' (summed together)' : ` (${matchedItems[0].category})`;
-    return { calcNote: `Same figure as ${names} on the Assumptions tab${suffix} — shown on this line since it's the same cost. Edit the amount there.` };
+    return { calcNote: `= ${names}` };
   }
   return null;
 }
@@ -1078,29 +1051,23 @@ function withManualAccountRows(statementType, rows, customPLAccounts, costItems,
 function customAccountCalcExplanation(row) {
   if (row.payrollHeadcount) {
     const kindNote = {
-      lump: `Sum of every Payroll roster/bonus row tagged "${row.costType}" (base + bonus, loaded) for this month.`,
-      salaries: `Base salary (÷12, active headcount only) + Bonus $ for every Payroll row tagged "${row.costType}" — Bonus carries no tax/benefit load of its own, so it's folded in here rather than split into its own line.`,
-      taxes: `Base salary (÷12) × Tax Rate% for every Payroll row tagged "${row.costType}".`,
-      benefits: `Base salary (÷12) × Benefits% for every Payroll row tagged "${row.costType}".`,
-    }[row.payrollLineKind] || `Sum of every Payroll roster/bonus row tagged "${row.costType}" for this month.`;
-    return {
-      calcNote: `${kindNote} Already counted inside this section's Total. Edit headcount or pay on the Payroll tab to change it here.`,
-    };
+      lump: `Σ Payroll rows tagged "${row.costType}" (base + bonus)`,
+      salaries: `(Base ÷ 12) + Bonus, rows tagged "${row.costType}"`,
+      taxes: `(Base ÷ 12) × Tax Rate %, rows tagged "${row.costType}"`,
+      benefits: `(Base ÷ 12) × Benefits %, rows tagged "${row.costType}"`,
+    }[row.payrollLineKind] || `Σ Payroll rows tagged "${row.costType}"`;
+    return { calcNote: kindNote };
   }
   if (row.manualAccount) {
     // Plural now (2026-08-10, Kayee: "I want to assign both... here it will show both
     // are linked") — list every linked item's name, summed together on this line.
     const names = row.linkedItemNames || [];
-    const linkedNote =
-      names.length > 0
-        ? `Currently fed by ${names.map((n) => `"${n}"`).join(' + ')} on the Assumptions tab (summed together).`
-        : 'Nothing linked yet — drag a Non-Headcount Cost item from the sidebar and drop it on this row.';
     return {
-      calcNote: `"${row.label}" is a line you added by hand. ${linkedNote} It's already included in this section's Total.`,
+      calcNote: names.length > 0 ? `= ${names.map((n) => `"${n}"`).join(' + ')}` : 'Not linked — drag a cost item here',
     };
   }
   return {
-    calcNote: `"${row.label}" is a custom account entered on the Assumptions tab's Non-Headcount Costs table — edit it there. It's already included in this section's Total.`,
+    calcNote: `"${row.label}" — set on Assumptions tab`,
     components: [],
   };
 }
@@ -1349,39 +1316,41 @@ function cfOutflowCell(account, timing, iso, forecastSet, accrualCtx, onSetTimin
   return { value, cell };
 }
 
-const CF_REVENUE_ROW_MATCH = {
-  'Transaction Revenue': 'transactionByMonth',
-  'Subscription Revenue': 'subscriptionByMonth',
+const CF_REVENUE_ROW_FORMULAS = {
+  'Transaction Revenue': meetingRevenueForMonth,
+  'Subscription Revenue': upfrontRevenueForMonth,
 };
 
 /** Patches the CF sheet's own "Transaction Revenue" / "Subscription Revenue" rows for
- *  forecast months from the Customer Cash Flow tab's live breakdown (2026-08-20,
- *  Kayee: "you didn't bring inflow from customer into here transactional revenue is
- *  the calculation with the # of meeting * price per meeting and the subscription is
- *  the other. It needs to be link from the customer live... if I edit in customer it
- *  will go into here"). Same matched-by-label, forecast-months-only, blank-not-$0
- *  pattern as withCFExpenseCashOutflowRows right below — reads
- *  customerInflowTotals.transactionByMonth/subscriptionByMonth (see
- *  lib/cashflow/cashProjection.js + CustomerPanel.jsx for the write side). Runs BEFORE
- *  withSectionTotalRollups so, once these two rows have real forecast numbers, CF's
- *  own "Total Cash In from Operations" band (a same-section Total row that's currently
- *  blank for forecast months) picks them up automatically, the same way COGS/OpEx
- *  totals already do. Purely additive — a row this doesn't find a label match for is
- *  left completely alone. */
+ *  forecast months (2026-08-20, Kayee: "transactional revenue is the calculation with
+ *  the # of meeting * price per meeting and the subscription is the other... it needs
+ *  to be link from the customer live"). FIRST version of this fix read the Customer
+ *  Cash Flow tab's localStorage handoff — but that tab only has real numbers in it if
+ *  someone has actually typed campaign/meeting counts into its own driver grid, and
+ *  Kayee's real workflow drives Revenue entirely from the P&L Assumptions sidebar
+ *  instead (2026-08-20 follow-up: "cash in projections still didn't get bring over
+ *  from customer projection" — the P&L's own Transaction/Subscription Revenue WERE
+ *  populated, this CF copy just wasn't reading the same source). Rewritten to call the
+ *  exact same meetingRevenueForMonth/upfrontRevenueForMonth functions the P&L
+ *  projection itself uses (via cfProjection.accrualCtx.revenue, the same `ctx` object
+ *  plAccrualForMonth already receives) — so these two CF rows are now guaranteed to
+ *  equal whatever the P&L shows for the same two rows, not a second, easily-empty data
+ *  source. (No per-account cash-timing override yet, same as every account with no
+ *  sidebar config — "Follow P&L" 1:1, matching every COGS/OpEx account's own default.)
+ *  Runs BEFORE withSectionTotalRollups so CF's "Total Cash In from Operations" band
+ *  (blank for forecast months otherwise) picks these up automatically. */
 function withCFRevenueInflowRows(rows, months, lastActualIndex, cfProjection) {
-  const { customerInflowTotals } = cfProjection;
+  const { accrualCtx } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
-  if (forecastMonths.length === 0 || !customerInflowTotals) return rows;
+  if (forecastMonths.length === 0 || !accrualCtx?.revenue) return rows;
 
   return rows.map((row) => {
     if (row.isTotal) return row;
-    const sourceKey = CF_REVENUE_ROW_MATCH[String(row.label ?? '').trim()];
-    if (!sourceKey) return row;
-    const byMonth = customerInflowTotals[sourceKey];
-    if (!byMonth) return row;
+    const calc = CF_REVENUE_ROW_FORMULAS[String(row.label ?? '').trim()];
+    if (!calc) return row;
     const values = { ...row.values };
     for (const iso of forecastMonths) {
-      if (byMonth[iso] != null) values[iso] = Number(byMonth[iso]) || 0;
+      values[iso] = calc(accrualCtx.revenue, iso) || 0;
     }
     return { ...row, values };
   });
@@ -1462,6 +1431,45 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
     }
   }
 
+  // Manual/custom P&L accounts (2026-08-20, Kayee: "no account or expenses should be
+  // missed from here" — spotted "Vetric", an account she added via P&L's "+ Add
+  // account" and gave a Quarterly cash-timing override to in this very sidebar, never
+  // showing up anywhere in the CF table). The loop above only knew how to insert ONE
+  // specific synthetic row (Payroll's headcount line); every other account this
+  // function patches has to already exist as a real row on the CF Google Sheet tab. A
+  // manual account never has one — it's not a real GL line, it only exists because the
+  // user typed a name into the P&L. Same fix as withManualAccountRows already applies
+  // to the P&L statement (that function is PL-only, gated at its very first line), now
+  // generalized here for CF: insert a row for any manual account nothing above already
+  // matched, right before its section's own Total row (falling back to right after the
+  // section's last row), then fill it the same cfOutflowCell way as every other line —
+  // so its sidebar cash-timing config (interval/manual) actually has somewhere to land. */
+  for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
+    if (!account.manual || matchedIds.has(account.id)) continue;
+    let insertAt = next.findIndex((r) => r.isTotal && r.section === account.section);
+    if (insertAt === -1) {
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].section === account.section) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+    }
+    if (insertAt === -1) continue;
+    const values = {};
+    const monthCells = {};
+    for (const iso of forecastMonths) {
+      const { value, cell } = cfOutflowCell(account, timingByAccount[account.id], iso, forecastSet, accrualCtx, onSetTiming);
+      values[iso] = value;
+      if (cell !== undefined) monthCells[iso] = cell;
+    }
+    next = [
+      ...next.slice(0, insertAt),
+      { key: `cf_${account.id}`, label: account.label, section: account.section, isTotal: false, values, monthCells },
+      ...next.slice(insertAt),
+    ];
+  }
+
   return next;
 }
 
@@ -1473,17 +1481,19 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
  *  REMOVED — they duplicated the statement's own Total bands and showing the same $
  *  twice invites double-count readings. What remains, forecast months only:
  *
- *   - Customer Cash Inflow — the computed Cash Coming In monthly TOTAL from the
- *     Customer Cash Flow tab's Cash Inflow Projection section, read from localStorage
- *     (CUSTOMER_INFLOW_STORAGE_KEY — see CustomerPanel.jsx, which writes it on every
- *     input change). Blank (not $0) if that tab has never saved. This still drives the
- *     Beginning/Net Change/Ending Cash rollforward below unchanged. Revenue-side
- *     wiring was scoped OUT of the 2026-08-19 reshape (Kayee: "only cash out... all of
- *     the cogs and opex") but added back 2026-08-20 as its own row-level link —
- *     withCFRevenueInflowRows (above withCFExpenseCashOutflowRows) now patches the CF
- *     sheet's real "Transaction Revenue" / "Subscription Revenue" rows directly from
- *     the same Customer tab data, split by stream, so this "Customer Cash Inflow"
- *     summary line and those two real rows are always the same $ two different ways.
+ *   - Customer Cash Inflow — meeting + upfront revenue for the month, computed from
+ *     the same Assumptions-tab revenue object the P&L projection itself reads
+ *     (cfAccrualCtx.revenue — see the 2026-08-20 rewrite below). Drives the
+ *     Beginning/Net Change/Ending Cash rollforward below. Revenue-side wiring was
+ *     scoped OUT of the 2026-08-19 reshape (Kayee: "only cash out... all of the cogs
+ *     and opex") but added back 2026-08-20 as its own row-level link —
+ *     withCFRevenueInflowRows (above withCFExpenseCashOutflowRows) patches the CF
+ *     sheet's real "Transaction Revenue" / "Subscription Revenue" rows from the exact
+ *     same source, so this "Customer Cash Inflow" summary line and those two real rows
+ *     are always the same $ two different ways. (First tried reading a Customer Cash
+ *     Flow tab localStorage handoff instead — dropped the same day once it was clear
+ *     that tab only has real numbers if someone fills in its own separate driver grid,
+ *     which isn't how Kayee actually forecasts revenue.)
  *   - Net Projected Cash Flow — inflow − total COGS/OpEx cash out, kept as a Total
  *     band. Still computed by summing cashOutflowForMonth over every expense account
  *     (not by re-reading the displayed Total rows) — mathematically identical to the
@@ -1494,7 +1504,7 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
  *  Actual months are never touched — real GL cash history stays exactly as the sheet
  *  reported it. */
 function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection) {
-  const { expenseAccounts, timingByAccount, customerInflowTotals, accrualCtx } = cfProjection;
+  const { expenseAccounts, timingByAccount, accrualCtx } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
   if (forecastMonths.length === 0) return rows;
   const forecastSet = new Set(forecastMonths);
@@ -1503,7 +1513,13 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
   const inflowValues = {};
   const netValues = {};
   for (const iso of forecastMonths) {
-    const inflow = customerInflowTotals?.totalsByMonth ? Number(customerInflowTotals.totalsByMonth[iso]) || 0 : null;
+    // Same source as withCFRevenueInflowRows above (2026-08-20 rewrite) — meeting +
+    // upfront revenue from the P&L's own Assumptions, not the Customer tab handoff —
+    // so this summary line and the Beginning/Ending Cash rollforward it drives are
+    // never out of sync with what "Transaction Revenue"/"Subscription Revenue" show.
+    const inflow = accrualCtx?.revenue
+      ? meetingRevenueForMonth(accrualCtx.revenue, iso) + upfrontRevenueForMonth(accrualCtx.revenue, iso)
+      : null;
     let outflow = 0;
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
       outflow += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
