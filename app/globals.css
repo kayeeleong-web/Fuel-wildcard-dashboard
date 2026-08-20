@@ -1025,7 +1025,32 @@ tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0
    tallest thing in the row. Shrinking the button (smaller font/padding) and pinning
    one shared min-height makes every bar identical whether or not it has a button. */
 .reports-sidebar .payroll-card-head { min-height: 48px; padding-top: 8px; padding-bottom: 8px; box-sizing: border-box; }
-.reports-sidebar .payroll-card-head .btn { font-size: 11px; padding: 5px 10px; }
+.reports-sidebar .payroll-card-head .btn { font-size: 11px; padding: 5px 10px; white-space: nowrap; }
+/* No wrapping on narrow laptops (2026-08-20 follow-up, Kayee: "on a smaller laptop it
+   looks like this" — the base .payroll-card-head is flex-wrap:wrap, so once the title
+   + item count + button couldn't share one line, the button dropped to a second row
+   and made that card taller again). Keep everything on one line: the title shrinks
+   and ellipsizes if it must, the count and button never wrap or shrink. */
+.reports-sidebar .payroll-card-head { flex-wrap: nowrap; gap: 8px; }
+.reports-sidebar .payroll-card-head .payroll-card-title-btn {
+  font-size: 12.5px; min-width: 0; overflow: hidden;
+}
+.reports-sidebar .payroll-card-head .payroll-card-title-btn > :last-child,
+.reports-sidebar .payroll-card-head .payroll-card-title-btn {
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.reports-sidebar .payroll-card-head .payroll-card-sub { flex: none; font-size: 10.5px; white-space: nowrap; }
+.reports-sidebar .payroll-card-head .payroll-card-actions { flex: none; margin-left: auto; }
+
+/* Narrow-screen fix for the cost tables (2026-08-20, Kayee: "it got smooshed and you
+   don't see the amount. you need to be able to adjust based on screen size") — the $
+   cell holds the amount input AND the "Period" pill side by side; on a small laptop
+   the sidebar's $ column shrinks to ~80px, and the pill (fixed content) won, crushing
+   the input to a sliver ("1," "3("). The input now keeps a readable minimum width and
+   the pill WRAPS underneath it whenever the two can't share the row — so the layout
+   adapts to the space instead of sacrificing the number. */
+.reports-sidebar .assump-cost-table .assump-cost-amount-cell { flex-wrap: wrap; }
+.reports-sidebar .assump-cost-table .assump-cost-amount-cell .pr-input-month { min-width: 58px; }
 .payroll-card-sub { font-size: 11.5px; color: var(--on-black-muted); font-family: var(--font-num); }
 .payroll-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
