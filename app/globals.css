@@ -400,6 +400,16 @@ a {
    way, so there's no version of this that sticks to the page scroll instead. */
 .table-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow-x: auto; overflow-y: auto; max-height: 640px; box-shadow: 0 1px 2px rgba(17,17,17,.03); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Reports statement table: fixed per-column width, not the generic width:100% above
+   (2026-08-20, Kayee: switching the range toggle from "All" — 30+ months — down to
+   "2026-2028" filtered to just a handful of real months made those few columns stretch
+   noticeably wider to fill the same 100% container width. "Make it the same width as
+   historical" — table-layout:fixed + an explicit per-column width makes column width
+   authoritative and independent of how many columns happen to be visible; the table
+   itself just gets narrower with fewer columns instead of stretching them. */
+.report-doc table { table-layout: fixed; width: auto; }
+.report-doc th:first-child, .report-doc td:first-child { width: 240px; }
+.report-doc th:not(:first-child), .report-doc td:not(:first-child) { width: 92px; }
 thead th { position: sticky; top: 0; z-index: 3; text-align: right; font-size: 10.5px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: .5px; padding: 13px 18px; white-space: nowrap; background: var(--black); border-bottom: 2px solid var(--green); }
 thead th:first-child { text-align: left; }
 tbody td { padding: 10px 18px; text-align: right; color: var(--text); white-space: nowrap; font-family: var(--font-num); }
