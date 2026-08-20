@@ -57,6 +57,14 @@ import {
 const PLAN_STORAGE_KEY = 'fuel_wildcard_customer_plan_v1';
 const DRIVERS_STORAGE_KEY = 'fuel_wildcard_customer_drivers_v1';
 
+// Suffix appended to the waterfall subtitle when the Transaction/Subscription
+// revenue-stream toggle narrows the table below "All" (2026-08-20).
+const REVENUE_STREAM_SUBTITLE = {
+  all: '',
+  transaction: ' · Transaction Revenue only (account 42000)',
+  subscription: ' · Subscription Revenue only (account 40000)',
+};
+
 const WATERFALL_FROZEN_COLUMNS = [
   { key: 'name', label: 'Customer', width: 200 },
   { key: 'startMonth', label: 'Start', width: 84 },
@@ -354,6 +362,13 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // own header (CollapsibleSection's headActions slot), same obvious placement as the
   // 2026-2028/Historical toggle elsewhere in the app.
   const [waterfallView, setWaterfallView] = useState('cash');
+  // Transaction vs Subscription revenue-stream toggle (2026-08-20, Kayee: "give me
+  // another toggle to have this table to separate transactional and subscription
+  // revenue") — same two streams the P&L/CF Assumptions model as "Transaction
+  // Revenue" (account 42000) and "Subscription Revenue" (account 40000); 'all' keeps
+  // every 4xxxx revenue account, including Services Revenue (41000) which belongs to
+  // neither stream.
+  const [revenueStream, setRevenueStream] = useState('all');
   // Both sections now start EXPANDED (2026-08-20, Kayee: "you can keep these two now
   // expand by default") — reverses the 2026-08-18 collapsed-by-default decision now
   // that the tab's contents are more settled.
@@ -370,12 +385,12 @@ export function CustomerPanel({ glCash, glAccrued }) {
   }
 
   const cashWaterfall = useMemo(
-    () => buildCustomerWaterfall(glCash?.transactions),
-    [glCash]
+    () => buildCustomerWaterfall(glCash?.transactions, revenueStream),
+    [glCash, revenueStream]
   );
   const accruedWaterfall = useMemo(
-    () => buildCustomerWaterfall(glAccrued?.transactions),
-    [glAccrued]
+    () => buildCustomerWaterfall(glAccrued?.transactions, revenueStream),
+    [glAccrued, revenueStream]
   );
 
   // The Cash/Accrued waterfalls now respect the 2026-2028/Historical toggle too
@@ -834,6 +849,17 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   Accrued
                 </button>
               </div>
+              <div className="seg">
+                <button className={revenueStream === 'all' ? 'active' : undefined} onClick={() => setRevenueStream('all')}>
+                  All
+                </button>
+                <button className={revenueStream === 'transaction' ? 'active' : undefined} onClick={() => setRevenueStream('transaction')}>
+                  Transaction
+                </button>
+                <button className={revenueStream === 'subscription' ? 'active' : undefined} onClick={() => setRevenueStream('subscription')}>
+                  Subscription
+                </button>
+              </div>
             </div>
           }
         >
@@ -845,7 +871,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 title="Cash Waterfall — GL Cash"
                 subtitle={`${cashWaterfall.customers.length} customer${
                   cashWaterfall.customers.length === 1 ? '' : 's'
-                } · cash received per month, ordered by start month`}
+                } · cash received per month, ordered by start month${REVENUE_STREAM_SUBTITLE[revenueStream]}`}
                 waterfall={cashWaterfall}
                 months={cashMonths}
                 todayIso={todayIso}
@@ -858,7 +884,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
               title="Accrued Waterfall — GL Accrued"
               subtitle={`${accruedWaterfall.customers.length} customer${
                 accruedWaterfall.customers.length === 1 ? '' : 's'
-              } · revenue recognized per month, ordered by start month`}
+              } · revenue recognized per month, ordered by start month${REVENUE_STREAM_SUBTITLE[revenueStream]}`}
               waterfall={accruedWaterfall}
               months={accruedMonths}
               todayIso={todayIso}
