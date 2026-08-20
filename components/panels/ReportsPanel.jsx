@@ -1537,7 +1537,9 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
       outflow += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
     }
-    if (inflow != null) inflowValues[iso] = inflow;
+    // (2026-08-20 bugfix: a stray write to the removed `inflowValues` map here threw a
+    // ReferenceError that silently killed the whole rollforward below — Kayee: "you
+    // removed the beginning and ending cash calculation." Only netValues is needed.)
     netValues[iso] = (inflow || 0) - outflow;
   }
 
