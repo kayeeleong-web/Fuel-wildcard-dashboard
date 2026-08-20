@@ -127,7 +127,12 @@ const PL_COST_PROJECTIONS_BY_LABEL = {
   // Confirmed by Kayee (2026-08-06): "cost for campaign in cogs is last month's # of
   // campaign multiply by campaign cost of 250 in the assumption" — this row IS
   // costPerCampaignForMonth, not a generic custom account.
-  'Cost of campaigns': (ctx, iso) => costPerCampaignForMonth(ctx.revenue, iso),
+  // Moved onto the "Cost of Product" row (2026-08-20, Kayee: "move the calculation for
+  // cost of campaign into cost of product") — "Cost of campaigns" now stays actuals-only
+  // (blank in forecast months, same as every other unwired row), and its forecast
+  // number shows up on "Cost of Product" instead. Total COGS is untouched either way,
+  // since it sums costPerCampaignForMonth directly rather than reading this row.
+  'Cost of Product': (ctx, iso) => costPerCampaignForMonth(ctx.revenue, iso),
   'Total COGS': (ctx, iso) => cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
   'Total OpEx': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total OPEX': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
@@ -589,8 +594,8 @@ function costCalcExplanation(rowLabel, ctx) {
   if (rowLabel === 'Gross Profit Margin %') {
     return { calcNote: 'Gross Profit Margin % = Gross Profit ÷ Total Revenue × 100' };
   }
-  if (rowLabel === 'Cost of campaigns') {
-    return { calcNote: 'Cost of Campaigns = Campaigns (prior month) × Cost Per Campaign' };
+  if (rowLabel === 'Cost of Product') {
+    return { calcNote: 'Cost of Product (forecast) = Campaigns (prior month) × Cost Per Campaign' };
   }
   // Plural now (2026-08-10, Kayee: "I dragged Central - Bookkeeping and Central -
   // Payroll both to Tax and Accounting... it will add the amount") — more than one
