@@ -2045,7 +2045,20 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   // Revenue rows aren't a valid link target for a cost item at all, so that returns
   // null and blocks dropping there entirely.
   const sectionUpper = section.toUpperCase();
-  const sectionCategory = sectionUpper === 'REVENUE' ? null : sectionUpper === 'COGS' ? 'CoGS' : 'OpEx';
+  // Non-operating sections (NON OPEX, NON-OPERATING INCOME & EXPENSES, UNCATEGORIZED
+  // EXPENSES — the COA's 80000/90000 "NOpex" range) map to the 'Other' cost-item
+  // category (2026-08-20, Kayee: "why wont it let me drag to non opex misc from the
+  // other misc" — these sections used to fall into the default OpEx bucket, so a
+  // "Non-Headcount Cost - Other" item's application/x-cost-item-other drag was
+  // rejected by the only rows it actually belongs on).
+  const sectionCategory =
+    sectionUpper === 'REVENUE'
+      ? null
+      : sectionUpper === 'COGS'
+      ? 'CoGS'
+      : /NON[ -]?OP|UNCATEGORIZED/.test(sectionUpper)
+      ? 'Other'
+      : 'OpEx';
   const dropMimeType = sectionCategory ? `application/x-cost-item-${sectionCategory.toLowerCase()}` : null;
 
   // Skip the section header band entirely when a section contains ONLY Total rows
