@@ -382,12 +382,18 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // (2026-08-20, Kayee: the toggle "not working" turned out to mean these tables
   // specifically — she expected clicking it to filter these, same as everywhere else
   // in the app; reverses the 2026-08-18 decision to always show full history here).
-  // 'default' keeps only 2026-01..2028-12, matching monthsForRange's own bounds so the
-  // whole tab filters consistently; 'all' keeps every month the GL actually has.
-  const cashMonths =
-    range === 'all' ? cashWaterfall.months : cashWaterfall.months.filter((m) => m >= '2026-01' && m <= '2028-12');
-  const accruedMonths =
-    range === 'all' ? accruedWaterfall.months : accruedWaterfall.months.filter((m) => m >= '2026-01' && m <= '2028-12');
+  // 'default' spans the FULL Jan-2026..Dec-2028 window via monthsForRange (not just
+  // whatever real GL months happen to fall in it) — most customers' actual cash only
+  // runs through whatever the latest closed month is, so filtering to just the real
+  // months left a short, few-column table sitting in the wide page-wide container with
+  // a big dead white gap next to it (2026-08-20, Kayee: "I dont like that there's a
+  // white space here"). Extending to the full window instead fills the header row
+  // properly; months with no real GL entry simply render blank (no $0, no placeholder —
+  // formatPayrollAmount already returns '' for 0/undefined), same as "just [show] the
+  // month and without the numbers" per her ask. 'all' keeps every month the GL actually
+  // has — no reason to pad that past whatever data really exists.
+  const cashMonths = range === 'all' ? cashWaterfall.months : monthsForRange('default');
+  const accruedMonths = range === 'all' ? accruedWaterfall.months : monthsForRange('default');
 
   // Planning/driver-grid months come from the shared payroll horizon (2026-01..2028-12
   // by default, full range on Historical) — forward-looking grids must extend past the
@@ -735,7 +741,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   2026 – 2028
                 </button>
                 <button className={range === 'all' ? 'active' : undefined} onClick={() => setRange('all')}>
-                  Historical
+                  All
                 </button>
               </div>
               <div className="seg">

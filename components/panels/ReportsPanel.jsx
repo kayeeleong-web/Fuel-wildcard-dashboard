@@ -352,12 +352,15 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
         {!fixedType && (
           <div className="seg right">
             {/* Two states only (2026-08-07 rewrite): the 3-year default landing view,
-                and Historical — everything, actual and forecast alike, no filtering. */}
+                and All — everything, actual and forecast alike, no filtering. Labeled
+                "All" not "Historical" (2026-08-20, Kayee: "historical is not the right
+                word if you also show 2026" — correct, this state still includes
+                2026-2028, so "historical" undersold what it actually shows). */}
             <button className={range === 'default' ? 'active' : undefined} onClick={() => setRange('default')}>
               2026 – 2028
             </button>
             <button className={range === 'all' ? 'active' : undefined} onClick={() => setRange('all')}>
-              Historical
+              All
             </button>
           </div>
         )}

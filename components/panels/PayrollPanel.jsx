@@ -110,7 +110,7 @@ export function PayrollPanel() {
             2026 – 2028
           </button>
           <button className={range === 'all' ? 'active' : undefined} onClick={() => setRange('all')}>
-            Historical
+            All
           </button>
         </div>
       </div>
