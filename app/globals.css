@@ -1017,7 +1017,15 @@ tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0
 /* 2026-08-20: sidebar card headers were briefly dark grey (#3F4247, Kayee: "the black
    is a little too much") then reverted the same day (Kayee: "actually make it black
    again i dont like the dark gray as a division") — they use the standard --black
-   .payroll-card-head chrome again; no override needed. */
+   .payroll-card-head chrome again. */
+/* Uniform header height across all four sidebar cards (2026-08-20, Kayee: "i dont
+   like that they are in different height, make them the same height, maybe make the
+   font of the white boxes smaller") — Revenue Assumptions has no header button, so
+   its bar rendered shorter than the cost cards whose "+ Add … Cost" button was the
+   tallest thing in the row. Shrinking the button (smaller font/padding) and pinning
+   one shared min-height makes every bar identical whether or not it has a button. */
+.reports-sidebar .payroll-card-head { min-height: 48px; padding-top: 8px; padding-bottom: 8px; box-sizing: border-box; }
+.reports-sidebar .payroll-card-head .btn { font-size: 11px; padding: 5px 10px; }
 .payroll-card-sub { font-size: 11.5px; color: var(--on-black-muted); font-family: var(--font-num); }
 .payroll-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
