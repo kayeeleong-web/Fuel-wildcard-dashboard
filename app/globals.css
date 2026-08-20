@@ -1165,38 +1165,49 @@ thead th.pr-month-historical { background: #3a3a3d; }
 .driver-metric-label { color: var(--muted); font-size: 11.5px; }
 
 /* Shade BOTH rows of one customer the same, alternating customer-to-customer plain
-   grey/white — no tint (2026-08-20, Kayee: "i think it's confusing the alternative
-   color... just do grey and white"; supersedes the 2026-08-19/-20 white/light-cyan
-   version, which read as fighting with the blue editable-cell grid below). Extra
-   ancestor classes here outrank the generic
-   `.payroll-table tbody tr:not(...):nth-child(even) td.pr-frozen` rule this overrides. */
-.customer-driver-grid .payroll-table tbody tr.driver-pair-even td,
-.customer-driver-grid .payroll-table tbody tr.driver-pair-even td.pr-frozen {
+   grey/white — no tint (2026-08-20, Kayee: "just do grey and white"). The
+   :not(.total):not(.section) here isn't decorative — the app's GENERIC frozen-cell
+   zebra rule (`.payroll-table tbody tr:not(.total):not(.section):nth-child(even)
+   td.pr-frozen`) carries 5 class-level selectors, which quietly OUTRANKED the previous
+   4-class version of this rule on frozen cells only — so the name/driver/price columns
+   striped per-ROW (nth-child) while the month cells striped per-PAIR, exactly the
+   "Accrual second line should be white... very messy" mismatch Kayee flagged. Adding
+   the two :not()s lifts this to 6 classes, beating the generic rule everywhere. */
+.customer-driver-grid .payroll-table tbody tr.driver-pair-even:not(.total):not(.section) td,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-even:not(.total):not(.section) td.pr-frozen {
   background: #fff;
 }
-.customer-driver-grid .payroll-table tbody tr.driver-pair-odd td,
-.customer-driver-grid .payroll-table tbody tr.driver-pair-odd td.pr-frozen {
+.customer-driver-grid .payroll-table tbody tr.driver-pair-odd:not(.total):not(.section) td,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-odd:not(.total):not(.section) td.pr-frozen {
   background: var(--panel-2);
 }
 
 /* Kayee, 2026-08-19: "no need to have spacing like this... it's like a spreadsheet...
-   stick to one another" — the default Payroll-table row padding read as loose gaps
-   around these small count/price inputs. Tighter, spreadsheet-density padding scoped to
-   just this table, no border by default. */
-.customer-driver-grid .payroll-table tbody td { padding: 3px 10px; }
+   stick to one another" — tighter, spreadsheet-density padding scoped to just this
+   table. The fixed height + hidden overflow is what makes EVERY row the same height
+   (2026-08-20, Kayee: "all the row needs to be in the same height") — a row's tallest
+   occupant (name input, delete button, plain text) no longer decides its height. */
+.customer-driver-grid .payroll-table tbody td { padding: 2px 10px; height: 26px; }
 
-/* 2026-08-20 (Kayee: "the blue grid is an indicator or editable cells... you will put
-   it in price and also the monthly amount. because those are the area you can input
-   numbers not the current customer [name/driver label]") — the blue spreadsheet-style
-   gridline now marks ONLY the actually-editable cells (Price column + the monthly
-   count inputs), not the read-only Customer/Driver-label columns, which stay plain
-   with no border at all. pr-frozen-col-price is the Price column specifically (added
-   in PayrollTable.jsx alongside the existing pr-frozen-col-name/pr-frozen-col-metric,
-   which intentionally get NO rule here). */
-.customer-driver-grid .payroll-table tbody td.pr-frozen-col-price,
-.customer-driver-grid .payroll-table tbody td.pr-month-cell {
-  border: 1px solid rgba(17,179,231,.35);
+/* Gridlines are grey, not blue (2026-08-20, Kayee: "i dont like the gridline of blue,
+   make the gridline grey") — every cell in the grid gets the same quiet grey line,
+   like an actual spreadsheet. */
+.customer-driver-grid .payroll-table tbody td { border: 1px solid var(--border); }
+
+/* Editable cells are marked by a light BLUE FILL instead of the old blue gridline
+   (2026-08-20, Kayee: "the cells blue then... it needs to be consistent") — :has(input)
+   tints exactly the cells that really take typing (a Price cell or a count cell in an
+   editable month), never the read-only name/driver columns or pre-2026 actual months,
+   matching the P&L's own blue editable-input convention. */
+.customer-driver-grid .payroll-table tbody tr:not(.total) td.pr-frozen-col-price:has(input),
+.customer-driver-grid .payroll-table tbody tr:not(.total) td.pr-month-cell:has(input) {
+  background: var(--blue-soft);
 }
+
+/* Compact, chrome-less delete button so the rows that have one stay the exact same
+   height as the rows that don't (same 2026-08-20 "same height" ask). */
+.customer-driver-grid .icon-btn { width: 20px; height: 20px; border: none; background: transparent; }
+.customer-driver-grid .icon-btn svg { width: 12px; height: 12px; }
 
 /* Kayee, 2026-08-19 (arrow from Summary down to the Current & Pipeline grid): "move
    this here" — join the Summary card and the grid right below it into one continuous
