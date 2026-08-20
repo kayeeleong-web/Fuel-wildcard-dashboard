@@ -263,7 +263,32 @@ export class GoogleSheetsDataSource implements DataSource {
         };
       });
 
-    return { type, months: monthsWanted, rows };
+    // Merge duplicate same-label Total rows within a section into ONE summed row
+    // (2026-08-20, Kayee, pointing at the CF's two stacked "Total Other Cash In"
+    // bands: "you can combine these two correct?") — the sheet's CF tab carries two
+    // separate Total rows with the identical label, which rendered as two identical
+    // black bands showing two partial totals. Summing them here (null + null stays
+    // null, so blank months stay blank rather than becoming $0) shows one true total
+    // while leaving the sheet untouched. Non-total line items are never merged — two
+    // real accounts sharing a name would be a data problem to surface, not to hide.
+    const mergedRows: FinancialStatementRow[] = [];
+    const totalsByKey = new Map<string, FinancialStatementRow>();
+    for (const row of rows) {
+      const mergeKey = row.isTotal ? `${row.section}|${row.label}` : null;
+      const existing = mergeKey ? totalsByKey.get(mergeKey) : undefined;
+      if (existing) {
+        for (const month of monthsWanted) {
+          const a = existing.values[month];
+          const b = row.values[month];
+          existing.values[month] = a === null && b === null ? null : (a ?? 0) + (b ?? 0);
+        }
+        continue;
+      }
+      if (mergeKey) totalsByKey.set(mergeKey, row);
+      mergedRows.push(row);
+    }
+
+    return { type, months: monthsWanted, rows: mergedRows };
   }
 
   /**

@@ -2028,11 +2028,18 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   // each section... in cogs you will collapse everything until the total cogs, keep
   // cogs and total cogs") — clicking the section band (e.g. "COGS") hides every
   // non-Total row in between, leaving just the section header and its own Total row
-  // visible, same idea as the Payroll tab's own collapsible outer sections. Expanded
-  // by default so nothing changes for anyone who hasn't touched this yet. Local to
+  // visible, same idea as the Payroll tab's own collapsible outer sections. Local to
   // this one section's row group, same as dragOverKey above — collapsing COGS has no
   // effect on OpEx's own state.
-  const [collapsed, setCollapsed] = useState(false);
+  // Non-operating sections start COLLAPSED (2026-08-20, Kayee: "can you keep it
+  // collapsed? meaning non operating income expenses") — small ancillary items
+  // (interest, rewards, taxes) that don't need to be open by default; the section's
+  // own Total row stays visible, and one click expands the detail. Every other
+  // section still starts expanded, as before.
+  // Also matches the GAAP-friendlier names suggested for this section ("Other
+  // Operating Items" / "Other Income & Expenses") so renaming it in the sheet
+  // doesn't silently lose the collapsed default.
+  const [collapsed, setCollapsed] = useState(/NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section));
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
   // headcount cost to cogs and opex... if i add the cost in cogs it will only be
