@@ -191,6 +191,12 @@ function isHistoricalMonth(iso) {
 }
 
 function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso, tintForecast }) {
+  // Optional per-group collapse (2026-08-20, for the Customer grid's "Inactive
+  // Customers" group — Kayee: "you can default it to collapse") — a group with
+  // `collapsible: true` toggles its rows by clicking its own section band;
+  // `defaultCollapsed` picks the initial state. Groups without the flag behave
+  // exactly as before (label is a plain band, rows always shown).
+  const [collapsed, setCollapsed] = useState(!!group.defaultCollapsed);
   if (!group.rows.length) return null;
   return (
     <>
@@ -199,18 +205,23 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso,
         // (globals.css `tbody tr.section td`); `group.rowModifier` ('pr-tbd' /
         // 'pr-dismissed') swaps the tint for the Payroll tab's Planned/Dismissed
         // sub-sections, which don't exist anywhere else in this app.
-        <tr className={`section${group.rowModifier ? ` ${group.rowModifier}` : ''}`}>
+        <tr
+          className={`section${group.rowModifier ? ` ${group.rowModifier}` : ''}`}
+          onClick={group.collapsible ? () => setCollapsed((c) => !c) : undefined}
+          style={group.collapsible ? { cursor: 'pointer' } : undefined}
+        >
           <td
             className="pr-frozen pr-frozen-section pr-frozen-last"
             colSpan={frozenColumns.length}
             style={{ width: offsets.totalWidth, left: 0 }}
           >
+            {group.collapsible && <span className={`payroll-chevron${collapsed ? '' : ' open'}`}>▸ </span>}
             {group.label}
           </td>
           <td colSpan={months.length} />
         </tr>
       )}
-      {group.rows.map((row) => (
+      {(!group.collapsible || !collapsed) && group.rows.map((row) => (
         // draggable/onDrag*/onDrop are optional passthrough — only Roster rows supply
         // them (drag-to-reorder within a section), so Bonus/Total Comp/Summary rows
         // just render a plain, non-draggable <tr> as before (undefined props are a

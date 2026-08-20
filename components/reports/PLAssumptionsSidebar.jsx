@@ -64,6 +64,21 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
 
   return (
     <div className="reports-sidebar">
+      {/* Hide toggle sits ABOVE the cards, not inside the Revenue Assumptions header
+          (2026-08-20, Kayee: "dont make the hide button inside of revenue assumption,
+          make it like on top") — it collapses the WHOLE sidebar, so nesting it in one
+          card's header made it read like it only hid that card. Text label alongside
+          the icon (2026-08-07) — same "make it obvious" reasoning as the collapsed
+          rail. */}
+      <div className="reports-sidebar-toolbar">
+        <button type="button" className="reports-sidebar-toggle-open" title="Hide Assumptions" onClick={onToggleCollapse}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+          Hide
+        </button>
+      </div>
+
       <div className="payroll-card">
         <div className="payroll-card-head">
           <button
@@ -75,17 +90,6 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
             <span className={`payroll-chevron${revenueOpen ? ' open' : ''}`}>▸</span>
             Revenue Assumptions
           </button>
-          <span className="payroll-card-actions">
-            {/* Text label alongside the icon (2026-08-07) — same "make it obvious"
-                reasoning as the collapsed rail; a bare icon in a black header bar full
-                of other icon-less text was easy to skim past. */}
-            <button type="button" className="reports-sidebar-toggle-open" title="Hide Assumptions" onClick={onToggleCollapse}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-              Hide
-            </button>
-          </span>
         </div>
 
         {revenueOpen && (

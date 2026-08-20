@@ -264,7 +264,7 @@ function WaterfallTable({ title, subtitle, waterfall, months, todayIso }) {
  *  and CF feed still use). `getCount`/`onSetCount` take (kind, key, iso);
  *  `getPrice`/`onSetPrice` take (kind, key) — generic signatures so one component
  *  covers both the campaigns row and the meetings row per customer. */
-function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months, isEditableMonth, todayIso, getCount, onSetCount, getPrice, onSetPrice, headActions }) {
+function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, inactiveRows = [], months, isEditableMonth, todayIso, getCount, onSetCount, getPrice, onSetPrice, getQty = () => 1, headActions }) {
   function monthCellsFor(key, kind) {
     return Object.fromEntries(
       months.map((iso) => [
@@ -293,12 +293,23 @@ function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months,
     return list.flatMap((r, i) => {
       const idx = startIdx + i;
       const zebra = idx % 2 === 0 ? 'driver-pair-even' : 'driver-pair-odd';
+      // Running customer number (2026-08-20, Kayee: "can you add numbering, like
+      // accrual is 1, amplitude is 2") — one ordinal per CUSTOMER (both of its rows
+      // show the same number), continuing across the Current → Planned group split
+      // since startIdx carries over.
+      const num = <span className="driver-row-num">{idx + 1}</span>;
+      const withNum = (content) => (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {num}
+          <span style={{ flex: '1 1 auto', minWidth: 0 }}>{content}</span>
+        </span>
+      );
       return [
         {
           id: `${r.key}__campaigns`,
           className: `driver-pair-first ${zebra}`,
           cells: {
-            name: r.nameCell ?? r.name,
+            name: withNum(r.nameCell ?? r.name),
             metric: <span className="driver-metric-label"># of Campaigns</span>,
             price: <MonthInput value={getPrice('campaigns', r.key)} onCommit={(n) => onSetPrice('campaigns', r.key, n)} />,
           },
@@ -318,7 +329,7 @@ function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months,
             // row") — for manual/planned rows, nameCell is an EDITABLE input (+ delete
             // button), so repeating it gave two separate name boxes per customer. The
             // Meetings row now just mirrors whatever the Campaigns row's input says.
-            name: r.name,
+            name: withNum(r.name),
             metric: <span className="driver-metric-label"># of Meetings</span>,
             price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
           },
@@ -339,7 +350,9 @@ function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months,
       cells: { name: <b>{label}</b>, metric: '', price: '' },
       monthCells: Object.fromEntries(
         months.map((iso) => {
-          const sum = allRows.reduce((acc, r) => acc + (getCount(kind, r.key, iso) || 0), 0);
+          // Counts multiply by each row's qty (2026-08-20) — a planned row standing
+          // for 2 customers × 250 campaigns contributes 500 to TOTAL Campaigns.
+          const sum = allRows.reduce((acc, r) => acc + getQty(r.key) * (getCount(kind, r.key, iso) || 0), 0);
           return [iso, <b key={iso}>{sum ? sum.toLocaleString('en-US') : ''}</b>];
         })
       ),
@@ -368,6 +381,11 @@ function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, months,
         // line between the two, not just a sort-order coincidence.
         { key: 'current', label: null, rows: currentPairs },
         { key: 'planned', label: 'Planned Customers', rows: plannedPairs },
+        // Hidden GL customers live in their own collapsed "Inactive" group at the
+        // bottom (2026-08-20, Kayee: "no need to restore [button in the header]...
+        // add an inactive section... default it to collapse... add the restore next
+        // to the customer name") — each row is just the name + its own Restore button.
+        { key: 'inactive', label: 'Inactive Customers', collapsible: true, defaultCollapsed: true, rows: inactiveRows },
       ]}
       headActions={headActions}
       // Kayee, 2026-08-19: "I dont like the input box bubble... more simple like a
@@ -537,23 +555,45 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // drivers.hiddenGlCustomers and the row disappears from this grid only. Their real
   // GL actuals are untouched (waterfall, Cash Coming In actual months). Restorable
   // via the "Restore hidden" header button.
+  // No confirm dialog (2026-08-20, Kayee: "i dont want this warning") — hiding is
+  // freely reversible now that hidden rows land in the visible Inactive Customers
+  // section below with their own Restore button, so a browser popup guarding it was
+  // just friction.
   function hideGlCustomer(name) {
     if (!drivers) return;
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Hide ${name} from this projection grid? Their GL actuals stay everywhere else; you can restore them with the "Restore hidden" button.`)
-    ) {
-      return;
-    }
     setDrivers({ ...drivers, hiddenGlCustomers: [...(drivers.hiddenGlCustomers || []), name] });
   }
 
-  function restoreHiddenGlCustomers() {
+  // Per-customer restore (2026-08-20, Kayee: "add the restore next to the customer
+  // name" — replaces the earlier one-shot "Restore hidden (N)" header button).
+  function restoreGlCustomer(name) {
     if (!drivers) return;
-    setDrivers({ ...drivers, hiddenGlCustomers: [] });
+    setDrivers({ ...drivers, hiddenGlCustomers: (drivers.hiddenGlCustomers || []).filter((n) => n !== name) });
   }
 
   const hiddenGlCustomers = drivers?.hiddenGlCustomers || [];
+
+  // Rows for the grid's collapsed "Inactive Customers" group — pre-built PayrollTable
+  // rows (name + Restore), no driver/price/month cells: an inactive customer has
+  // nothing to plan until it's restored.
+  const inactiveDriverRows = [...hiddenGlCustomers]
+    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+    .map((name) => ({
+      id: `inactive:${name}`,
+      cells: {
+        name: (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
+            <span>{name}</span>
+            <button type="button" className="btn" onClick={() => restoreGlCustomer(name)} title="Bring this customer back into the projection grid">
+              Restore
+            </button>
+          </span>
+        ),
+        metric: '',
+        price: '',
+      },
+      monthCells: {},
+    }));
 
   // Current & pipeline driver rows: the live GL Cash roster (pre-populated,
   // name read-only — it IS the GL counterparty name, but hideable) + manually added
@@ -614,18 +654,28 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // no more separate Qty/Start Month/Upfront/Monthly economics model. A "Planned" tag
   // next to the name is the only thing distinguishing them for the Current/Planned
   // summary split below.
+  // 2026-08-20 (Kayee): "Planned" pill tag REMOVED — planned rows already live under
+  // the grid's own "Planned Customers" divider band, so the per-row tag was redundant
+  // ("you dont need the planned bubble because you always put them under planned
+  // customer"). In its place: a Qty multiplier ("did you give me options to multiply
+  // with quantity? like this customer at this price point will be 2 of them") — every
+  // planned row's cash-in is qty × (campaigns × price + meetings × price), so one row
+  // can stand for N identical planned customers. Defaults to 1; see qtyForKey below.
   const plannedDriverRows = (planned || []).map((r) => ({
     key: `plan:${r.id}`,
     name: r.name,
     nameCell: (
-      // Trash on the RIGHT (2026-08-20, Kayee) — input, then the Planned tag, then
-      // delete last, so the destructive control isn't the first thing in the cell.
+      // Trash on the RIGHT (2026-08-20, Kayee) — delete last, so the destructive
+      // control isn't the first thing in the cell.
       <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <TextInput value={r.name} placeholder="Planned customer name" focusOnMount={r.id === justAddedId} onCommit={(v) => {
           updatePlanned(r.id, { name: v });
           if (r.id === justAddedId) setJustAddedId(null);
         }} />
-        <span className="pr-tag">Planned</span>
+        <span className="planned-qty" title="Quantity — how many identical planned customers this row stands for; all its $ multiply by this">
+          ×
+          <MonthInput value={Number(r.qty) || 1} onCommit={(n) => updatePlanned(r.id, { qty: Math.max(1, Math.round(n) || 1) })} />
+        </span>
         <button
           type="button"
           className="icon-btn"
@@ -680,21 +730,31 @@ export function CustomerPanel({ glCash, glAccrued }) {
     ...(planned || []).map((r) => ({ key: `plan:${r.id}`, name: r.name || 'Untitled planned customer', kind: 'Planned' })),
   ];
 
-  /** Meeting $ for one customer key in one month: meetings × that customer's per-
-   *  meeting price — this IS "Transaction Revenue" (2026-08-20 breakdown, matching the
-   *  P&L projection's own "Transaction Revenue = # of Meetings × Per Meeting Rate"
+  /** Quantity multiplier (2026-08-20, Kayee: "this customer at this price point will
+   *  be 2 of them") — planned rows only; one planned row can stand for N identical
+   *  customers, and everything computed from it (both streams, grid totals, summary,
+   *  CF feed) multiplies by N. Current/pipeline rows are real single customers → 1. */
+  function qtyForKey(key) {
+    if (!key.startsWith('plan:')) return 1;
+    const row = (planned || []).find((r) => `plan:${r.id}` === key);
+    return Math.max(1, Number(row?.qty) || 1);
+  }
+
+  /** Meeting $ for one customer key in one month: qty × meetings × that customer's
+   *  per-meeting price — this IS "Transaction Revenue" (2026-08-20 breakdown, matching
+   *  the P&L projection's own "Transaction Revenue = # of Meetings × Per Meeting Rate"
    *  naming, per Kayee: "transactional revenue is the calculation with the # of
    *  meeting * price per meeting"). */
   function meetingCashInFor(key, iso) {
-    return getDriverCount('meetings', key, iso) * getCustomerPrice('meetings', key);
+    return qtyForKey(key) * getDriverCount('meetings', key, iso) * getCustomerPrice('meetings', key);
   }
 
-  /** Campaign $ for one customer key in one month: campaigns × that customer's
+  /** Campaign $ for one customer key in one month: qty × campaigns × that customer's
    *  campaign price — this IS "Subscription Revenue" ("and the subscription is the
    *  other [calculation]"), matching the P&L projection's "Subscription Revenue =
    *  # of Campaigns × Upfront Rate". */
   function campaignCashInFor(key, iso) {
-    return getDriverCount('campaigns', key, iso) * getCustomerPrice('campaigns', key);
+    return qtyForKey(key) * getDriverCount('campaigns', key, iso) * getCustomerPrice('campaigns', key);
   }
 
   /** Computed cash in for one customer key in one FORECAST month: the sum of the two
@@ -1056,6 +1116,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 subtitle="Each customer priced individually, alphabetically · counts editable Jan 2026 onward · Current & Pipeline from the live GL Cash roster, plus rows you add · Planned customers in their own group below"
                 currentRows={sortedCurrentDriverRows}
                 plannedRows={sortedPlannedDriverRows}
+                inactiveRows={inactiveDriverRows}
                 months={planMonths}
                 isEditableMonth={isDriverEditableMonth}
                 todayIso={todayIso}
@@ -1063,18 +1124,9 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 onSetCount={setDriverCount}
                 getPrice={getCustomerPrice}
                 onSetPrice={setCustomerPrice}
+                getQty={qtyForKey}
                 headActions={
                   <div style={{ display: 'flex', gap: 8 }}>
-                    {hiddenGlCustomers.length > 0 && (
-                      <button
-                        type="button"
-                        className="btn"
-                        title={`Bring back: ${hiddenGlCustomers.join(', ')}`}
-                        onClick={restoreHiddenGlCustomers}
-                      >
-                        Restore hidden ({hiddenGlCustomers.length})
-                      </button>
-                    )}
                     <button type="button" className="btn" onClick={addManualCustomer}>
                       + Add Customer Row
                     </button>

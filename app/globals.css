@@ -1272,6 +1272,12 @@ tr.summary-subtotal-pinned td {
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   position: sticky; top: 38px; z-index: 2;
 }
+/* Running customer number in the driver grid (2026-08-20, Kayee: "add numbering,
+   like accrual is 1, amplitude is 2") — small muted ordinal before the name, same
+   number on both of a customer's rows. Fixed width keeps names vertically aligned
+   through 1- and 2-digit numbers. */
+.driver-row-num { flex: none; width: 18px; text-align: right; color: var(--muted-2); font-size: 10.5px; font-family: var(--font-num); }
+
 /* Planned-row quantity multiplier (2026-08-20, Kayee: "this customer at this price
    point will be 2 of them") — a compact "× N" next to the planned customer's name;
    replaces the removed "Planned" pill tag (redundant under the Planned Customers
