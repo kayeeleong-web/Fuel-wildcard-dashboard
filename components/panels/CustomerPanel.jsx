@@ -1035,7 +1035,11 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 rowGroups={[{ key: 'summary', label: null, rows: summaryRows }]}
               />
 
-              <div style={{ height: 20 }} />
+              {/* No explicit spacer divs between these cards (2026-08-20, Kayee:
+                  "these spaces are too big, make it narrower like the same height as
+                  the other spacing") — the parent .pr-outer-body's own 20px flex gap
+                  already separates them; a spacer div on top of that gap doubled the
+                  space (gap + spacer + gap). */}
 
               {/* ONE combined grid for current, pipeline, AND planned customers
                   (2026-08-19 consolidation, Kayee: "we dont need a separate section
@@ -1080,8 +1084,6 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   </div>
                 }
               />
-
-              <div style={{ height: 20 }} />
 
               {/* Price assumptions for PLANNED customers — moved to the very bottom
                   (2026-08-20, Kayee: "move this to the very bottom"; was the first
