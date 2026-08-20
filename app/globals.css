@@ -554,8 +554,14 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    paired with a "Hide" text label (2026-08-07) instead of a bare icon, so it doesn't
    blend into the row of black-on-black chrome around it. White-on-black keeps it
    visible against that dark header without reading as a green "success" action. */
+/* 2026-08-20 (Kayee: "dont make the hide button inside of revenue assumption, make it
+   like on top") — the Hide toggle moved from the Revenue Assumptions card's black
+   header bar to its own slim toolbar row at the very top of the sidebar, since it
+   hides the WHOLE sidebar, not that one card. flex-shrink:0 for the same reason as
+   the cards below it (capped scrolling flex parent must not squeeze it). */
+.reports-sidebar-toolbar { display: flex; justify-content: flex-end; flex: 0 0 auto; margin-bottom: -8px; }
 .reports-sidebar-toggle-open {
-  display: flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.3); border-radius: 7px;
+  display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 7px;
   background: #fff; color: var(--text); font-size: 11.5px; font-weight: 700;
   padding: 6px 10px; cursor: pointer; transition: background .12s ease;
 }
@@ -1097,16 +1103,23 @@ tbody tr.section.pr-dismissed td { background: var(--black-2); color: rgba(255,2
    forecast months get a light, muted blue wash, never a saturated color. */
 .pr-month-head.pr-fcst { box-shadow: inset 0 -2px 0 var(--blue); }
 td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
-.pr-year-start { border-left: 2px solid var(--border); }
-thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.18); }
+/* Year-boundary line darkened 2026-08-20 (Kayee: "the line dividing the year needs to
+   be darker so that i can see the division of different year") — the old var(--border)
+   grey vanished into the grid's own grey cell borders (which became the SAME color
+   once the driver grid's gridlines went grey), so a year boundary was indistinguishable
+   from any other column line. A solid dark grey reads as a real divider without being
+   full black. */
+.pr-year-start { border-left: 2px solid #9CA3AF; }
+thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.35); }
 
 /* Reports/Projection year-boundary divider (2026-08-19, Kayee: "put some line between
    the year"), and the same treatment for every other table in the app (Payroll,
    Customer) via .pr-year-start above — one continuous vertical rule running the full
-   height of the table (header rows + every body row), not just the year-band row. */
+   height of the table (header rows + every body row), not just the year-band row.
+   Darkened 2026-08-20, same reason as .pr-year-start above. */
 .report-doc th.y-boundary,
-.report-doc td.y-boundary { border-left: 2px solid var(--border); }
-.report-doc thead th.y-boundary { border-left: 2px solid rgba(255,255,255,.28); }
+.report-doc td.y-boundary { border-left: 2px solid #9CA3AF; }
+.report-doc thead th.y-boundary { border-left: 2px solid rgba(255,255,255,.35); }
 
 /* Same historical-month dark-grey header treatment as Reports' .r-historical, applied
    to PayrollTable-based tables (Payroll, Customer waterfalls/driver grids) — see
@@ -1155,8 +1168,12 @@ thead th.pr-month-historical { background: #3a3a3d; }
    its own padding/border, so rows containing one sat visibly taller than the plain-text
    GL rows around them. Flat and border-free, the input's row is the exact same height
    as a text row; focusing shows the same thin blue inset line as the count cells. */
+/* Zero horizontal padding (2026-08-20 follow-up, Kayee: "the tab space is annoying
+   before the name of the added new customer") — the cell's own 10px padding already
+   provides the indent; the input's extra 5px on top made manual/planned rows' names
+   sit visibly deeper than the plain-text GL names above them. */
 .customer-driver-grid td.pr-frozen input.pr-input {
-  padding: 2px 5px; font-size: 12px; line-height: 1.3;
+  padding: 2px 0; font-size: 12px; line-height: 1.3;
   background: transparent; border: none; border-radius: 0;
 }
 .customer-driver-grid td.pr-frozen input.pr-input:focus {
@@ -1209,6 +1226,18 @@ thead th.pr-month-historical { background: #3a3a3d; }
 .customer-driver-grid .icon-btn { width: 20px; height: 20px; border: none; background: transparent; }
 .customer-driver-grid .icon-btn svg { width: 12px; height: 12px; }
 
+/* Row hover highlight (2026-08-20, Kayee: "when i hover to that row in cash in
+   projection it will be in a blue color... so it's easier on the eyes") — a light
+   blue wash across the WHOLE hovered row, frozen and month cells alike. The
+   :not()s match the zebra rules above so this outranks both them and the app's
+   generic greenish frozen-cell hover. */
+.customer-driver-grid .payroll-table tbody tr.driver-pair-first:not(.total):not(.section):hover td,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-first:not(.total):not(.section):hover td.pr-frozen,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-last:not(.total):not(.section):hover td,
+.customer-driver-grid .payroll-table tbody tr.driver-pair-last:not(.total):not(.section):hover td.pr-frozen {
+  background: #D6F1FB;
+}
+
 /* Kayee, 2026-08-19 (arrow from Summary down to the Current & Pipeline grid): "move
    this here" — join the Summary card and the grid right below it into one continuous
    block instead of two separate cards with a gap between them. Zeroes the gap for just
@@ -1231,17 +1260,25 @@ tr.summary-subtotal td {
   background: #E5E7EB !important; color: var(--text) !important; font-weight: 400;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
 }
-/* "Total Current/Planned Customer" (2026-08-20, Kayee: "make total current customer a
-   slightly darker grey and also make it stay on top") — one shade darker than the
-   plain .summary-subtotal breakdown rows nested under it, and sticky just below the
-   table's own black thead (already sticky top:0 in the same scroll box) so it's still
-   visible if expanding both tiers' breakdowns ever pushes this card past its
-   .payroll-table-wrap scroll cap. */
+/* "Total Current/Planned Customer" — sticky just below the table's own black thead
+   (already sticky top:0 in the same scroll box) so it's still visible if expanding
+   both tiers' breakdowns pushes this card past its .payroll-table-wrap scroll cap.
+   Shade history: darker-than-breakdown #D1D5DB on 2026-08-19 ("slightly darker grey"),
+   REVERSED 2026-08-20 (Kayee: "make these two a lighter grey, lighter than the meeting
+   cash in and campaign cash in") — now #F9FAFB, one step LIGHTER than the #E5E7EB
+   breakdown rows above. */
 tr.summary-subtotal-pinned td {
-  background: #D1D5DB !important; color: var(--text) !important; font-weight: 400;
+  background: #F9FAFB !important; color: var(--text) !important; font-weight: 400;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   position: sticky; top: 38px; z-index: 2;
 }
+/* Planned-row quantity multiplier (2026-08-20, Kayee: "this customer at this price
+   point will be 2 of them") — a compact "× N" next to the planned customer's name;
+   replaces the removed "Planned" pill tag (redundant under the Planned Customers
+   divider band). Narrow fixed-width input so it doesn't crowd the name. */
+.planned-qty { display: inline-flex; align-items: center; gap: 2px; flex: none; color: var(--muted); font-size: 11px; }
+.planned-qty .pr-input-month { width: 30px; text-align: center; }
+
 .summary-row-toggle {
   display: inline-flex; align-items: center; gap: 6px; border: none; background: none;
   padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
