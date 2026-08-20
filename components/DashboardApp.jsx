@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useState } from 'react';
+import { useState } from 'react';
 import { Topbar } from './shell/Topbar';
 import { TabNav } from './shell/TabNav';
 import { Footer } from './shell/Footer';
@@ -37,32 +37,26 @@ const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
  * not GL data, so it loads its own state client-side (lib/payroll/usePayrollState.js)
  * rather than receiving props here. Appears as both a standalone tab and in Projection.
  *
- * activeTab is remembered in localStorage (ACTIVE_TAB_STORAGE_KEY) so a hard refresh
- * reopens on whichever tab the user was last viewing instead of resetting to KPI
- * Report. The initial render still has to start on 'kpi' (server and first client
- * render must match, or React throws a hydration mismatch) — the saved tab is applied
- * right after mount, which is the standard way to read a browser-only API without
- * breaking SSR.
- *
- * 2026-08-18 (Kayee: "I refresh and then it will jump to KPI report first and then
- * jump back... it's just annoying"): that restore was originally a plain useEffect,
- * which React runs AFTER the browser has already painted — so on every refresh the
- * user visibly saw the wrong tab (KPI) for a frame before it snapped to the saved one.
- * useLayoutEffect runs synchronously before paint instead, so the correction happens
- * before anything is shown on screen: same hydration-safe 'kpi' first render, but no
- * visible flash/jump afterward.
+ * activeTab is remembered via a cookie now (2026-08-20 rewrite, Kayee: "when I do a
+ * hard refresh in a specific tab it will always go back to KPI and then go back again
+ * to my current tab" — still a visible flash even with the useLayoutEffect fix below).
+ * That earlier fix used localStorage, which only the BROWSER can read — so the
+ * server-rendered HTML on every hard refresh always had to start on 'kpi' (the only
+ * state the server could possibly know), and only after hydration could client JS
+ * correct it. However early that correction ran, the wrong tab had already been
+ * painted once — that gap IS the flash. Reading the last-active tab from a cookie in
+ * app/page.js (a Server Component) instead means the server already renders the
+ * CORRECT tab on the very first response — `initialActiveTab` below comes from that
+ * cookie, so there's no wrong tab left to flash away from. localStorage is gone
+ * entirely; changeTab now just sets the cookie the server reads next time.
  */
-export function DashboardApp({ clientName, kpiData, dashboardSummary, statements, customReportsList, glCash, glAccrued }) {
-  const [activeTab, setActiveTab] = useState('kpi');
-
-  useLayoutEffect(() => {
-    const saved = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
-    if (saved && TABS.includes(saved)) setActiveTab(saved);
-  }, []);
+export function DashboardApp({ clientName, initialActiveTab, kpiData, dashboardSummary, statements, customReportsList, glCash, glAccrued }) {
+  const [activeTab, setActiveTab] = useState(TABS.includes(initialActiveTab) ? initialActiveTab : 'kpi');
 
   function changeTab(tab) {
     setActiveTab(tab);
-    window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, tab);
+    // 1-year expiry, path=/ so app/page.js can read it on any hard refresh.
+    document.cookie = `${ACTIVE_TAB_STORAGE_KEY}=${tab}; path=/; max-age=31536000; samesite=lax`;
   }
 
   return (

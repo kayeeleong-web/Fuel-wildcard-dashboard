@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useState } from 'react';
+import { useState } from 'react';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel } from './CustomerPanel';
@@ -12,7 +12,6 @@ const SUB_TABS = [
   { id: 'customer', label: 'Customer' },
 ];
 const SUB_TAB_IDS = SUB_TABS.map((t) => t.id);
-const ACTIVE_SUBTAB_STORAGE_KEY = 'fuel_wildcard_projection_subtab';
 
 /**
  * Projection tab — sixth sibling panel (2026-08-17, Kayee: "let's separate projection
@@ -25,31 +24,18 @@ const ACTIVE_SUBTAB_STORAGE_KEY = 'fuel_wildcard_projection_subtab';
  * "Reports" in the main bar hides this entire panel and shows the actual-only Reports
  * view instead.
  *
- * The active sub-tab is remembered in localStorage (2026-08-18, Kayee: "it should
- * refresh there show me back to customer. not jumping around") — same pattern as
- * DashboardApp's ACTIVE_TAB_STORAGE_KEY: render starts on 'pl' (so server/first-client
- * render match and React doesn't throw a hydration mismatch), then the saved sub-tab
- * is restored right after mount, once the main tab has already restored to 'projection'
- * on the outer level.
- *
- * Uses useLayoutEffect, not useEffect (2026-08-18, Kayee, again: "I refresh... it will
- * jump to KPI report first and then jump back... it's just annoying" — same flash, one
- * level down: a plain useEffect here fired after the browser already painted 'P&L
- * Projection', so refreshing on Customer visibly flashed P&L Projection first even
- * once the outer DashboardApp tab was fixed. useLayoutEffect corrects it before paint,
- * so nothing wrong is ever shown on screen.
+ * The active sub-tab is NOT remembered across visits (2026-08-20, Kayee: "when I open
+ * up projection it always default to customer. please default to P&L projection" —
+ * reversing the 2026-08-18 "remember where I left off" behavior for this one sub-nav,
+ * which meant reopening Projection kept landing on whatever was last clicked instead
+ * of the P&L view). Always opens on 'pl'; switching sub-tabs during a session still
+ * works exactly the same, it just isn't persisted anymore.
  */
 export function ProjectionPanel({ statements, customReports, glCash, glAccrued }) {
   const [projectionSubTab, setProjectionSubTab] = useState('pl');
 
-  useLayoutEffect(() => {
-    const saved = window.localStorage.getItem(ACTIVE_SUBTAB_STORAGE_KEY);
-    if (saved && SUB_TAB_IDS.includes(saved)) setProjectionSubTab(saved);
-  }, []);
-
   function changeSubTab(tab) {
     setProjectionSubTab(tab);
-    window.localStorage.setItem(ACTIVE_SUBTAB_STORAGE_KEY, tab);
   }
 
   return (

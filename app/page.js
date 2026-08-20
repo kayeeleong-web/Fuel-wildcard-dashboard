@@ -1,7 +1,12 @@
 import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
 import { getDataSource } from '@/lib/data';
 import { clientConfig } from '@/config/client.config';
 import { DashboardApp } from '@/components/DashboardApp';
+
+// Must match DashboardApp's own TABS list exactly.
+const VALID_TABS = ['kpi', 'dashboard', 'reports', 'projection'];
+const ACTIVE_TAB_COOKIE = 'fuel_wildcard_active_tab';
 
 // This DataSource implementation (googleapis) needs the Node.js runtime, not Edge.
 export const runtime = 'nodejs';
@@ -42,6 +47,19 @@ export default async function HomePage() {
   const { isAuthenticated, redirectToSignIn } = await auth();
   if (!isAuthenticated) return redirectToSignIn();
 
+  // 2026-08-20 (Kayee: "when i do a hard refresh in a specific tab it will always go
+  // back to kpi and then go back again to my current tab" — a visible flash on every
+  // hard refresh). The prior fix only used localStorage, which the SERVER can't read —
+  // so the very first HTML painted on a hard refresh always showed the 'kpi' panel
+  // (the only state the server can render), and only THEN did client JS run, read
+  // localStorage, and correct it. That gap between server-paint and client-correction
+  // is exactly the flash, no matter how early the client-side correction runs.
+  // Reading the last-active tab from a cookie here instead means the server itself
+  // already knows which tab to render on the very first response — no wrong tab is
+  // ever painted, so there's nothing to flash away from.
+  const savedTab = (await cookies()).get(ACTIVE_TAB_COOKIE)?.value;
+  const initialActiveTab = VALID_TABS.includes(savedTab) ? savedTab : 'kpi';
+
   const source = getDataSource();
 
   const [kpiData, dashboardSummary, pl, cf, bs, customReportsList, glCash, glAccrued] =
@@ -59,6 +77,7 @@ export default async function HomePage() {
   return (
     <DashboardApp
       clientName={clientConfig.name}
+      initialActiveTab={initialActiveTab}
       kpiData={kpiData}
       dashboardSummary={dashboardSummary}
       statements={{ PL: pl, CF: cf, BS: bs }}

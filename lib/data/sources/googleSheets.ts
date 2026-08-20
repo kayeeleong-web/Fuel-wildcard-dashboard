@@ -139,39 +139,94 @@ export class GoogleSheetsDataSource implements DataSource {
     this.sheetId = id;
   }
 
+  /**
+   * KPI_Report — rebuilt 2026-08-20 onto the SAME wide "one column per month" schema
+   * PL/CF/BS already use, replacing the old fixed Current/Prior/PriorYear/YTD/TTM/
+   * Benchmark columns + a Y1 report-month cell. Row 1 is now:
+   *   Section | Key | Label | Unit | Type | Benchmark | IsTotal | <month 1> | <month 2>...
+   * (cols A-G, then H onward — Type is "flow" [sum for YTD/TTM], "stock" [point-in-time,
+   * never summed], or "ratio" [%, also point-in-time]). There is no longer a Y1 cell to
+   * read the report month from — the app determines "current month" itself, as the
+   * LAST month column that has a real (non-null) value anywhere in the sheet, same
+   * "never trust a stale hardcoded date" principle the PL/CF/BS range logic already
+   * follows. Fixes the 2026-08-20 bug where the app was still reading the OLD schema
+   * against this NEW sheet layout (Kayee: "I have no data because it's a wrong month" —
+   * Y1 no longer held a date at all once the sheet was rebuilt, so the picker/table
+   * anchored on garbage). Current/Prior/PriorYear/YTD/TTM are all derived here from the
+   * month columns, per row Type — never read from a cell that doesn't exist anymore. */
   async getKPIData(): Promise<KPIReportData> {
-    const [rows, monthCell] = await Promise.all([
-      getValues(this.sheetId, "KPI_Report!A2:W"),
-      getValues(this.sheetId, "KPI_Report!Y1:Y1"),
-    ]);
+    const header = await getValues(this.sheetId, "KPI_Report!1:1");
+    const monthCols = (header[0] ?? []).slice(7); // columns after Section|Key|Label|Unit|Type|Benchmark|IsTotal
+    if (monthCols.length === 0) return { month: "", rows: [] };
 
-    const metricRows: MetricRow[] = rows
+    const body = await getValues(this.sheetId, `KPI_Report!A2:${colLetter(6 + monthCols.length)}`);
+
+    // Current month = the last column ANY row has a real number in — never a fixed/
+    // stale cell, so a sheet that hasn't been updated for the newest month yet still
+    // anchors on the last month it genuinely has data for.
+    let currentIdx = -1;
+    for (let i = monthCols.length - 1; i >= 0; i--) {
+      if (body.some((r) => toNumberOrNull(r[7 + i]) !== null)) {
+        currentIdx = i;
+        break;
+      }
+    }
+    const month = currentIdx >= 0 ? monthCols[currentIdx] : "";
+
+    const metricRows: MetricRow[] = body
       .filter((r) => r[1]) // has a Key
       .map((r) => {
-        const trend = r
-          .slice(11, 23) // Trend1..Trend12, cols L..W
-          .map((v) => toNumberOrNull(v))
-          .filter((v): v is number => v !== null);
+        const type = (r[4] ?? "flow").toLowerCase();
+        const valueAt = (idx: number) => (idx >= 0 && idx < monthCols.length ? toNumberOrNull(r[7 + idx]) : null);
+
+        const trendStart = Math.max(0, currentIdx - 11);
+        const trend = currentIdx >= 0
+          ? Array.from({ length: currentIdx - trendStart + 1 }, (_, i) => valueAt(trendStart + i)).filter(
+              (v): v is number => v !== null
+            )
+          : [];
+
+        const current = valueAt(currentIdx);
+        const prior = valueAt(currentIdx - 1);
+        const priorYear = valueAt(currentIdx - 12);
+
+        // YTD/TTM only mean anything for a "flow" metric (summed) — a "stock" balance
+        // or a "ratio" summed across months would be a fabricated, meaningless number,
+        // so those render "—" instead (CLAUDE.md: blank beats a wrong-looking figure).
+        let ytd: number | null = null;
+        let ttm: number | null = null;
+        if (type === "flow" && currentIdx >= 0) {
+          const [, currentMonthNum] = monthCols[currentIdx].split("-").map(Number);
+          const yearStart = currentIdx - (currentMonthNum - 1);
+          const ytdValues = Array.from({ length: currentIdx - yearStart + 1 }, (_, i) => valueAt(yearStart + i)).filter(
+            (v): v is number => v !== null
+          );
+          ytd = ytdValues.length > 0 ? ytdValues.reduce((a, b) => a + b, 0) : null;
+
+          const ttmStart = Math.max(0, currentIdx - 11);
+          const ttmValues = Array.from({ length: currentIdx - ttmStart + 1 }, (_, i) => valueAt(ttmStart + i)).filter(
+            (v): v is number => v !== null
+          );
+          ttm = ttmValues.length > 0 ? ttmValues.reduce((a, b) => a + b, 0) : null;
+        }
+
         return {
           section: r[0] ?? "Uncategorized",
           key: r[1],
           label: r[2] ?? r[1],
           unit: toUnit(r[3]),
-          current: toNumberOrNull(r[4]),
-          prior: toNumberOrNull(r[5]),
-          priorYear: toNumberOrNull(r[6]),
-          ytd: toNumberOrNull(r[7]),
-          ttm: toNumberOrNull(r[8]),
-          benchmark: toNumberOrNull(r[9]),
-          isTotal: (r[10] ?? "").toLowerCase() === "true",
+          current,
+          prior,
+          priorYear,
+          ytd,
+          ttm,
+          benchmark: toNumberOrNull(r[5]),
+          isTotal: (r[6] ?? "").toLowerCase() === "true",
           trend: trend.length > 0 ? trend : undefined,
         };
       });
 
-    return {
-      month: monthCell[0]?.[0] ?? "",
-      rows: metricRows,
-    };
+    return { month, rows: metricRows };
   }
 
   async getStatement(type: StatementType, range: ReportRange): Promise<FinancialStatementData> {

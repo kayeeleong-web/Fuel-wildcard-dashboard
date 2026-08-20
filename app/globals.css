@@ -1092,32 +1092,48 @@ thead th.pr-month-historical { background: #3a3a3d; }
 .customer-driver-grid .pr-input-month:focus {
   background: #fff; border-color: var(--blue); box-shadow: none;
 }
-/* 2026-08-19: each customer now contributes two rows (# of Campaigns, # of Meetings) —
-   a light bottom border after the second row separates one customer's pair from the
-   next without adding another divider row per customer. The metric label ("# of
-   Campaigns"/"# of Meetings") reads as a muted sub-label, not a second customer name. */
-.customer-driver-grid tr.driver-pair-last td { border-bottom: 1px solid var(--border); }
+/* 2026-08-19: each customer now contributes two rows (# of Campaigns, # of Meetings).
+   2026-08-20: the extra dark bottom-border-after-pair rule is gone — every cell now
+   already gets a full blue gridline on every side (see below), so a customer pair's
+   boundary is just the grid itself; a second, different-colored border here would
+   only muddy that. The metric label ("# of Campaigns"/"# of Meetings") still reads as
+   a muted sub-label, not a second customer name. */
 .driver-metric-label { color: var(--muted); font-size: 11.5px; }
 
 /* Shade BOTH rows of one customer the same, alternating customer-to-customer — see the
    dataRows comment in CustomerPanel.jsx for why (default per-row striping split a pair
    across two shades, so the eye couldn't tell the Meetings row belonged with the
    Campaigns row above it). Extra ancestor classes here outrank the generic
-   `.payroll-table tbody tr:not(...):nth-child(even) td.pr-frozen` rule this overrides. */
+   `.payroll-table tbody tr:not(...):nth-child(even) td.pr-frozen` rule this overrides.
+   2026-08-20 (Kayee: "the gray box kinda blended into the background... why the gray
+   and white thing so weird" — the shading WAS already 2-rows-per-customer in the code,
+   but with no gridlines at all between cells, a grey pair read as a loose, disconnected
+   blob rather than a clearly-bounded 2-row block): lightened both tones so neither
+   reads as "blended into the page background," and added real blue gridlines below
+   (every cell bordered on every side, like an actual spreadsheet) so each pair's
+   boundary is the grid itself, not just a background-color guess. */
 .customer-driver-grid .payroll-table tbody tr.driver-pair-even td,
 .customer-driver-grid .payroll-table tbody tr.driver-pair-even td.pr-frozen {
-  background: var(--panel);
+  background: #fff;
 }
 .customer-driver-grid .payroll-table tbody tr.driver-pair-odd td,
 .customer-driver-grid .payroll-table tbody tr.driver-pair-odd td.pr-frozen {
-  background: #F0F2F4;
+  background: #EAF7FC;
 }
 
 /* Kayee, 2026-08-19: "no need to have spacing like this... it's like a spreadsheet...
    stick to one another" — the default Payroll-table row padding read as loose gaps
    around these small count/price inputs. Tighter, spreadsheet-density padding scoped to
-   just this table. */
-.customer-driver-grid .payroll-table tbody td { padding: 3px 10px; }
+   just this table.
+   2026-08-20: "let's do blue gridline and then no gap in between... the boxes or cells
+   are stuck to each other" — table already has border-collapse:collapse (no double
+   borders, cells already touch structurally), what was missing was any visible line
+   AT ALL between cells; a real 1px blue border on every side of every cell is the
+   actual "spreadsheet" look she's asking for, not just tight padding. */
+.customer-driver-grid .payroll-table tbody td {
+  padding: 3px 10px; border: 1px solid rgba(17,179,231,.35);
+}
+.customer-driver-grid .payroll-table tbody td.pr-frozen { border: 1px solid rgba(17,179,231,.35); }
 
 /* Kayee, 2026-08-19 (arrow from Summary down to the Current & Pipeline grid): "move
    this here" — join the Summary card and the grid right below it into one continuous
