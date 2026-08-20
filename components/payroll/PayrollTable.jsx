@@ -74,7 +74,7 @@ export function PayrollTable({
               {frozenColumns.map((col, i) => (
                 <th
                   key={col.key}
-                  className="pr-frozen pr-frozen-head"
+                  className={`pr-frozen pr-frozen-head pr-frozen-col-${col.key}${i === frozenColumns.length - 1 ? ' pr-frozen-last' : ''}`}
                   style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
                 >
                   {col.label}
@@ -97,7 +97,7 @@ export function PayrollTable({
                 {frozenColumns.map((col, i) => (
                   <td
                     key={col.key}
-                    className="pr-frozen"
+                    className={`pr-frozen pr-frozen-col-${col.key}${i === frozenColumns.length - 1 ? ' pr-frozen-last' : ''}`}
                     style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
                   >
                     {totalRow.cells[col.key]}
@@ -201,7 +201,7 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso,
         // sub-sections, which don't exist anywhere else in this app.
         <tr className={`section${group.rowModifier ? ` ${group.rowModifier}` : ''}`}>
           <td
-            className="pr-frozen pr-frozen-section"
+            className="pr-frozen pr-frozen-section pr-frozen-last"
             colSpan={frozenColumns.length}
             style={{ width: offsets.totalWidth, left: 0 }}
           >
@@ -227,7 +227,7 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso,
           {frozenColumns.map((col, i) => (
             <td
               key={col.key}
-              className="pr-frozen"
+              className={`pr-frozen pr-frozen-col-${col.key}${i === frozenColumns.length - 1 ? ' pr-frozen-last' : ''}`}
               style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
             >
               {row.cells[col.key]}

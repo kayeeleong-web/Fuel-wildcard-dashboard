@@ -789,12 +789,20 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .assump-cost-schedule-toggle:hover { background: rgba(17,179,231,.2); }
 .assump-cost-schedule-toggle.has-schedule { background: var(--blue); color: #fff; border-color: var(--blue); }
 
-/* Lets the Non-Headcount Costs card (the taller of the sidebar's two cards) grow to
-   fill whatever extra height align-items:stretch above gives .reports-sidebar, with
-   its own table scrolling internally — the Revenue Assumptions card above it keeps
-   its natural content height instead of also stretching. */
-.reports-sidebar .payroll-card:last-of-type { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.reports-sidebar .payroll-card:last-of-type .payroll-table-wrap { flex: 1 1 auto; min-height: 0; max-height: none; }
+/* 2026-08-20 FIX (Kayee: "what happen here it's broken. like it got cut off") — this
+   used to make the LAST card (Non-Headcount Cost - OpEx) flex-grow to fill leftover
+   height + scroll its own table internally, back when .reports-sidebar was a plain
+   stretched flex column matching the P&L table's full height (no cap of its own).
+   Now that .reports-sidebar has its OWN max-height + overflow-y:auto (the sticky-
+   sidebar fix, same date, right above in this file), that combination is doubly
+   bounded: a flex:1 1 auto child with max-height:none inside an ALREADY height-capped,
+   scrolling flex parent computes a broken/near-zero height in some browsers instead of
+   just growing to its natural content size — which is exactly the "cut off after 1
+   row" look. The outer sidebar scrollbar is now the only scroll region that should
+   exist here; every card renders at its natural height and the sidebar scrolls past
+   whichever ones don't fit, same as any normal stacked list. */
+.reports-sidebar .payroll-card:last-of-type { flex: 0 0 auto; }
+.reports-sidebar .payroll-card:last-of-type .payroll-table-wrap { max-height: none; overflow: visible; }
 
 /* P&L line items, tightened the same notch as the sidebar's tables while this merged
    view is open (2026-08-07) — scoped to .reports-with-sidebar so the plain CF/BS
@@ -995,6 +1003,17 @@ tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0
 thead .pr-frozen { z-index: 5; }
 .pr-frozen-section { z-index: 3; }
 
+/* Divider between the frozen leading columns and the scrollable month columns
+   (2026-08-20, Kayee: "add a line here" — pointing at the Total/frozen block
+   boundary on the Customer Cash Flow waterfall). Applied to the LAST frozen
+   cell in every row (marked pr-frozen-last in PayrollTable.jsx) via an inset
+   box-shadow rather than a real border, so it doesn't change any of the fixed
+   pixel widths the sticky-offset math above depends on. Two color variants:
+   the header row has a black background (needs a light line), every body row
+   has a white/panel background (needs a dark line). */
+.pr-frozen-last { box-shadow: inset -2px 0 0 rgba(17, 24, 39, 0.28); }
+thead .pr-frozen-last { box-shadow: inset -2px 0 0 rgba(255, 255, 255, 0.35); }
+
 /* A frozen-column label longer than its fixed width (e.g. "Cost Per Campaign (COGS,
    feeds next month)") used to visually bleed into the first month column instead of
    wrapping — table cells don't clip overflowing content by default, and the generic
@@ -1083,57 +1102,55 @@ thead th.pr-month-historical { background: #3a3a3d; }
    "I dont like the input box bubble... more simple like a spreadsheet... reduce the
    height also it's a little too wide." Scoped to .customer-driver-grid (set via
    PayrollTable's className prop) so the blue rounded-pill .pr-input everywhere else
-   (Payroll, P&L sidebar) is untouched. Flat cell, faint gray gridline instead of a
-   pill background/border, shorter and narrower than the default .pr-input-month. */
+   (Payroll, P&L sidebar) is untouched.
+   2026-08-20 (Kayee: "no need to put another grey box inside... the blue grid is an
+   indicator or editable cells") — this used to give the <input> itself its own faint
+   border on top of the cell's blue gridline border below, reading as a box-inside-a-box.
+   The input is now fully border/background-less; the surrounding <td>'s blue border
+   (see the pr-frozen-col-price / pr-month-cell rule further down) is the ONLY visual
+   box, and it doubles as the "this cell is editable" signal. */
 .customer-driver-grid .pr-input-month {
   width: 100%; padding: 2px 5px; font-size: 11.5px; line-height: 1.3;
-  background: transparent; border: 1px solid var(--border-soft); border-radius: 0;
+  background: transparent; border: none; border-radius: 0;
 }
 .customer-driver-grid .pr-input-month:focus {
-  background: #fff; border-color: var(--blue); box-shadow: none;
+  background: #fff; box-shadow: inset 0 0 0 1px var(--blue);
 }
-/* 2026-08-19: each customer now contributes two rows (# of Campaigns, # of Meetings).
-   2026-08-20: the extra dark bottom-border-after-pair rule is gone — every cell now
-   already gets a full blue gridline on every side (see below), so a customer pair's
-   boundary is just the grid itself; a second, different-colored border here would
-   only muddy that. The metric label ("# of Campaigns"/"# of Meetings") still reads as
-   a muted sub-label, not a second customer name. */
 .driver-metric-label { color: var(--muted); font-size: 11.5px; }
 
-/* Shade BOTH rows of one customer the same, alternating customer-to-customer — see the
-   dataRows comment in CustomerPanel.jsx for why (default per-row striping split a pair
-   across two shades, so the eye couldn't tell the Meetings row belonged with the
-   Campaigns row above it). Extra ancestor classes here outrank the generic
-   `.payroll-table tbody tr:not(...):nth-child(even) td.pr-frozen` rule this overrides.
-   2026-08-20 (Kayee: "the gray box kinda blended into the background... why the gray
-   and white thing so weird" — the shading WAS already 2-rows-per-customer in the code,
-   but with no gridlines at all between cells, a grey pair read as a loose, disconnected
-   blob rather than a clearly-bounded 2-row block): lightened both tones so neither
-   reads as "blended into the page background," and added real blue gridlines below
-   (every cell bordered on every side, like an actual spreadsheet) so each pair's
-   boundary is the grid itself, not just a background-color guess. */
+/* Shade BOTH rows of one customer the same, alternating customer-to-customer plain
+   grey/white — no tint (2026-08-20, Kayee: "i think it's confusing the alternative
+   color... just do grey and white"; supersedes the 2026-08-19/-20 white/light-cyan
+   version, which read as fighting with the blue editable-cell grid below). Extra
+   ancestor classes here outrank the generic
+   `.payroll-table tbody tr:not(...):nth-child(even) td.pr-frozen` rule this overrides. */
 .customer-driver-grid .payroll-table tbody tr.driver-pair-even td,
 .customer-driver-grid .payroll-table tbody tr.driver-pair-even td.pr-frozen {
   background: #fff;
 }
 .customer-driver-grid .payroll-table tbody tr.driver-pair-odd td,
 .customer-driver-grid .payroll-table tbody tr.driver-pair-odd td.pr-frozen {
-  background: #EAF7FC;
+  background: var(--panel-2);
 }
 
 /* Kayee, 2026-08-19: "no need to have spacing like this... it's like a spreadsheet...
    stick to one another" — the default Payroll-table row padding read as loose gaps
    around these small count/price inputs. Tighter, spreadsheet-density padding scoped to
-   just this table.
-   2026-08-20: "let's do blue gridline and then no gap in between... the boxes or cells
-   are stuck to each other" — table already has border-collapse:collapse (no double
-   borders, cells already touch structurally), what was missing was any visible line
-   AT ALL between cells; a real 1px blue border on every side of every cell is the
-   actual "spreadsheet" look she's asking for, not just tight padding. */
-.customer-driver-grid .payroll-table tbody td {
-  padding: 3px 10px; border: 1px solid rgba(17,179,231,.35);
+   just this table, no border by default. */
+.customer-driver-grid .payroll-table tbody td { padding: 3px 10px; }
+
+/* 2026-08-20 (Kayee: "the blue grid is an indicator or editable cells... you will put
+   it in price and also the monthly amount. because those are the area you can input
+   numbers not the current customer [name/driver label]") — the blue spreadsheet-style
+   gridline now marks ONLY the actually-editable cells (Price column + the monthly
+   count inputs), not the read-only Customer/Driver-label columns, which stay plain
+   with no border at all. pr-frozen-col-price is the Price column specifically (added
+   in PayrollTable.jsx alongside the existing pr-frozen-col-name/pr-frozen-col-metric,
+   which intentionally get NO rule here). */
+.customer-driver-grid .payroll-table tbody td.pr-frozen-col-price,
+.customer-driver-grid .payroll-table tbody td.pr-month-cell {
+  border: 1px solid rgba(17,179,231,.35);
 }
-.customer-driver-grid .payroll-table tbody td.pr-frozen { border: 1px solid rgba(17,179,231,.35); }
 
 /* Kayee, 2026-08-19 (arrow from Summary down to the Current & Pipeline grid): "move
    this here" — join the Summary card and the grid right below it into one continuous

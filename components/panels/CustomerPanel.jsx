@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { PageHead } from '../ui/PageHead';
 import { buildCustomerWaterfall } from '../../lib/data/customerData';
 import { MonthInput, PayrollTable, TextInput } from '../payroll/PayrollTable';
 import { AssumptionField } from '../payroll/AssumptionsBar';
@@ -302,7 +301,12 @@ function CombinedDriverGrid({ title, subtitle, rows, months, isEditableMonth, to
         id: `${r.key}__meetings`,
         className: `driver-pair-last ${zebra}`,
         cells: {
-          name: '',
+          // 2026-08-20 (Kayee: "you can repeat the customer name in both row so next
+          // for # of campaign you will have fermat as well as # of meetings next to it
+          // is fermat") — reverses the 2026-08-19 "blank on the second row" decision;
+          // with plain alternating grey/white banding replacing the old per-row tint,
+          // a repeated name is what actually ties the pair together now.
+          name: r.nameCell ?? r.name,
           metric: <span className="driver-metric-label"># of Meetings</span>,
           price: <MonthInput value={getPrice('meetings', r.key)} onCommit={(n) => onSetPrice('meetings', r.key, n)} />,
         },
@@ -808,11 +812,13 @@ export function CustomerPanel({ glCash, glAccrued }) {
 
   return (
     <>
-      <PageHead title="Customer Cash Flow" />
+      {/* No PageHead here (2026-08-20, Kayee: "waste of space") — the "Customer"
+          sub-tab button directly above already labels this view, so a second
+          "Customer Cash Flow" title right under it was pure redundancy. */}
 
       {/* Wide wrapper — the frozen leading columns eat most of the normal page width,
           so this section breaks out wider, exactly like the Payroll tab (.page-wide
-          in globals.css). PageHead above stays at the normal page width. */}
+          in globals.css). */}
       <div className="page-wide">
         {/* Each of the 2 sections is a CollapsibleSection card — the exact same
             .pr-outer-section "outer folder" shell the Payroll tab uses for Existing /
