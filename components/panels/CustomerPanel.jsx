@@ -660,12 +660,18 @@ export function CustomerPanel({ glCash, glAccrued }) {
   const sortedPlannedDriverRows = alphabetical(plannedDriverRows);
 
   const allCashInRows = [
-    ...cashWaterfall.customers.map((c) => ({
-      key: `gl:${c.name}`,
-      name: c.name,
-      kind: 'Current',
-      glByMonth: c.byMonth,
-    })),
+    // Hidden GL customers excluded here too (2026-08-20) so hiding a row also drops
+    // its forecast counts from the Cash Coming In summary and the CF feed — otherwise
+    // a hidden row would keep silently adding invisible cash to the totals. Its saved
+    // counts aren't deleted, so restoring the row brings its numbers straight back.
+    ...cashWaterfall.customers
+      .filter((c) => !hiddenGlCustomers.includes(c.name))
+      .map((c) => ({
+        key: `gl:${c.name}`,
+        name: c.name,
+        kind: 'Current',
+        glByMonth: c.byMonth,
+      })),
     ...(drivers?.manualCustomers || []).map((c) => ({
       key: `manual:${c.id}`,
       name: c.name || 'Untitled',
@@ -1010,11 +1016,77 @@ export function CustomerPanel({ glCash, glAccrued }) {
         >
           {driversHydrated && drivers && hydrated && planned ? (
             <>
-              {/* 1 — SUMMARY STRIP. Price assumptions — same AssumptionField strip as
-                  the Payroll tab's assumptions bar. No explanatory paragraph anymore
-                  (2026-08-19, Kayee: "the text is wasting space with the explanation,
-                  just remove it") — the field labels themselves already say who the
-                  default is for. */}
+              {/* SUMMARY — one place at the top for the totals (2026-08-19, Kayee:
+                  "there are too many sections... just have one at the top for summary.
+                  like summary total of both current and planned customer and then
+                  below by [tier] like total of current customer and then followed by
+                  planned customer"). Three stacked TOTAL-style rows, nothing else.
+                  2026-08-20 (Kayee: "give a space between summary and projection...
+                  it need a space") — the 2026-08-19 .customer-driver-group wrapper
+                  that joined Summary + grid into one gapless block is gone; they're
+                  two separate cards again with the tab's normal 20px spacer. */}
+              <PayrollTable
+                title="Cash Coming In — Summary"
+                subtitle="TOTAL (current + planned), then each broken out — feeds the Cash Flow Projection"
+                tintForecast={false}
+                frozenColumns={SUMMARY_FROZEN_COLUMNS}
+                months={planMonths}
+                todayIso={todayIso}
+                rowGroups={[{ key: 'summary', label: null, rows: summaryRows }]}
+              />
+
+              <div style={{ height: 20 }} />
+
+              {/* ONE combined grid for current, pipeline, AND planned customers
+                  (2026-08-19 consolidation, Kayee: "we dont need a separate section
+                  for plan customer, just put it in the Current & Pipeline
+                  section... rename it to cash in projection or something... they can
+                  input the # of campaign and meeting same as the current and
+                  pipeline and then just consolidate it"). Planned rows sit at the
+                  bottom of the same table, tagged "Planned" next to their name, and
+                  are added with their own button so it's still clear which kind of
+                  row you're creating — but priced/driven identically to every other
+                  row here (campaigns × price + meetings × price). */}
+              <CombinedDriverGrid
+                title="Cash In Projection — Campaigns & Meetings"
+                subtitle="Each customer priced individually, alphabetically · counts editable Jan 2026 onward · Current & Pipeline from the live GL Cash roster, plus rows you add · Planned customers in their own group below"
+                currentRows={sortedCurrentDriverRows}
+                plannedRows={sortedPlannedDriverRows}
+                months={planMonths}
+                isEditableMonth={isDriverEditableMonth}
+                todayIso={todayIso}
+                getCount={getDriverCount}
+                onSetCount={setDriverCount}
+                getPrice={getCustomerPrice}
+                onSetPrice={setCustomerPrice}
+                headActions={
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {hiddenGlCustomers.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn"
+                        title={`Bring back: ${hiddenGlCustomers.join(', ')}`}
+                        onClick={restoreHiddenGlCustomers}
+                      >
+                        Restore hidden ({hiddenGlCustomers.length})
+                      </button>
+                    )}
+                    <button type="button" className="btn" onClick={addManualCustomer}>
+                      + Add Customer Row
+                    </button>
+                    <button type="button" className="btn" onClick={addPlannedCustomer}>
+                      + Add Planned Customer
+                    </button>
+                  </div>
+                }
+              />
+
+              <div style={{ height: 20 }} />
+
+              {/* Price assumptions for PLANNED customers — moved to the very bottom
+                  (2026-08-20, Kayee: "move this to the very bottom"; was the first
+                  thing in the section). Same AssumptionField strip as the Payroll
+                  tab's assumptions bar. */}
               <div className="payroll-assumptions customer-assumptions">
                 <AssumptionField
                   label="Planned Customer Price per Campaign"
@@ -1027,62 +1099,6 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   value={drivers.meetingPrice}
                   suffix="$"
                   onCommit={(v) => setDrivers({ ...drivers, meetingPrice: v })}
-                />
-              </div>
-
-              {/* SUMMARY — one place at the top for the totals (2026-08-19, Kayee:
-                  "there are too many sections... just have one at the top for summary.
-                  like summary total of both current and planned customer and then
-                  below by [tier] like total of current customer and then followed by
-                  planned customer"). Three stacked TOTAL-style rows, nothing else. */}
-              {/* Summary + the combined grid render as ONE continuous block
-                  (2026-08-19, Kayee: drew an arrow from the Summary down to this grid,
-                  "move this here" → attach them with no gap instead of two separate
-                  cards) — .customer-driver-group in globals.css zeroes the gap between
-                  just these two and joins their corners into a single visual card. */}
-              <div className="customer-driver-group">
-                <PayrollTable
-                  title="Cash Coming In — Summary"
-                  subtitle="TOTAL (current + planned), then each broken out — feeds the Cash Flow Projection"
-                  tintForecast={false}
-                  frozenColumns={SUMMARY_FROZEN_COLUMNS}
-                  months={planMonths}
-                  todayIso={todayIso}
-                  rowGroups={[{ key: 'summary', label: null, rows: summaryRows }]}
-                />
-
-                {/* ONE combined grid for current, pipeline, AND planned customers
-                    (2026-08-19 consolidation, Kayee: "we dont need a separate section
-                    for plan customer, just put it in the Current & Pipeline
-                    section... rename it to cash in projection or something... they can
-                    input the # of campaign and meeting same as the current and
-                    pipeline and then just consolidate it"). Planned rows sit at the
-                    bottom of the same table, tagged "Planned" next to their name, and
-                    are added with their own button so it's still clear which kind of
-                    row you're creating — but priced/driven identically to every other
-                    row here (campaigns × price + meetings × price). */}
-                <CombinedDriverGrid
-                  title="Cash In Projection — Campaigns & Meetings"
-                  subtitle="Each customer priced individually, alphabetically · counts editable Jan 2026 onward · Current & Pipeline from the live GL Cash roster, plus rows you add · Planned customers in their own group below"
-                  currentRows={sortedCurrentDriverRows}
-                  plannedRows={sortedPlannedDriverRows}
-                  months={planMonths}
-                  isEditableMonth={isDriverEditableMonth}
-                  todayIso={todayIso}
-                  getCount={getDriverCount}
-                  onSetCount={setDriverCount}
-                  getPrice={getCustomerPrice}
-                  onSetPrice={setCustomerPrice}
-                  headActions={
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" className="btn" onClick={addManualCustomer}>
-                        + Add Customer Row
-                      </button>
-                      <button type="button" className="btn" onClick={addPlannedCustomer}>
-                        + Add Planned Customer
-                      </button>
-                    </div>
-                  }
                 />
               </div>
             </>

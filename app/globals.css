@@ -994,6 +994,14 @@ tbody tr.total td.pr-fcst { background: var(--black); box-shadow: inset 0 -2px 0
 }
 .payroll-chevron { display: inline-block; font-size: 11px; color: var(--on-black-muted); transition: transform .15s ease; }
 .payroll-chevron.open { transform: rotate(90deg); color: #fff; }
+
+/* P&L Assumptions sidebar card headers only (2026-08-20, Kayee: "the black is a
+   little too much, can you make it a dark grey?") — with all four cards now
+   default-collapsed, the sidebar reads as a stack of solid black bars; a dark grey
+   softens that without changing the header chrome anywhere else (Payroll's cards,
+   the Customer tab, etc. keep the standard --black head). NOT a design-token change —
+   scoped strictly to .reports-sidebar. */
+.reports-sidebar .payroll-card-head { background: #3F4247; }
 .payroll-card-sub { font-size: 11.5px; color: var(--on-black-muted); font-family: var(--font-num); }
 .payroll-card-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
