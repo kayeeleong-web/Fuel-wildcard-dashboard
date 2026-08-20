@@ -159,6 +159,7 @@ export function KPIReportPanel({ kpiData }) {
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
             aria-label="Select month"
+            autoComplete="off"
           >
             {monthOptions.map((m) => (
               <option key={m} value={m}>{formatMonthLabel(m)}</option>
