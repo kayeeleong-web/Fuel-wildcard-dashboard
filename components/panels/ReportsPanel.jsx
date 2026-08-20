@@ -1524,9 +1524,7 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
   const forecastMonths = months.slice(lastActualIndex + 1);
   if (forecastMonths.length === 0) return rows;
   const forecastSet = new Set(forecastMonths);
-  const section = 'CASH PROJECTION';
 
-  const inflowValues = {};
   const netValues = {};
   for (const iso of forecastMonths) {
     // Same source/fallback as withCFRevenueInflowRows above — Customer tab's live
@@ -1583,11 +1581,15 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
     return next;
   })();
 
-  return [
-    ...rowsWithRollforward,
-    { key: 'cfproj_inflow', label: 'Customer Cash Inflow', section, isTotal: false, values: inflowValues },
-    { key: 'cfproj_net', label: 'Net Projected Cash Flow', section, isTotal: true, values: netValues },
-  ];
+  // The appended "CASH PROJECTION" section (Customer Cash Inflow + Net Projected
+  // Cash Flow rows) was REMOVED 2026-08-20 (Kayee: "this is confusing. can you
+  // remove" — Customer Cash Inflow read as a misplaced Financing-section line, when
+  // customer receipts are Operating activity that the statement's own Transaction/
+  // Subscription Revenue rows already show, and Net Projected Cash Flow duplicated
+  // the Net Change in Cash rollforward row). The inflow/net math above still runs —
+  // it's what drives the Beginning/Net Change/Ending Cash rollforward, which is now
+  // the ONLY place the projected net appears.
+  return rowsWithRollforward;
 }
 
 /** Generic fallback so every fine-grained section Total (e.g. "Total Meals &
@@ -2046,12 +2048,20 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   const sectionCategory = sectionUpper === 'REVENUE' ? null : sectionUpper === 'COGS' ? 'CoGS' : 'OpEx';
   const dropMimeType = sectionCategory ? `application/x-cost-item-${sectionCategory.toLowerCase()}` : null;
 
+  // Skip the section header band entirely when a section contains ONLY Total rows
+  // (2026-08-20, Kayee, pointing at CF's "CASH IN" band sitting alone above "Total
+  // Cash In": "is this row needed? if not it's redundant. remove") — a band with no
+  // line items under it to collapse/label is pure noise; the Total row it introduces
+  // is already self-labeling ("Total Cash In").
+  const hasLineItems = rows.some((r) => !r.isTotal);
+
   return (
     <>
       {/* Two cells, not one colSpan cell — position:sticky on a <td> with colspan doesn't
           reliably stick in table layout (a well-known cross-browser limitation), which
           was letting the section band's label scroll away with the rest of the row. A
           real single-column first cell sticks the same way a normal data row's does. */}
+      {hasLineItems && (
       <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
         <td>
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
@@ -2059,6 +2069,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         </td>
         <td colSpan={months.length}></td>
       </tr>
+      )}
       {/* "+ Add account" now renders right BEFORE this section's own Total row
           (2026-08-10 fix, Kayee: "i click add account above travel thinking that it
           will get added to travel but then it was added to the one above") — it used
@@ -2072,13 +2083,21 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           Total, matching where a newly added account actually lands
           (withManualAccountRows already inserts right before the section's Total). */}
       {(() => {
-        const nonTotalRows = rows.filter((r) => !r.isTotal);
+        // Margin-% rows render AFTER the section's Total row, not before (2026-08-20,
+        // Kayee: "move grpm% between gross profit and salaries") — PROFITABILITY's
+        // "Gross Profit Margin %" used to land above "Gross Profit" purely because of
+        // the non-Total-rows-first split below, which read backwards: the % is derived
+        // FROM the total, so it belongs directly under it.
+        const isMarginRow = (r) => /margin\s*%/i.test(String(r.label));
+        const nonTotalRows = rows.filter((r) => !r.isTotal && !isMarginRow(r));
+        const marginRows = rows.filter((r) => !r.isTotal && isMarginRow(r));
         const totalRows = rows.filter((r) => r.isTotal);
         return (
           <>
             {!collapsed && nonTotalRows.map(renderRow)}
             {!collapsed && onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
             {totalRows.map(renderRow)}
+            {!collapsed && marginRows.map(renderRow)}
           </>
         );
       })()}
