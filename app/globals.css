@@ -1149,6 +1149,19 @@ thead th.pr-month-historical { background: #3a3a3d; }
 .customer-driver-grid .pr-input-month:focus {
   background: #fff; box-shadow: inset 0 0 0 1px var(--blue);
 }
+/* Customer-name inputs on manual/planned rows get the same flat treatment (2026-08-20,
+   Kayee: "the blue input box is making the height bigger... so uneven. maybe dont use
+   boxes, make it like a cell like google sheet") — the default blue-pill .pr-input has
+   its own padding/border, so rows containing one sat visibly taller than the plain-text
+   GL rows around them. Flat and border-free, the input's row is the exact same height
+   as a text row; focusing shows the same thin blue inset line as the count cells. */
+.customer-driver-grid td.pr-frozen input.pr-input {
+  padding: 2px 5px; font-size: 12px; line-height: 1.3;
+  background: transparent; border: none; border-radius: 0;
+}
+.customer-driver-grid td.pr-frozen input.pr-input:focus {
+  background: #fff; box-shadow: inset 0 0 0 1px var(--blue); outline: none;
+}
 .driver-metric-label { color: var(--muted); font-size: 11.5px; }
 
 /* Shade BOTH rows of one customer the same, alternating customer-to-customer plain
