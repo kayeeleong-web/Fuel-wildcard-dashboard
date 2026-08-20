@@ -503,7 +503,17 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    shrink/grow with the window instead of staying "3cm less"). 1cm = 37.8px at the
    standard 96dpi CSS reference. .reports-main is flex:1 1 0%, so it automatically
    reclaims every pixel given up here — no separate change needed on the table side. */
-.reports-sidebar { flex: 0 0 calc(34% - 113px); max-width: calc(34% - 113px); min-width: 300px; display: flex; flex-direction: column; gap: 18px; }
+/* Sticky (2026-08-20, Kayee: "make the hamburger follow my scroll... what if I need it
+   when I'm at the bottom") — the sidebar/rail used to be a plain stretched flex item,
+   as tall as the whole (often page-length) table but with its real content anchored to
+   its own top, so that content scrolled out of view the moment the page scrolled past
+   it. Sticky pins it at a fixed viewport offset (just below the black topbar + pill
+   tab nav) for as long as its own stretched box is still in view, releasing naturally
+   once its bottom edge (same bottom as the table) scrolls past — so it's reachable
+   from anywhere in the table, not just the very top. The card list inside can still
+   exceed viewport height on its own (long cost-item lists), so it gets its own
+   max-height + scroll rather than pushing the sticky box taller than the viewport. */
+.reports-sidebar { flex: 0 0 calc(34% - 113px); max-width: calc(34% - 113px); min-width: 300px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 140px; align-self: flex-start; max-height: calc(100vh - 156px); overflow-y: auto; }
 /* Cash Flow Assumptions only (2026-08-19, Kayee: "make the cash flow assumption
    narrowing it's a little too wide") — narrower than the shared .reports-sidebar width
    the P&L Assumptions sidebar still uses, since CF's controls now need far less room
@@ -512,6 +522,9 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .reports-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .reports-with-sidebar.is-collapsed .reports-sidebar-rail { flex: 0 0 auto; }
 .reports-sidebar-rail { display: flex; align-self: stretch; }
+/* Collapsed rail follows the same sticky rule as the expanded sidebar above — same
+   fix, same reason (2026-08-20). */
+.reports-sidebar-toggle-rail { position: sticky; top: 140px; }
 
 /* Collapsed rail toggle (2026-08-07, Kayee: "make hamburger more obvious because user
    might miss it") — full height of the row (align-self:stretch above) so it reads as
@@ -599,10 +612,12 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    between") rather than Reports' 34%/340px-min sidebar — Payroll's sidebar only ever
    holds the 4 short rate fields (no wide cost-item table like Reports has), so the
    same wide column just left a big gap between each label and its small input box. */
-.payroll-sidebar { flex: 0 0 260px; max-width: 260px; min-width: 220px; display: flex; flex-direction: column; gap: 18px; }
+/* Sticky, same fix/reason as .reports-sidebar above (2026-08-20). */
+.payroll-sidebar { flex: 0 0 260px; max-width: 260px; min-width: 220px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 140px; align-self: flex-start; max-height: calc(100vh - 156px); overflow-y: auto; }
 .payroll-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .payroll-with-sidebar.is-collapsed .payroll-sidebar-rail { flex: 0 0 auto; }
 .payroll-sidebar-rail { display: flex; align-self: stretch; }
+.payroll-sidebar-toggle-rail { position: sticky; top: 140px; }
 
 .payroll-sidebar-toggle-rail {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px;
