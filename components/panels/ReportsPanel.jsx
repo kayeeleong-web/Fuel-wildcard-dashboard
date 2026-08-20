@@ -371,7 +371,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
           someone sees it; this makes explicit what's a real input vs. a computed or
           booked figure. P&L-only, since CF/BS have no editable cells. Custom and
           projection sub-tabs are other panels entirely now (2026-08-17). */}
-      {mode === 'actual' && reportType === 'PL' && (
+      {/* 2026-08-20 fix (Kayee: "we shouldnt have this text anymore since this only
+          apply to the projection section") — this legend explains editable-input vs
+          formula/actual cell styling, but the Reports (actual) tab never has editable
+          cells at all ("in report it will only show actual" — no driver rows, no
+          Assumptions-driven values). Only the Projection tab's P&L has real editable
+          cells to explain; this was showing on the wrong one. */}
+      {mode === 'projection' && reportType === 'PL' && (
         <div className="report-legend">
           <span className="report-legend-item">
             <span className="report-legend-swatch report-legend-swatch-editable" />
@@ -1343,6 +1349,44 @@ function cfOutflowCell(account, timing, iso, forecastSet, accrualCtx, onSetTimin
   return { value, cell };
 }
 
+const CF_REVENUE_ROW_MATCH = {
+  'Transaction Revenue': 'transactionByMonth',
+  'Subscription Revenue': 'subscriptionByMonth',
+};
+
+/** Patches the CF sheet's own "Transaction Revenue" / "Subscription Revenue" rows for
+ *  forecast months from the Customer Cash Flow tab's live breakdown (2026-08-20,
+ *  Kayee: "you didn't bring inflow from customer into here transactional revenue is
+ *  the calculation with the # of meeting * price per meeting and the subscription is
+ *  the other. It needs to be link from the customer live... if I edit in customer it
+ *  will go into here"). Same matched-by-label, forecast-months-only, blank-not-$0
+ *  pattern as withCFExpenseCashOutflowRows right below — reads
+ *  customerInflowTotals.transactionByMonth/subscriptionByMonth (see
+ *  lib/cashflow/cashProjection.js + CustomerPanel.jsx for the write side). Runs BEFORE
+ *  withSectionTotalRollups so, once these two rows have real forecast numbers, CF's
+ *  own "Total Cash In from Operations" band (a same-section Total row that's currently
+ *  blank for forecast months) picks them up automatically, the same way COGS/OpEx
+ *  totals already do. Purely additive — a row this doesn't find a label match for is
+ *  left completely alone. */
+function withCFRevenueInflowRows(rows, months, lastActualIndex, cfProjection) {
+  const { customerInflowTotals } = cfProjection;
+  const forecastMonths = months.slice(lastActualIndex + 1);
+  if (forecastMonths.length === 0 || !customerInflowTotals) return rows;
+
+  return rows.map((row) => {
+    if (row.isTotal) return row;
+    const sourceKey = CF_REVENUE_ROW_MATCH[String(row.label ?? '').trim()];
+    if (!sourceKey) return row;
+    const byMonth = customerInflowTotals[sourceKey];
+    if (!byMonth) return row;
+    const values = { ...row.values };
+    for (const iso of forecastMonths) {
+      if (byMonth[iso] != null) values[iso] = Number(byMonth[iso]) || 0;
+    }
+    return { ...row, values };
+  });
+}
+
 function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjection) {
   const { expenseAccounts, timingByAccount, accrualCtx, onSetTiming } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
@@ -1374,7 +1418,15 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
         delete monthCells[iso];
       }
     }
-    return hasManualCell || row.monthCells ? { ...row, values, monthCells } : { ...row, values };
+    // `cfManualRow` flag (2026-08-20, Kayee: "when i add the manual input boxes the
+    // boxes make the height of the row taller. i want to keep it the [same] height as
+    // the other rows") — lets the <tr> rendering below apply the same compact-padding
+    // treatment already used for P&L's # of Campaigns/Meetings driver rows
+    // (tr.report-driver-row), instead of the MonthInput's normal (taller) size showing
+    // through unchanged.
+    return hasManualCell || row.monthCells
+      ? { ...row, values, monthCells, cfManualRow: hasManualCell || row.cfManualRow }
+      : { ...row, values };
   });
 
   const payrollAccount = expenseAccounts.cogsAccounts.find((a) => a.synthetic === 'payrollCogs');
@@ -1424,9 +1476,14 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
  *   - Customer Cash Inflow — the computed Cash Coming In monthly TOTAL from the
  *     Customer Cash Flow tab's Cash Inflow Projection section, read from localStorage
  *     (CUSTOMER_INFLOW_STORAGE_KEY — see CustomerPanel.jsx, which writes it on every
- *     input change). Blank (not $0) if that tab has never saved. Revenue-side wiring
- *     is deliberately untouched by the 2026-08-19 reshape (Kayee scoped it to "only
- *     cash out... all of the cogs and opex").
+ *     input change). Blank (not $0) if that tab has never saved. This still drives the
+ *     Beginning/Net Change/Ending Cash rollforward below unchanged. Revenue-side
+ *     wiring was scoped OUT of the 2026-08-19 reshape (Kayee: "only cash out... all of
+ *     the cogs and opex") but added back 2026-08-20 as its own row-level link —
+ *     withCFRevenueInflowRows (above withCFExpenseCashOutflowRows) now patches the CF
+ *     sheet's real "Transaction Revenue" / "Subscription Revenue" rows directly from
+ *     the same Customer tab data, split by stream, so this "Customer Cash Inflow"
+ *     summary line and those two real rows are always the same $ two different ways.
  *   - Net Projected Cash Flow — inflow − total COGS/OpEx cash out, kept as a Total
  *     band. Still computed by summing cashOutflowForMonth over every expense account
  *     (not by re-reading the displayed Total rows) — mathematically identical to the
@@ -1446,7 +1503,7 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
   const inflowValues = {};
   const netValues = {};
   for (const iso of forecastMonths) {
-    const inflow = customerInflowTotals ? Number(customerInflowTotals[iso]) || 0 : null;
+    const inflow = customerInflowTotals?.totalsByMonth ? Number(customerInflowTotals.totalsByMonth[iso]) || 0 : null;
     let outflow = 0;
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
       outflow += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);
@@ -1767,6 +1824,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     // Total bands, then append the summary section — each step guarded separately,
     // same isolation rule as the P&L pipeline above.
     try {
+      rows = withCFRevenueInflowRows(rows, months, lastActualIndex, cfProjection);
+    } catch (err) {
+      console.warn('Cash Flow revenue inflow projection failed:', err);
+    }
+    try {
       rows = withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjection);
     } catch (err) {
       console.warn('Cash Flow expense cash-outflow projection failed:', err);
@@ -2036,7 +2098,10 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         // add the $ anywhere.
         const isDropTarget = !!onLinkCostItem && !row.driver && !row.payrollHeadcount && !row.isPercent && !!sectionCategory;
         return (
-          <tr key={row.key} className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : undefined}>
+          <tr
+            key={row.key}
+            className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : row.cfManualRow ? 'cf-manual-row' : undefined}
+          >
             <td
               className={isDropTarget && dragOverKey === row.key ? 'report-cost-drop-target is-drag-over' : isDropTarget ? 'report-cost-drop-target' : undefined}
               onDragOver={

@@ -354,12 +354,12 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // own header (CollapsibleSection's headActions slot), same obvious placement as the
   // 2026-2028/Historical toggle elsewhere in the app.
   const [waterfallView, setWaterfallView] = useState('cash');
-  // Both sections start collapsed (2026-08-18, Kayee: "make the section in customer
-  // stay collapsed default when open the page") — the tab opens quiet, the user
-  // expands whichever section they actually want to work in.
+  // Both sections now start EXPANDED (2026-08-20, Kayee: "you can keep these two now
+  // expand by default") — reverses the 2026-08-18 collapsed-by-default decision now
+  // that the tab's contents are more settled.
   const [collapsedSections, setCollapsedSections] = useState({
-    current: true,
-    projection: true,
+    current: false,
+    projection: false,
   });
   const { rows: planned, setRows: setPlanned, hydrated } = usePlannedCustomers();
   const { state: drivers, setState: setDrivers, hydrated: driversHydrated } = useCustomerDrivers();
@@ -565,32 +565,58 @@ export function CustomerPanel({ glCash, glAccrued }) {
     ...(planned || []).map((r) => ({ key: `plan:${r.id}`, name: r.name || 'Untitled planned customer', kind: 'Planned' })),
   ];
 
-  /** Computed cash in for one customer key in one FORECAST month:
-   *  campaigns × that customer's campaign price + meetings × that customer's meeting
-   *  price (2026-08-19: per-customer rates, not one shared rate — see getCustomerPrice). */
+  /** Meeting $ for one customer key in one month: meetings × that customer's per-
+   *  meeting price — this IS "Transaction Revenue" (2026-08-20 breakdown, matching the
+   *  P&L projection's own "Transaction Revenue = # of Meetings × Per Meeting Rate"
+   *  naming, per Kayee: "transactional revenue is the calculation with the # of
+   *  meeting * price per meeting"). */
+  function meetingCashInFor(key, iso) {
+    return getDriverCount('meetings', key, iso) * getCustomerPrice('meetings', key);
+  }
+
+  /** Campaign $ for one customer key in one month: campaigns × that customer's
+   *  campaign price — this IS "Subscription Revenue" ("and the subscription is the
+   *  other [calculation]"), matching the P&L projection's "Subscription Revenue =
+   *  # of Campaigns × Upfront Rate". */
+  function campaignCashInFor(key, iso) {
+    return getDriverCount('campaigns', key, iso) * getCustomerPrice('campaigns', key);
+  }
+
+  /** Computed cash in for one customer key in one FORECAST month: the sum of the two
+   *  streams above (2026-08-19: per-customer rates, not one shared rate — see
+   *  getCustomerPrice). */
   function cashInFor(key, iso) {
-    return (
-      getDriverCount('campaigns', key, iso) * getCustomerPrice('campaigns', key) +
-      getDriverCount('meetings', key, iso) * getCustomerPrice('meetings', key)
-    );
+    return campaignCashInFor(key, iso) + meetingCashInFor(key, iso);
   }
 
   // CF PROJECTION FEED — the other half of the link documented in ReportsPanel.jsx.
   // Recomputed over the FULL horizon (not just the visible range toggle) so switching
   // the display range can never change what the CF projection reads. Forecast months
-  // only: actual months are real GL cash, already on the CF statement.
+  // only: actual months are real GL cash, already on the CF statement. As of
+  // 2026-08-20 this also splits the combined total into `transactionByMonth` (meeting
+  // $, across every current/pipeline/planned row) and `subscriptionByMonth` (campaign
+  // $) so the CF sheet's own "Transaction Revenue" / "Subscription Revenue" rows can
+  // show these live, not just one lump "Customer Cash Inflow" total.
   const inflowTotalsByMonth = useMemo(() => {
     if (!driversHydrated || !drivers) return null;
     const totals = {};
+    const transactionTotals = {};
+    const subscriptionTotals = {};
     for (const iso of monthsForRange('all')) {
       if (!isEditableMonth(iso)) continue;
       let sum = 0;
+      let meetingSum = 0;
+      let campaignSum = 0;
       for (const row of allCashInRows) {
-        sum += cashInFor(row.key, iso);
+        meetingSum += meetingCashInFor(row.key, iso);
+        campaignSum += campaignCashInFor(row.key, iso);
       }
+      sum = meetingSum + campaignSum;
       totals[iso] = sum;
+      transactionTotals[iso] = meetingSum;
+      subscriptionTotals[iso] = campaignSum;
     }
-    return totals;
+    return { totalsByMonth: totals, transactionByMonth: transactionTotals, subscriptionByMonth: subscriptionTotals };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drivers, driversHydrated, planned, cashWaterfall, glLastIso]);
 
@@ -599,7 +625,13 @@ export function CustomerPanel({ glCash, glAccrued }) {
     try {
       window.localStorage.setItem(
         CUSTOMER_INFLOW_STORAGE_KEY,
-        JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), totalsByMonth: inflowTotalsByMonth })
+        JSON.stringify({
+          version: 2,
+          updatedAt: new Date().toISOString(),
+          totalsByMonth: inflowTotalsByMonth.totalsByMonth,
+          transactionByMonth: inflowTotalsByMonth.transactionByMonth,
+          subscriptionByMonth: inflowTotalsByMonth.subscriptionByMonth,
+        })
       );
     } catch {
       // Same private-browsing/storage-full caveat as the hooks above — the CF
@@ -667,11 +699,12 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // medium grey and then total current and total planned is light grey so that it's
   // not all black." The card header + month-header row stay the shared black chrome;
   // only these row backgrounds change.
-  function buildSubtotalRow(label, rows, tone) {
+  function buildSubtotalRow(label, rows, tone, valueFor = amountFor) {
     // 2026-08-19, Kayee: "the total current and total planned numbers and the entire
     // row the font doesn't need to be bold" — only the grand TOTAL (current+planned)
-    // row stays bold; the Current-only / Planned-only rows below it render as plain
-    // weight text (still their own light-grey row tone, just not bold).
+    // row stays bold; every row below it (including the new Meeting/Campaigns Cash In
+    // breakdown lines, 2026-08-20) renders as plain weight text (still its own light-
+    // grey row tone, just not bold).
     const bold = tone === 'grand';
     const wrap = (node) => (bold ? <b>{node}</b> : node);
     return {
@@ -680,7 +713,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
       cells: { name: wrap(label), kind: '' },
       monthCells: Object.fromEntries(
         planMonths.map((iso) => {
-          const sum = rows.reduce((acc, row) => acc + amountFor(row, iso), 0);
+          const sum = rows.reduce((acc, row) => acc + valueFor(row, iso), 0);
           return [iso, <span key={iso}>{wrap(formatPayrollAmount(sum) || '$0')}</span>];
         })
       ),
@@ -692,19 +725,32 @@ export function CustomerPanel({ glCash, glAccrued }) {
   const currentKindRows = allCashInRows.filter((r) => r.kind !== 'Planned');
   const plannedKindRows = allCashInRows.filter((r) => r.kind === 'Planned');
 
-  // ONE summary, three rows (2026-08-19, Kayee: "there are too many sections... just
-  // have one at the top for summary. like summary total of both current and planned
-  // customer and then below by [tier] like total of current customer and then followed
-  // by planned customer"). Replaces both the old single-TOTAL summary strip and the
-  // separate "Cash Coming In — Detail" per-customer table — the driver grids below
-  // already show every customer's own numbers, so a third table repeating them was
-  // just more sections without more information.
+  // Summary breakdown (2026-08-20, Kayee: "you should do meeting cash in and campaigns
+  // cash in and then roll up to current customer and then same goes to planned
+  // customer... rename it so that it doesn't just say total - current, just say total
+  // current customer — something that fits in the FP&A world"). Each tier (Current,
+  // then Planned) now shows its two component streams — Meeting Cash In (Transaction
+  // Revenue) and Campaigns Cash In (Subscription Revenue), same naming the P&L/CF
+  // statements use — right above the tier's own roll-up total, instead of a single
+  // opaque number. Breakdown rows use meetingCashInFor/campaignCashInFor directly
+  // (always driver × price, live) rather than amountFor's GL-protected total, so they
+  // stay consistent with exactly what feeds the CF sheet's Transaction/Subscription
+  // Revenue rows for forecast months; the roll-up total below them still uses
+  // amountFor, so real GL cash keeps being the source of truth for actual months.
   const summaryRows = [
     buildSubtotalRow('TOTAL (Current + Planned)', allCashInRows, 'grand'),
-    buildSubtotalRow('Total — Current', currentKindRows, 'sub'),
+    buildSubtotalRow('Meeting Cash In', currentKindRows, 'sub', (row, iso) => meetingCashInFor(row.key, iso)),
+    buildSubtotalRow('Campaigns Cash In', currentKindRows, 'sub', (row, iso) => campaignCashInFor(row.key, iso)),
+    buildSubtotalRow('Total Current Customer', currentKindRows, 'sub'),
     // Only shown once there's at least one planned customer — an always-visible
-    // "Total — Planned $0" row when the plan is empty would just be noise.
-    ...(plannedKindRows.length > 0 ? [buildSubtotalRow('Total — Planned', plannedKindRows, 'sub')] : []),
+    // "Total Planned Customer $0" row when the plan is empty would just be noise.
+    ...(plannedKindRows.length > 0
+      ? [
+          buildSubtotalRow('Meeting Cash In', plannedKindRows, 'sub', (row, iso) => meetingCashInFor(row.key, iso)),
+          buildSubtotalRow('Campaigns Cash In', plannedKindRows, 'sub', (row, iso) => campaignCashInFor(row.key, iso)),
+          buildSubtotalRow('Total Planned Customer', plannedKindRows, 'sub'),
+        ]
+      : []),
   ];
 
   /* ----------------------------------- Render ----------------------------------- */
@@ -795,7 +841,12 @@ export function CustomerPanel({ glCash, glAccrued }) {
         <CollapsibleSection
           title="Cash Inflow Projection"
           subtitle="Prices & live monthly TOTAL · campaigns/meetings drivers · planned customers — feeds the Cash Flow Projection"
-          colorVar="--teal"
+          // Matches Payroll's color scheme (2026-08-20, Kayee: "purple is planned and
+          // whichever is current") — Current Customers above stays --blue (same as
+          // Payroll's "Existing"); this section holds the planning/forecast side of the
+          // tab (planned customers + forward-looking drivers), so it takes Payroll's
+          // "Planned" purple instead of its old unrelated teal.
+          colorVar="--purple"
           collapsed={collapsedSections.projection}
           onToggle={() => toggleSection('projection')}
         >
@@ -806,7 +857,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                   (2026-08-19, Kayee: "the text is wasting space with the explanation,
                   just remove it") — the field labels themselves already say who the
                   default is for. */}
-              <div className="payroll-assumptions">
+              <div className="payroll-assumptions customer-assumptions">
                 <AssumptionField
                   label="Planned Customer Price per Campaign"
                   value={drivers.campaignPrice}
