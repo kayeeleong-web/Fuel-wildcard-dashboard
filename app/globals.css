@@ -1141,6 +1141,22 @@ tr.summary-subtotal td {
   background: #E5E7EB !important; color: var(--text) !important; font-weight: 400;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
 }
+/* "Total Current/Planned Customer" (2026-08-20, Kayee: "make total current customer a
+   slightly darker grey and also make it stay on top") — one shade darker than the
+   plain .summary-subtotal breakdown rows nested under it, and sticky just below the
+   table's own black thead (already sticky top:0 in the same scroll box) so it's still
+   visible if expanding both tiers' breakdowns ever pushes this card past its
+   .payroll-table-wrap scroll cap. */
+tr.summary-subtotal-pinned td {
+  background: #D1D5DB !important; color: var(--text) !important; font-weight: 400;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  position: sticky; top: 38px; z-index: 2;
+}
+.summary-row-toggle {
+  display: inline-flex; align-items: center; gap: 6px; border: none; background: none;
+  padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.summary-row-toggle .payroll-chevron { color: inherit; }
 
 .customer-driver-group { display: flex; flex-direction: column; gap: 0; }
 .customer-driver-group > .payroll-card:first-child { margin-bottom: 0; border-radius: 14px 14px 0 0; }

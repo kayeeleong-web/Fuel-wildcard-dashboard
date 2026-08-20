@@ -13,6 +13,7 @@ import {
   plExpenseAccounts,
   plAccrualForMonth,
   cashOutflowForMonth,
+  readCustomerInflowTotals,
 } from '../../lib/cashflow/cashProjection';
 import {
   headcountCostByCostType,
@@ -246,13 +247,22 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // both fold in Payroll's headcount costs, same as the P&L projection does.
   const { state: cfPayrollState, hydrated: cfPayrollHydrated } = usePayrollState();
 
-  // 2026-08-20: CF's own Transaction/Subscription Revenue rows and the "Customer Cash
-  // Inflow"/rollforward calc below now derive straight from cfAccrualCtx.revenue (the
-  // same Assumptions-tab revenue object the P&L projection itself reads) instead of
-  // the Customer Cash Flow tab's localStorage handoff — that tab only has real numbers
-  // once someone fills in its own per-customer driver grid, which isn't how revenue
-  // actually gets forecast here. See withCFRevenueInflowRows/withCashFlowProjectionRows
-  // below.
+  // 2026-08-20 (reverted back, same day — Kayee: "this is not coming from p&l
+  // projection it's coming from customer tab... I put some dummy numbers in July 2026
+  // just to see if you bring it over"): CF's Transaction/Subscription Revenue rows and
+  // the "Customer Cash Inflow" summary read the Customer tab's live localStorage
+  // handoff (CUSTOMER_INFLOW_STORAGE_KEY) again, for any forecast month the Customer
+  // tab has actually saved a number for — editing Customer really does flow into CF,
+  // as originally asked for. Falls back to the P&L Assumptions calc
+  // (meetingRevenueForMonth/upfrontRevenueForMonth) ONLY for a month the Customer tab
+  // has never saved anything for in this browser, so CF isn't blank before anyone has
+  // ever opened the Customer tab. Read once on mount — CustomerPanel and this panel are
+  // sibling sub-tabs that unmount on switch, so mount-time read always sees the latest
+  // save.
+  const [customerInflow, setCustomerInflow] = useState(null);
+  useEffect(() => {
+    setCustomerInflow(readCustomerInflowTotals());
+  }, []);
 
   // The COGS/OpEx account lists the CF sidebar shows timing controls for — the actual
   // chart-of-account rows from the live P&L statement (plus Payroll's injected COGS
@@ -442,6 +452,7 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                         timingByAccount: (cashTimingHydrated && cashTimingState?.timingByAccount) || {},
                         accrualCtx: cfAccrualCtx,
                         onSetTiming: handleSetTiming,
+                        customerInflow,
                       }
                     : null
                 }
@@ -1321,41 +1332,41 @@ function cfOutflowCell(account, timing, iso, forecastSet, accrualCtx, onSetTimin
   return { value, cell };
 }
 
+// Maps each CF revenue row label to (a) which customerInflow breakdown field is its
+// live Customer-tab source, and (b) the P&L Assumptions fallback calc for any month
+// the Customer tab hasn't saved a number for yet.
 const CF_REVENUE_ROW_FORMULAS = {
-  'Transaction Revenue': meetingRevenueForMonth,
-  'Subscription Revenue': upfrontRevenueForMonth,
+  'Transaction Revenue': { customerField: 'transactionByMonth', fallback: meetingRevenueForMonth },
+  'Subscription Revenue': { customerField: 'subscriptionByMonth', fallback: upfrontRevenueForMonth },
 };
 
 /** Patches the CF sheet's own "Transaction Revenue" / "Subscription Revenue" rows for
  *  forecast months (2026-08-20, Kayee: "transactional revenue is the calculation with
  *  the # of meeting * price per meeting and the subscription is the other... it needs
- *  to be link from the customer live"). FIRST version of this fix read the Customer
- *  Cash Flow tab's localStorage handoff — but that tab only has real numbers in it if
- *  someone has actually typed campaign/meeting counts into its own driver grid, and
- *  Kayee's real workflow drives Revenue entirely from the P&L Assumptions sidebar
- *  instead (2026-08-20 follow-up: "cash in projections still didn't get bring over
- *  from customer projection" — the P&L's own Transaction/Subscription Revenue WERE
- *  populated, this CF copy just wasn't reading the same source). Rewritten to call the
- *  exact same meetingRevenueForMonth/upfrontRevenueForMonth functions the P&L
- *  projection itself uses (via cfProjection.accrualCtx.revenue, the same `ctx` object
- *  plAccrualForMonth already receives) — so these two CF rows are now guaranteed to
- *  equal whatever the P&L shows for the same two rows, not a second, easily-empty data
- *  source. (No per-account cash-timing override yet, same as every account with no
- *  sidebar config — "Follow P&L" 1:1, matching every COGS/OpEx account's own default.)
+ *  to be link from the customer live"). Reads the Customer Cash Flow tab's live
+ *  localStorage handoff (cfProjection.customerInflow, from readCustomerInflowTotals())
+ *  first — a dummy number typed into Customer for July really does show up here for
+ *  July, confirmed 2026-08-20. Falls back to meetingRevenueForMonth/
+ *  upfrontRevenueForMonth off the P&L Assumptions revenue object ONLY for a forecast
+ *  month the Customer tab has never saved a value for in this browser (customerInflow
+ *  is null before its first visit, or a specific iso is simply absent from its
+ *  totals) — so this never goes blank just because nobody has opened Customer tab yet,
+ *  but a real Customer-tab number always wins once one exists.
  *  Runs BEFORE withSectionTotalRollups so CF's "Total Cash In from Operations" band
  *  (blank for forecast months otherwise) picks these up automatically. */
 function withCFRevenueInflowRows(rows, months, lastActualIndex, cfProjection) {
-  const { accrualCtx } = cfProjection;
+  const { accrualCtx, customerInflow } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
-  if (forecastMonths.length === 0 || !accrualCtx?.revenue) return rows;
+  if (forecastMonths.length === 0) return rows;
 
   return rows.map((row) => {
     if (row.isTotal) return row;
-    const calc = CF_REVENUE_ROW_FORMULAS[String(row.label ?? '').trim()];
-    if (!calc) return row;
+    const formula = CF_REVENUE_ROW_FORMULAS[String(row.label ?? '').trim()];
+    if (!formula) return row;
     const values = { ...row.values };
     for (const iso of forecastMonths) {
-      values[iso] = calc(accrualCtx.revenue, iso) || 0;
+      const fromCustomer = customerInflow?.[formula.customerField]?.[iso];
+      values[iso] = fromCustomer != null ? fromCustomer : accrualCtx?.revenue ? formula.fallback(accrualCtx.revenue, iso) || 0 : 0;
     }
     return { ...row, values };
   });
@@ -1509,7 +1520,7 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
  *  Actual months are never touched — real GL cash history stays exactly as the sheet
  *  reported it. */
 function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection) {
-  const { expenseAccounts, timingByAccount, accrualCtx } = cfProjection;
+  const { expenseAccounts, timingByAccount, accrualCtx, customerInflow } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
   if (forecastMonths.length === 0) return rows;
   const forecastSet = new Set(forecastMonths);
@@ -1518,13 +1529,15 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
   const inflowValues = {};
   const netValues = {};
   for (const iso of forecastMonths) {
-    // Same source as withCFRevenueInflowRows above (2026-08-20 rewrite) — meeting +
-    // upfront revenue from the P&L's own Assumptions, not the Customer tab handoff —
-    // so this summary line and the Beginning/Ending Cash rollforward it drives are
-    // never out of sync with what "Transaction Revenue"/"Subscription Revenue" show.
-    const inflow = accrualCtx?.revenue
-      ? meetingRevenueForMonth(accrualCtx.revenue, iso) + upfrontRevenueForMonth(accrualCtx.revenue, iso)
-      : null;
+    // Same source/fallback as withCFRevenueInflowRows above — Customer tab's live
+    // saved total first, P&L Assumptions calc only for a month Customer hasn't saved.
+    const fromCustomer = customerInflow?.totalsByMonth?.[iso];
+    const inflow =
+      fromCustomer != null
+        ? fromCustomer
+        : accrualCtx?.revenue
+        ? meetingRevenueForMonth(accrualCtx.revenue, iso) + upfrontRevenueForMonth(accrualCtx.revenue, iso)
+        : null;
     let outflow = 0;
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
       outflow += cashOutflowForMonth(account, timingByAccount[account.id], iso, forecastSet, accrualCtx);

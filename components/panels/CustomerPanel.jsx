@@ -699,7 +699,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // medium grey and then total current and total planned is light grey so that it's
   // not all black." The card header + month-header row stay the shared black chrome;
   // only these row backgrounds change.
-  function buildSubtotalRow(label, rows, tone, valueFor = amountFor) {
+  function buildSubtotalRow(label, rows, tone, valueFor = amountFor, toggle = null) {
     // 2026-08-19, Kayee: "the total current and total planned numbers and the entire
     // row the font doesn't need to be bold" — only the grand TOTAL (current+planned)
     // row stays bold; every row below it (including the new Meeting/Campaigns Cash In
@@ -707,10 +707,24 @@ export function CustomerPanel({ glCash, glAccrued }) {
     // grey row tone, just not bold).
     const bold = tone === 'grand';
     const wrap = (node) => (bold ? <b>{node}</b> : node);
+    // 'pinned' tone (2026-08-20, Kayee: "make total current customer a slightly darker
+    // grey and also make it stay on top... should have the ability to expand and see
+    // meeting cash and campaign cash in") — darker than the plain 'sub' breakdown rows
+    // below it, and sticky (see .summary-subtotal-pinned in globals.css) so it's still
+    // visible once you've scrolled down into the long customer grid underneath.
+    const className = bold ? 'summary-grand-total' : tone === 'pinned' ? 'summary-subtotal-pinned' : 'summary-subtotal';
+    const nameNode = toggle ? (
+      <button type="button" className="summary-row-toggle" onClick={toggle.onClick} aria-expanded={toggle.expanded}>
+        <span className={`payroll-chevron${toggle.expanded ? ' open' : ''}`}>▸</span>
+        {wrap(label)}
+      </button>
+    ) : (
+      wrap(label)
+    );
     return {
-      id: `subtotal:${label}`,
-      className: bold ? 'summary-grand-total' : 'summary-subtotal',
-      cells: { name: wrap(label), kind: '' },
+      id: `subtotal:${label}:${tone}`,
+      className,
+      cells: { name: nameNode, kind: '' },
       monthCells: Object.fromEntries(
         planMonths.map((iso) => {
           const sum = rows.reduce((acc, row) => acc + valueFor(row, iso), 0);
@@ -737,18 +751,40 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // stay consistent with exactly what feeds the CF sheet's Transaction/Subscription
   // Revenue rows for forecast months; the roll-up total below them still uses
   // amountFor, so real GL cash keeps being the source of truth for actual months.
+  // Expand/collapse for each tier's Meeting/Campaigns breakdown, nested under its own
+  // Total row now instead of always shown above it (2026-08-20, Kayee: "make total
+  // current customer... stay on top... should have the ability to expand and see
+  // meeting cash and campaign cash in. and default to collapsed"). Defaults collapsed
+  // — the breakdown is a drill-down, not part of the at-a-glance summary.
+  const [summaryExpanded, setSummaryExpanded] = useState({ current: false, planned: false });
+  const toggleSummaryTier = (tier) => setSummaryExpanded((s) => ({ ...s, [tier]: !s[tier] }));
+
   const summaryRows = [
     buildSubtotalRow('TOTAL (Current + Planned)', allCashInRows, 'grand'),
-    buildSubtotalRow('Meeting Cash In', currentKindRows, 'sub', (row, iso) => meetingCashInFor(row.key, iso)),
-    buildSubtotalRow('Campaigns Cash In', currentKindRows, 'sub', (row, iso) => campaignCashInFor(row.key, iso)),
-    buildSubtotalRow('Total Current Customer', currentKindRows, 'sub'),
+    buildSubtotalRow('Total Current Customer', currentKindRows, 'pinned', amountFor, {
+      expanded: summaryExpanded.current,
+      onClick: () => toggleSummaryTier('current'),
+    }),
+    ...(summaryExpanded.current
+      ? [
+          buildSubtotalRow('Meeting Cash In', currentKindRows, 'sub', (row, iso) => meetingCashInFor(row.key, iso)),
+          buildSubtotalRow('Campaigns Cash In', currentKindRows, 'sub', (row, iso) => campaignCashInFor(row.key, iso)),
+        ]
+      : []),
     // Only shown once there's at least one planned customer — an always-visible
     // "Total Planned Customer $0" row when the plan is empty would just be noise.
     ...(plannedKindRows.length > 0
       ? [
-          buildSubtotalRow('Meeting Cash In', plannedKindRows, 'sub', (row, iso) => meetingCashInFor(row.key, iso)),
-          buildSubtotalRow('Campaigns Cash In', plannedKindRows, 'sub', (row, iso) => campaignCashInFor(row.key, iso)),
-          buildSubtotalRow('Total Planned Customer', plannedKindRows, 'sub'),
+          buildSubtotalRow('Total Planned Customer', plannedKindRows, 'pinned', amountFor, {
+            expanded: summaryExpanded.planned,
+            onClick: () => toggleSummaryTier('planned'),
+          }),
+          ...(summaryExpanded.planned
+            ? [
+                buildSubtotalRow('Meeting Cash In', plannedKindRows, 'sub', (row, iso) => meetingCashInFor(row.key, iso)),
+                buildSubtotalRow('Campaigns Cash In', plannedKindRows, 'sub', (row, iso) => campaignCashInFor(row.key, iso)),
+              ]
+            : []),
         ]
       : []),
   ];
