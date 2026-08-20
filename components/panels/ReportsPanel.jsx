@@ -377,30 +377,6 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
         )}
       </div>
 
-      {/* Legend (2026-08-07, Kayee: "give user an indicator on what cell is
-          editable") — the blue box style is otherwise unexplained the first time
-          someone sees it; this makes explicit what's a real input vs. a computed or
-          booked figure. P&L-only, since CF/BS have no editable cells. Custom and
-          projection sub-tabs are other panels entirely now (2026-08-17). */}
-      {/* 2026-08-20 fix (Kayee: "we shouldnt have this text anymore since this only
-          apply to the projection section") — this legend explains editable-input vs
-          formula/actual cell styling, but the Reports (actual) tab never has editable
-          cells at all ("in report it will only show actual" — no driver rows, no
-          Assumptions-driven values). Only the Projection tab's P&L has real editable
-          cells to explain; this was showing on the wrong one. */}
-      {mode === 'projection' && reportType === 'PL' && (
-        <div className="report-legend">
-          <span className="report-legend-item">
-            <span className="report-legend-swatch report-legend-swatch-editable" />
-            Editable input
-          </span>
-          <span className="report-legend-item">
-            <span className="report-legend-swatch report-legend-swatch-formula" />
-            From formula / actuals
-          </span>
-        </div>
-      )}
-
       {/* Wide wrapper — same treatment as Payroll's tables (globals.css .page-wide),
           so every wide-table tab behaves consistently (Kayee, 2026-08-05: "all pages
           needs to be consistant"). Toolbar/PageHead above stay at the normal page width. */}
@@ -438,6 +414,27 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
               />
             ) : null}
             <div className="reports-main">
+              {/* Legend (2026-08-07, Kayee: "give user an indicator on what cell is
+                  editable"). Moved INTO the table column (2026-08-20, Kayee: "i dont
+                  like it when something got cut off like this") — it used to sit
+                  above the sidebar+table flex row at full page width, where the
+                  sticky sidebar (top:140px) slid over it on scroll and half-covered
+                  the text. In this column the sidebar can never overlap it.
+                  Projection-P&L only ("we shouldnt have this text anymore since this
+                  only apply to the projection section"): the Reports (actual) tab has
+                  no editable cells to explain. */}
+              {mode === 'projection' && reportType === 'PL' && (
+                <div className="report-legend">
+                  <span className="report-legend-item">
+                    <span className="report-legend-swatch report-legend-swatch-editable" />
+                    Editable input
+                  </span>
+                  <span className="report-legend-item">
+                    <span className="report-legend-swatch report-legend-swatch-formula" />
+                    From formula / actuals
+                  </span>
+                </div>
+              )}
               <StatementDoc
                 statement={statements[reportType]}
                 range={range}
