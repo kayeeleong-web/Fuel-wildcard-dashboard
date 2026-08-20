@@ -1619,7 +1619,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     // Actual mode — skip all projection logic, return just the real rows.
     // No forecast columns to render, no sidebar, no Assumptions-driven values.
     return (
-      <div id="reports" className="table-wrap report-doc" data-doc={statement.type}>
+      <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
         <table>
           <thead>
             <tr className="report-year-row">

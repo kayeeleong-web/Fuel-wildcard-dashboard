@@ -707,19 +707,6 @@ export function CustomerPanel({ glCash, glAccrued }) {
     <>
       <PageHead title="Customer Cash Flow" />
 
-      {/* Same 2026-2028/Historical pair as Payroll & Reports — one piece of state
-          drives the visible-month window of every table at once. */}
-      <div className="toolbar">
-        <div className="seg right">
-          <button className={range === 'default' ? 'active' : undefined} onClick={() => setRange('default')}>
-            2026 – 2028
-          </button>
-          <button className={range === 'all' ? 'active' : undefined} onClick={() => setRange('all')}>
-            Historical
-          </button>
-        </div>
-      </div>
-
       {/* Wide wrapper — the frozen leading columns eat most of the normal page width,
           so this section breaks out wider, exactly like the Payroll tab (.page-wide
           in globals.css). PageHead above stays at the normal page width. */}
@@ -738,13 +725,27 @@ export function CustomerPanel({ glCash, glAccrued }) {
           collapsed={collapsedSections.current}
           onToggle={() => toggleSection('current')}
           headActions={
-            <div className="seg" onClick={(e) => e.stopPropagation()}>
-              <button className={waterfallView === 'cash' ? 'active' : undefined} onClick={() => setWaterfallView('cash')}>
-                Cash
-              </button>
-              <button className={waterfallView === 'accrued' ? 'active' : undefined} onClick={() => setWaterfallView('accrued')}>
-                Accrued
-              </button>
+            // 2026-08-20 (Kayee): the page-level 2026-2028/Historical toolbar sat far
+            // enough away from the Cash/Accrued toggle that it read as unrelated to this
+            // section — moved into this same header, right next to Cash/Accrued, so
+            // both toggles that affect this table live in one obvious place.
+            <div style={{ display: 'flex', gap: 8 }} onClick={(e) => e.stopPropagation()}>
+              <div className="seg">
+                <button className={range === 'default' ? 'active' : undefined} onClick={() => setRange('default')}>
+                  2026 – 2028
+                </button>
+                <button className={range === 'all' ? 'active' : undefined} onClick={() => setRange('all')}>
+                  Historical
+                </button>
+              </div>
+              <div className="seg">
+                <button className={waterfallView === 'cash' ? 'active' : undefined} onClick={() => setWaterfallView('cash')}>
+                  Cash
+                </button>
+                <button className={waterfallView === 'accrued' ? 'active' : undefined} onClick={() => setWaterfallView('accrued')}>
+                  Accrued
+                </button>
+              </div>
             </div>
           }
         >
