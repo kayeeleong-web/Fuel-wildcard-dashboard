@@ -437,33 +437,59 @@ tbody tr.total .m { color: var(--on-black-muted); }
 .pct-of { display: block; font-size: 10.5px; color: var(--muted-2); margin-top: 1px; }
 .g { color: var(--green-dark); } .r { color: var(--pink); } .m { color: var(--muted-2); }
 
-/* Non-hero P&L Total rows (Total Salaries & Benefits, Total Travel, Total Meals &
-   Entertainment, etc.) get a softer, blended treatment instead of the full black
-   band — 2026-08-20, Kayee: "for total revenue total cogs and gross profit ebitda
-   and net income it make sense to keep it black but the others it's just
-   distracting... how about a green for actual and blue for forecast? but like it's
-   blending in, not too in your face... a modern fp&a webpage, like a designer did
-   it." Total Revenue/Total COGS/Gross Profit/EBITDA/Net Income (see
-   HERO_TOTAL_ROW_LABELS in ReportsPanel.jsx) keep the original `tr.total` styling
-   above untouched — this only targets the `tr.total-soft` modifier class those
-   components add to every OTHER Total row, and only inside the P&L doc (CF/BS and
-   every other table in the app are unaffected). Specificity here is deliberately
-   higher than every `tr.total` rule above (adds `.report-doc[data-doc="PL"]` +
+/* Ending Cash — medium grey, not full black (2026-08-20, Kayee: "the format need to
+   be better like ending cash in a medium grey instead of black"). It's the one Total
+   row inside the Beginning/Net Change/Ending Cash formula block (see
+   isCashSummarySection in ReportsPanel.jsx), which Kayee wants left permanently
+   expanded and visually calmer than a hero black band — same #6B7280 medium grey
+   already used for CustomerPanel's tr.summary-grand-total, reused here for the same
+   "quiet final answer" feel. Higher specificity than the base `tr.total` rule above
+   (adds `.total-grey`) so it wins without !important. */
+.report-doc tr.total-grey td { background: #6B7280; color: #fff; border-top-color: #6B7280; border-bottom-color: #6B7280; }
+.report-doc tr.total-grey td:first-child { background: #6B7280; color: #fff; }
+.report-doc tr.total-grey td.active-col { background: #565D6D; color: #fff; }
+
+/* Non-hero Total rows (Total Salaries & Benefits, Total Travel, Total Cash Out from
+   Operations, etc.) get a softer, blended treatment instead of the full black band —
+   2026-08-20, Kayee: "for total revenue total cogs and gross profit ebitda and net
+   income it make sense to keep it black but the others it's just distracting...
+   green for actual and blue for forecast... blending in... modern fp&a webpage, like
+   a designer did it," extended the same day to Cash Flow ("do that for cash flow
+   too" / "in cash flow the important row keep it black like total cash in total cash
+   out and total operating activities"). The true hero Total rows for each statement
+   (see HERO_TOTAL_ROW_LABELS in ReportsPanel.jsx) keep the original `tr.total`
+   styling above untouched — this only targets the `tr.total-soft` modifier class
+   applied to every OTHER Total row, scoped to the P&L and CF docs (BS and every
+   other table in the app are unaffected).
+   SOLID colors only, never rgba/alpha (2026-08-20 bugfix, Kayee: "numbers and
+   headers is overlapping when i scroll to the right") — the frozen first column on
+   every row in this app is `position: sticky`, and a translucent background on a
+   sticky cell lets whatever data cell has scrolled underneath it show through, which
+   is exactly what an earlier rgba version of these rules did. Every other sticky
+   first-column background in this file (black/white/panel/panel-2) is solid for the
+   same reason — matching that convention here. Specificity is deliberately higher
+   than every `tr.total` rule above (adds `.report-doc[data-doc="PL"/"CF"]` +
    `.total-soft`) so it always wins without needing !important. */
-.report-doc[data-doc="PL"] tr.total-soft td {
-  font-weight: 700; background: rgba(43, 188, 98, .07); color: var(--text);
+.report-doc[data-doc="PL"] tr.total-soft td,
+.report-doc[data-doc="CF"] tr.total-soft td {
+  font-weight: 700; background: #F0FAF3; color: var(--text);
   border-top: 1px solid rgba(43, 188, 98, .3); border-bottom: 1px solid rgba(43, 188, 98, .3);
   box-shadow: none;
 }
-.report-doc[data-doc="PL"] tr.total-soft td:first-child { background: rgba(43, 188, 98, .1); color: var(--green-dark); }
-.report-doc[data-doc="PL"] tr.total-soft td.pr-fcst {
-  background: rgba(17, 179, 231, .07);
+.report-doc[data-doc="PL"] tr.total-soft td:first-child,
+.report-doc[data-doc="CF"] tr.total-soft td:first-child { background: #E7F7EC; color: var(--green-dark); }
+.report-doc[data-doc="PL"] tr.total-soft td.pr-fcst,
+.report-doc[data-doc="CF"] tr.total-soft td.pr-fcst {
+  background: #EAF8FD;
   border-top-color: rgba(17, 179, 231, .3); border-bottom-color: rgba(17, 179, 231, .3);
   box-shadow: none;
 }
-.report-doc[data-doc="PL"] tr.total-soft td.active-col { background: rgba(43, 188, 98, .16); color: var(--text); }
-.report-doc[data-doc="PL"] tr.total-soft:hover td { background: rgba(43, 188, 98, .12); }
-.report-doc[data-doc="PL"] tr.total-soft:hover td.pr-fcst { background: rgba(17, 179, 231, .12); }
+.report-doc[data-doc="PL"] tr.total-soft td.active-col,
+.report-doc[data-doc="CF"] tr.total-soft td.active-col { background: #D9F2E1; color: var(--text); }
+.report-doc[data-doc="PL"] tr.total-soft:hover td,
+.report-doc[data-doc="CF"] tr.total-soft:hover td { background: #E3F5E8; }
+.report-doc[data-doc="PL"] tr.total-soft:hover td.pr-fcst,
+.report-doc[data-doc="CF"] tr.total-soft:hover td.pr-fcst { background: #DEF2FB; }
 
 /* Current-period column highlight — must always show its value, on every row type,
    including total rows (design-rules.md §3: never a blank cell here). */
@@ -487,7 +513,14 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .table-wrap table tbody tr td:first-child { background: var(--panel); }
 .table-wrap table tbody tr:nth-child(even) td:first-child { background: var(--panel-2); }
 .table-wrap table tbody tr:hover td:first-child { background: #F0FBF4; }
-.table-wrap table tbody tr.section td:first-child { background: var(--green-soft); }
+/* Solid, not var(--green-soft) (2026-08-20 audit, Kayee: "numbers and headers is
+   overlapping when i scroll to the right... check all of them") — same sticky-cell
+   transparency bug as tr.total-soft above. This particular row's 2nd cell is a blank
+   colSpan in every table that uses tr.section (Reports' own section bands, Payroll's
+   collapsible section headers), so the transparency was never actually visible here
+   — no real text scrolls underneath it to show through — but it's the same latent
+   bug, so fixed to the equivalent solid color on principle rather than left ticking. */
+.table-wrap table tbody tr.section td:first-child { background: #E5F7EC; }
 .table-wrap table tbody tr.total td:first-child { background: var(--black); }
 
 /* Reports tab range toggle (2026-08-07 rewrite, Kayee: "show 2026 and up until end of
@@ -1184,6 +1217,16 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.35); }
 .report-doc th.y-boundary,
 .report-doc td.y-boundary { border-left: 2px solid rgba(17, 24, 39, .28); }
 .report-doc thead th.y-boundary { border-left: 2px solid rgba(255,255,255,.35); }
+/* Fix: the line was disappearing every time it crossed a black `tr.total` band
+   (2026-08-20, Kayee: "this line needs to go all the way down separating different
+   year in all three statement in reports and projections") — a translucent dark-navy
+   border reads as basically invisible against the Total row's near-black background,
+   so on a statement like the Balance Sheet (mostly back-to-back Total rows) the
+   boundary visually stopped a few rows down instead of running the full table height.
+   Same light/white treatment the header row already gets above, reused here for any
+   black total row body-wide. `tr.total-soft` rows are light-background, so the
+   original dark color already reads fine there and doesn't need this override. */
+.report-doc tr.total td.y-boundary { border-left-color: rgba(255,255,255,.4); }
 
 /* Same historical-month dark-grey header treatment as Reports' .r-historical, applied
    to PayrollTable-based tables (Payroll, Customer waterfalls/driver grids) — see

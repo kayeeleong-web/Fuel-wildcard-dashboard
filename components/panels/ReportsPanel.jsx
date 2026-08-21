@@ -1573,6 +1573,21 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
       priorEnding = endingValues[iso];
     }
 
+    // Net Change in Cash for ACTUAL months too (2026-08-20, Kayee: "why dont i have
+    // net change in cash in actual month. we need that in as well") — the sheet's
+    // real GL Beginning/Ending Cash balances already cover every actual month (never
+    // touched above, only forecast months are), but nothing ever derived the actual
+    // month's own Net Change from them. Simple arithmetic, no assumptions/forecast
+    // pipeline involved at all: Net Change = Ending − Beginning for that same month.
+    // Only fills a genuinely blank cell — never overwrites a real sheet-provided
+    // Net Change if this client's sheet happens to already report one.
+    for (const iso of months) {
+      if (netChangeValues[iso] != null) continue;
+      const beginning = beginningValues[iso];
+      const ending = endingValues[iso];
+      if (beginning != null && ending != null) netChangeValues[iso] = Number(ending) - Number(beginning);
+    }
+
     const next = [...rows];
     next[beginningIdx] = { ...rows[beginningIdx], values: beginningValues };
     next[netChangeIdx] = { ...rows[netChangeIdx], values: netChangeValues };
@@ -1626,18 +1641,139 @@ function withSectionTotalRollups(statementType, rows, months, lastActualIndex) {
     for (let i = lastActualIndex + 1; i < months.length; i++) {
       const iso = months[i];
       if (patchedValues[iso] != null) continue;
+      // Always write the sum — even when every sibling is blank/zero, defaulting to
+      // 0 (2026-08-20, Kayee: "if the other total is zero need to show zero. only
+      // the total line needs to show zero the collapsed rows no need") — a genuine
+      // Total row for a section that legitimately has no forecast activity should
+      // read "$0", not disappear into the same blank the individual (collapsed,
+      // hidden) line items show. Guarded above by `siblings.length === 0` — this
+      // never fires for a row that isn't a real section subtotal in the first place.
       let sum = 0;
-      let sawAny = false;
-      for (const sib of siblings) {
-        if (sib.values[iso] != null) {
-          sum += sib.values[iso];
-          sawAny = true;
-        }
-      }
-      if (sawAny) patchedValues[iso] = sum;
+      for (const sib of siblings) sum += Number(sib.values[iso]) || 0;
+      patchedValues[iso] = sum;
     }
     return { ...row, values: patchedValues };
   });
+}
+
+/** CF's own grand-total rows — Total Cash In, Total Cash Out from Operations, Total
+ *  Cash Out, and (Net Burn)/Cash Generated — never got filled by
+ *  withSectionTotalRollups above, because none of them are a genuine section
+ *  subtotal (they have no non-Total siblings sharing their own `.section` — they're
+ *  each their own standalone summary row), so that function's `siblings.length === 0`
+ *  guard always skipped them (2026-08-20, Kayee: "you still dont have the total for
+ *  cash out from operating total cash out and net burn").
+ *
+ *  Rather than walk the document in row order (fragile — a leaf Total that happens
+ *  to sit above "Total Cash In" in the sheet, like a Non-Operating section's cash-OUT
+ *  items, would get miscounted as cash-IN just because of where it happens to sit),
+ *  this matches by label instead:
+ *    - Total Cash In = Total Cash In from Operations + Total Other Cash In
+ *    - Total Cash Out = Total Cash Out from Operations + Total Other Cash Out (0 if
+ *      that row doesn't exist on this sheet)
+ *    - Total Cash Out from Operations = the sum of every OTHER leaf Total row (a
+ *      Total row with real line-item siblings of its own — Total Travel, Total
+ *      General Operations, etc.) EXCLUDING the three cash-in-side rows above,
+ *      Investing/Financing section totals (those roll up separately, into Net Cash
+ *      from Investing/Financing, not into Cash Out from Operations), and the
+ *      Beginning/Net Change/Ending Cash formula block (isTotal only on Ending, but
+ *      withReorderedCashFlowRows reassigns it the SAME `.section` as Beginning/Net
+ *      Change so the three read as one group — that would otherwise look like a
+ *      leaf Total with siblings and get summed in by mistake).
+ *    - (Net Burn)/Cash Generated = Total Cash In − Total Cash Out.
+ *  Only ever fills an already-blank cell (actual or forecast alike — the sheet has
+ *  never populated these rows at all, so there's no "real" value to protect the way
+ *  every other Total guards against overwriting one). */
+const CF_GRAND_TOTAL_LABELS = {
+  cashIn: /^total cash in$/i,
+  cashInFromOps: /^total cash in from operations$/i,
+  otherCashIn: /^total other cash in$/i,
+  cashOut: /^total cash out$/i,
+  cashOutFromOps: /^total cash out from operations$/i,
+  otherCashOut: /^total other cash out$/i,
+  netBurn: /net burn.*cash generated|cash generated.*net burn|net (burn|cash generated)/i,
+};
+
+function withCashFlowGrandTotals(rows, months) {
+  const findRow = (pattern) => rows.find((r) => r.isTotal && pattern.test(String(r.label ?? '').trim()));
+  const cashIn = findRow(CF_GRAND_TOTAL_LABELS.cashIn);
+  const cashInFromOps = findRow(CF_GRAND_TOTAL_LABELS.cashInFromOps);
+  const otherCashIn = findRow(CF_GRAND_TOTAL_LABELS.otherCashIn);
+  const cashOut = findRow(CF_GRAND_TOTAL_LABELS.cashOut);
+  const cashOutFromOps = findRow(CF_GRAND_TOTAL_LABELS.cashOutFromOps);
+  const otherCashOut = findRow(CF_GRAND_TOTAL_LABELS.otherCashOut);
+  const netBurn = findRow(CF_GRAND_TOTAL_LABELS.netBurn);
+  if (!cashIn && !cashOutFromOps && !cashOut && !netBurn) return rows;
+
+  const excludedKeys = new Set([cashIn, cashInFromOps, otherCashIn, cashOut, cashOutFromOps, otherCashOut, netBurn].filter(Boolean).map((r) => r.key));
+  const isBeginningEndingBlock = (r) =>
+    CASH_ROW_PATTERNS.beginning.test(r.label) || CASH_ROW_PATTERNS.netChange.test(r.label) || CASH_ROW_PATTERNS.ending.test(r.label);
+  // Every "leaf" Total row NOT already claimed above and NOT Investing/Financing/the
+  // Beginning-Ending block feeds Cash Out from Operations — Salaries & Benefits,
+  // Travel, Meals & Entertainment, General Operations, Miscellaneous Expense, etc.
+  const opExpenseTotals = rows.filter(
+    (r) =>
+      r.isTotal &&
+      !excludedKeys.has(r.key) &&
+      !isBeginningEndingBlock(r) &&
+      !/INVEST|FINANC/i.test(String(r.section ?? '')) &&
+      rows.some((sib) => !sib.isTotal && sib.section === r.section)
+  );
+
+  const patched = new Map();
+  const patch = (row, values) => patched.set(row.key, { ...row, values });
+
+  if (cashInFromOps || otherCashIn) {
+    const values = { ...(cashIn ? cashIn.values : {}) };
+    for (const m of months) {
+      if (values[m] != null) continue;
+      const a = cashInFromOps?.values[m];
+      const b = otherCashIn?.values[m];
+      if (a != null || b != null) values[m] = (Number(a) || 0) + (Number(b) || 0);
+    }
+    if (cashIn) patch(cashIn, values);
+  }
+
+  const cashOutFromOpsValues = cashOutFromOps ? { ...cashOutFromOps.values } : null;
+  if (cashOutFromOpsValues) {
+    for (const m of months) {
+      if (cashOutFromOpsValues[m] != null) continue;
+      if (opExpenseTotals.length === 0) continue;
+      let sum = 0;
+      for (const r of opExpenseTotals) sum += Number(r.values[m]) || 0;
+      cashOutFromOpsValues[m] = sum;
+    }
+    patch(cashOutFromOps, cashOutFromOpsValues);
+  }
+
+  if (cashOut && (cashOutFromOpsValues || otherCashOut)) {
+    const values = { ...cashOut.values };
+    for (const m of months) {
+      if (values[m] != null) continue;
+      const a = cashOutFromOpsValues ? cashOutFromOpsValues[m] : cashOutFromOps?.values[m];
+      const b = otherCashOut?.values[m];
+      if (a != null || b != null) values[m] = (Number(a) || 0) + (Number(b) || 0);
+    }
+    patch(cashOut, values);
+  }
+
+  if (netBurn) {
+    const finalCashIn = patched.get(cashIn?.key)?.values ?? cashIn?.values;
+    const finalCashOut = patched.get(cashOut?.key)?.values ?? cashOut?.values;
+    if (finalCashIn && finalCashOut) {
+      const values = { ...netBurn.values };
+      for (const m of months) {
+        if (values[m] != null) continue;
+        const a = finalCashIn[m];
+        const b = finalCashOut[m];
+        if (a != null || b != null) values[m] = (Number(a) || 0) - (Number(b) || 0);
+      }
+      patch(netBurn, values);
+    }
+  }
+
+  if (patched.size === 0) return rows;
+  return rows.map((r) => patched.get(r.key) || r);
 }
 
 const TOTAL_REVENUE_ROW_LABELS = ['Total Revenue', 'TOTAL REVENUE'];
@@ -1652,6 +1788,11 @@ const GROSS_PROFIT_ROW_LABELS = ['Gross Profit'];
  *  Case-insensitive, trimmed compare — see isHeroTotalRow below. */
 const HERO_TOTAL_ROW_LABELS = new Set([
   'total revenue', 'total cogs', 'gross profit', 'gross margin', 'ebitda', 'net income',
+  // Cash Flow hero rows (2026-08-20, Kayee: "in cash flow the important row keep it
+  // black like the total cash in total cash out and then total operating
+  // activities") — everything else on the CF doc's non-hero Total rows gets the same
+  // total-soft treatment as P&L's OpEx totals.
+  'total cash in', 'total cash out', 'total operating activities', 'total cash out from operations',
 ]);
 function isHeroTotalRow(label) {
   return HERO_TOTAL_ROW_LABELS.has(String(label ?? '').trim().toLowerCase());
@@ -1754,6 +1895,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               <FragmentRows
                 key={section}
                 section={section}
+                statementType={statement.type}
                 rows={sectionRows}
                 months={months}
                 currentMonth={currentMonth}
@@ -1888,6 +2030,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       console.warn('Cash Flow section Total rollup failed:', err);
     }
     try {
+      rows = withCashFlowGrandTotals(rows, months);
+    } catch (err) {
+      console.warn('Cash Flow grand-total (Total Cash In/Out, Net Burn) rollup failed:', err);
+    }
+    try {
       rows = withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection);
     } catch (err) {
       console.warn('Cash Flow projection row injection failed:', err);
@@ -2012,6 +2159,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
             <FragmentRows
               key={section}
               section={section}
+              statementType={statement.type}
               rows={sectionRows}
               months={months}
               currentMonth={currentMonth}
@@ -2030,7 +2178,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   );
 }
 
-function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount, onRemoveCostItem }) {
+function FragmentRows({ section, statementType, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount, onRemoveCostItem }) {
   // Which row (by key) currently has a cost item dragged over it — purely visual
   // feedback for the drag-and-drop cost-item-to-P&L-row linking feature (2026-08-10,
   // see handleLinkCostItem in StatementDoc for the full reasoning). Local to this
@@ -2051,7 +2199,14 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   // expands the detail underneath. The section's own Total row is never affected by
   // this (see hasLineItems/collapsed gating below) — this is purely which line items
   // show, never which totals do.
-  const [collapsed, setCollapsed] = useState(true);
+  // EXCEPT the CF Beginning/Net Change/Ending Cash formula block (2026-08-20, Kayee:
+  // "keep this portion not collapsed") — withReorderedCashFlowRows groups those three
+  // onto one shared "SUMMARY" section specifically so they read as one continuous
+  // formula (Beginning + Net Change = Ending); collapsing it away to just "= Ending
+  // Cash" would hide the two lines that explain it. Detected by CASH_ROW_PATTERNS
+  // rather than a hardcoded section name, since that reorder is itself name-agnostic.
+  const isCashSummarySection = statementType === 'CF' && rows.some((r) => CASH_ROW_PATTERNS.ending.test(r.label));
+  const [collapsed, setCollapsed] = useState(!isCashSummarySection);
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
   // headcount cost to cogs and opex... if i add the cost in cogs it will only be
@@ -2086,13 +2241,29 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   // is already self-labeling ("Total Cash In").
   const hasLineItems = rows.some((r) => !r.isTotal);
 
+  // OpEx sections only, for now (2026-08-20, Kayee: "can the total Total Salaries &
+  // Benefits be in the same line as Salaries & Benefits? so that we are not seeing
+  // two row... do it for opex items only for now") — collapsed, a section used to
+  // show its own header band AND its Total row right below as two separate lines
+  // that said almost the same thing ("SALARIES & BENEFITS" / "Total Salaries &
+  // Benefits"). While collapsed, skip the header band entirely and move its chevron
+  // + click-to-expand onto the section's own Total row instead, so there's exactly
+  // one line. Expanding restores the normal header-then-lines-then-Total layout
+  // (the header is genuinely useful once there's more than one row to label).
+  // Extended to every CF section too (2026-08-20, Kayee: "do that for cash flow
+  // too") — CF sections don't carry a meaningful CoGS/OpEx/Other split the way P&L
+  // does (sectionCategory falls back to 'OpEx' for most of them by coincidence of
+  // the same generic bucket logic above), so this checks statementType directly
+  // instead of relying on that fallback.
+  const mergeHeaderIntoTotal = (sectionCategory === 'OpEx' || statementType === 'CF') && hasLineItems && collapsed;
+
   return (
     <>
       {/* Two cells, not one colSpan cell — position:sticky on a <td> with colspan doesn't
           reliably stick in table layout (a well-known cross-browser limitation), which
           was letting the section band's label scroll away with the rest of the row. A
           real single-column first cell sticks the same way a normal data row's does. */}
-      {hasLineItems && (
+      {hasLineItems && !mergeHeaderIntoTotal && (
       <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
         <td>
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
@@ -2127,7 +2298,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
           <>
             {!collapsed && nonTotalRows.map(renderRow)}
             {!collapsed && onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
-            {totalRows.map(renderRow)}
+            {totalRows.map((row, i) => renderRow(row, { isSectionToggle: mergeHeaderIntoTotal && i === 0 }))}
             {!collapsed && marginRows.map(renderRow)}
           </>
         );
@@ -2135,7 +2306,7 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
     </>
   );
 
-  function renderRow(row) {
+  function renderRow(row, { isSectionToggle = false } = {}) {
         // Calc-note lookup now runs ONCE per row, not once per month cell (2026-08-07,
         // Kayee: "the hover over explanation on the calculation only needs to appear
         // once at the account title") — the popover moves from every forecast $ cell
@@ -2184,17 +2355,21 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         return (
           <tr
             key={row.key}
-            className={
+            className={[
               row.isTotal
-                ? isHeroTotalRow(row.label)
+                ? CASH_ROW_PATTERNS.ending.test(row.label)
+                  ? 'total total-grey'
+                  : isHeroTotalRow(row.label)
                   ? 'total'
                   : 'total total-soft'
                 : row.driver
                 ? 'report-driver-row'
                 : row.cfManualRow
                 ? 'cf-manual-row'
-                : undefined
-            }
+                : null,
+              isSectionToggle ? 'report-section-toggle' : null,
+            ].filter(Boolean).join(' ') || undefined}
+            onClick={isSectionToggle ? () => setCollapsed((c) => !c) : undefined}
           >
             <td
               className={isDropTarget && dragOverKey === row.key ? 'report-cost-drop-target is-drag-over' : isDropTarget ? 'report-cost-drop-target' : undefined}
@@ -2222,6 +2397,11 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                   : undefined
               }
             >
+              {/* isSectionToggle only ever renders while collapsed (mergeHeaderIntoTotal
+                  requires it), so this chevron is always in the "closed" (▸, not
+                  rotated) orientation — same glyph the section header shows before
+                  it's ever expanded. */}
+              {isSectionToggle && <span className="report-section-chevron">▸</span>}
               {rowCalcInfo ? (
                 <DrillPopover label={row.label} value={row.label} calcNote={rowCalcInfo.calcNote} />
               ) : (
@@ -2277,11 +2457,33 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
               let cellText;
               if (row.isPercent) {
                 cellText = row.values[m] != null ? `${row.values[m].toFixed(2)}%` : '';
+              } else if (row.isTotal) {
+                // A Total row's real $0 (from withSectionTotalRollups, 2026-08-20:
+                // "if the other total is zero need to show zero") stays "$0" — only
+                // a genuinely MISSING value (null, nothing to sum) is blank. Every
+                // other (non-Total) row keeps blanking $0 the same as missing, same
+                // as always — this exception is Total rows only, never the
+                // collapsed line items underneath them.
+                cellText = row.values[m] != null ? `$${Math.round(row.values[m]).toLocaleString('en-US')}` : '';
               } else {
                 const rounded = row.values[m] != null ? Math.round(row.values[m]) : 0;
                 cellText = rounded ? `$${rounded.toLocaleString('en-US')}` : '';
               }
               const isForecast = i > lastActualIndex;
+              // Beginning/Ending Cash balances color by sign (2026-08-20, Kayee: "if
+              // cash balance is negative is red and if it's positive is green") — a
+              // real cash shortfall or surplus jumping out at a glance, same red/green
+              // (.r/.g) already used for a Total row's composition breakdown elsewhere
+              // on this tab. Net Change in Cash is a flow, not a balance, so it's left
+              // out of this — only the two rows CASH_ROW_PATTERNS itself treats as
+              // balances.
+              const isCashBalanceRow = CASH_ROW_PATTERNS.beginning.test(row.label) || CASH_ROW_PATTERNS.ending.test(row.label);
+              const rawValue = row.values[m];
+              let valueNode = cellText;
+              if (isCashBalanceRow && cellText !== '' && rawValue != null) {
+                const signClass = rawValue < 0 ? 'r' : rawValue > 0 ? 'g' : null;
+                if (signClass) valueNode = <span className={signClass}>{cellText}</span>;
+              }
               return (
                 <td
                   key={m}
@@ -2292,9 +2494,9 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
                       inherently monthly, real numbers, so it stays exactly where it was.
                       Skipped for a blank cell — nothing to break down. */}
                   {row.isTotal && cellText !== '' ? (
-                    <DrillPopover label={row.label} value={cellText} components={siblingValuesAtMonth(rows, row, m)} />
+                    <DrillPopover label={row.label} value={valueNode} components={siblingValuesAtMonth(rows, row, m)} />
                   ) : (
-                    cellText
+                    valueNode
                   )}
                 </td>
               );
