@@ -461,6 +461,16 @@ export function CustomerPanel({ glCash, glAccrued }) {
   // GL's last actual month.
   const planMonths = monthsForRange(range);
 
+  // Cash In Projection — Campaigns & Meetings never shows anything before Jan 2026
+  // (2026-08-20, Kayee, pointing at that grid specifically: "for this section, start
+  // it at jan 2026 no need to show section for anything before that") — on the
+  // Historical toggle, planMonths can reach back into 2025, but per-customer
+  // campaign/meeting counts only ever get edited/tracked from Jan 2026 forward, so
+  // earlier columns there are just empty scroll-past space. Scoped to this one grid,
+  // not planMonths itself, so the Cash Coming In — Summary table above keeps showing
+  // its full Historical range untouched.
+  const driverGridMonths = planMonths.filter((iso) => iso >= '2026-01');
+
   // The actual/forecast boundary for driver inputs: the GL Cash tab's last real month
   // (e.g. Jun-26 → editing starts Jul-26). Falls back to today's month if the GL tab
   // is misconfigured/empty, so the grids stay usable rather than locking every cell.
@@ -535,12 +545,8 @@ export function CustomerPanel({ glCash, glAccrued }) {
 
   function removeManualCustomer(id, name) {
     if (!drivers) return;
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Remove ${name || 'this customer row'} and its campaign/meeting inputs?`)
-    ) {
-      return;
-    }
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete
+    // stuff") — delete fires immediately, matching every other delete action in the app.
     const nextDriversByKey = { ...drivers.driversByKey };
     delete nextDriversByKey[`manual:${id}`];
     setDrivers({
@@ -835,12 +841,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
   }
 
   function removePlanned(id, name) {
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Remove ${name || 'this planned customer'} from the plan?`)
-    ) {
-      return;
-    }
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete stuff").
     setPlanned((planned || []).filter((r) => r.id !== id));
     // Also drop the planned customer's campaign/meeting driver inputs — otherwise the
     // orphaned counts would silently keep feeding the Cash Coming In totals.
@@ -1117,7 +1118,7 @@ export function CustomerPanel({ glCash, glAccrued }) {
                 currentRows={sortedCurrentDriverRows}
                 plannedRows={sortedPlannedDriverRows}
                 inactiveRows={inactiveDriverRows}
-                months={planMonths}
+                months={driverGridMonths}
                 isEditableMonth={isDriverEditableMonth}
                 todayIso={todayIso}
                 getCount={getDriverCount}

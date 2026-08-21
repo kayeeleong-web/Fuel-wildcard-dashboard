@@ -173,7 +173,7 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
   }
 
   function removeItem(id, name) {
-    if (typeof window !== 'undefined' && !window.confirm(`Remove ${name || 'this cost item'}?`)) return;
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete stuff").
     onChange(costItems.filter((i) => i.id !== id));
   }
 

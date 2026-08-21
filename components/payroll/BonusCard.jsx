@@ -66,7 +66,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
   }
 
   function removeBonus(id, name) {
-    if (typeof window !== 'undefined' && !window.confirm(`Remove ${name || 'this person'} from the bonus table?`)) return;
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete stuff").
     onChange(bonuses.filter((b) => b.id !== id));
   }
 

@@ -64,7 +64,7 @@ export function HiringPlanCard({ roster, assumptions, months, todayIso, onChange
   }
 
   function removeRole(id, name) {
-    if (typeof window !== 'undefined' && !window.confirm(`Remove ${name || 'this planned role'} from the hiring plan?`)) return;
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete stuff").
     onChange(roster.filter((r) => r.id !== id));
   }
 

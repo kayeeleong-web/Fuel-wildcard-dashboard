@@ -1865,6 +1865,40 @@ function withGrossProfitMarginRow(rows, months) {
   return [...rows.slice(0, gpIdx + 1), marginRow, ...rows.slice(gpIdx + 1)];
 }
 
+/** EBITDA row was rendering as an empty hero band — every month blank, actual AND
+ *  forecast (2026-08-20, Kayee screenshot: "there's no ebitda and net income"). Turns
+ *  out the client's own sheet has never had per-month numbers on this particular row
+ *  (unlike "Net Income", a couple rows below it, which the sheet DOES populate for
+ *  actual months) — PL_COST_PROJECTIONS_BY_LABEL above only ever patches FORECAST
+ *  months for rows it recognizes, so a genuinely-blank sheet row stays blank for
+ *  actual months no matter what. Same fix as Gross Profit Margin % just above: derive
+ *  it client-side from whatever Gross Profit / Total OpEx values are ALREADY on
+ *  screen for that month (real booked $ for actual, formula-projected $ for
+ *  forecast), so it's automatically correct either way with no separate actual-vs-
+ *  forecast logic of its own. Only fills blanks — never overwrites a real value if
+ *  this client's sheet ever does start providing one. Safe no-op if either input row
+ *  isn't found. */
+function withEbitdaRollup(rows, months) {
+  const ebitdaIdx = rows.findIndex((r) => String(r.label ?? '').trim().toLowerCase() === 'ebitda');
+  if (ebitdaIdx === -1) return rows;
+  const gpRow = rows.find((r) => GROSS_PROFIT_ROW_LABELS.includes(r.label));
+  const opexRow = rows.find((r) => /^total op(e)?x$/i.test(String(r.label ?? '').trim()) || String(r.label ?? '').trim().toLowerCase() === 'total operating expenses');
+  if (!gpRow || !opexRow) return rows;
+  const ebitdaRow = rows[ebitdaIdx];
+  const patchedValues = { ...ebitdaRow.values };
+  for (const iso of months) {
+    if (patchedValues[iso] != null) continue;
+    const gpVal = gpRow.values[iso];
+    const opexVal = opexRow.values[iso];
+    if (gpVal != null && opexVal != null) {
+      patchedValues[iso] = gpVal - opexVal;
+    }
+  }
+  const next = [...rows];
+  next[ebitdaIdx] = { ...ebitdaRow, values: patchedValues };
+  return next;
+}
+
 function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection', cfProjection = null }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
@@ -2032,6 +2066,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   }
   if (statement.type === 'PL') {
     try {
+      rows = withEbitdaRollup(rows, months);
+    } catch (err) {
+      console.warn('EBITDA rollup failed:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
       rows = withGrossProfitMarginRow(rows, months);
     } catch (err) {
       console.warn('Gross Profit Margin % row injection failed:', err);
@@ -2139,15 +2180,8 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // was linked to it).
   function handleRemoveCostItem(itemId, label) {
     if (!assumptionsState?.costItems) return;
-    // Same confirm() guard every other row-delete in the app already has (Roster,
-    // Bonus, Hiring Plan, Customer tab rows, and the Assumptions sidebar's own trash
-    // icon for this exact item) — this entry point was missing it (2026-08-19 audit).
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(`Delete ${label || 'this cost item'}? This removes it everywhere it's used.`)
-    ) {
-      return;
-    }
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete
+    // stuff") — delete fires immediately, matching every other delete action in the app.
     setAssumptionsState({
       ...assumptionsState,
       costItems: assumptionsState.costItems.filter((i) => i.id !== itemId),
@@ -2252,8 +2286,26 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // Reports tab keeps its original default (only Non-Operating/Other-Income starts
   // collapsed; everything else starts open), matching how it's always looked.
   const isCashSummarySection = statementType === 'CF' && rows.some((r) => CASH_ROW_PATTERNS.ending.test(r.label));
+  // PROFITABILITY (Gross Profit + Gross Profit Margin %) also stays open by default
+  // (2026-08-20, Kayee: "this part shouldn't be collapsed. you are supposed to show
+  // gross profit and gross profit margin") — same reasoning as the CF cash-summary
+  // exception above: these are derived hero metrics meant to be visible at a glance,
+  // not detail rows worth hiding behind a click.
+  const isProfitabilitySection = statementType === 'PL' && /^profitability$/i.test(section.trim());
+  // Balance Sheet on the plain actuals-only Reports tab also starts fully collapsed
+  // by default (2026-08-20, Kayee, pointing at a BS view with every section already
+  // closed to just its header + Total row: "keep it collapsed like this for balance
+  // sheet by default") — a wall of individual GL accounts under Cash & Equivalent /
+  // Accounts Receivable / etc. is rarely what's wanted at a glance; the Total rows
+  // alone tell the story. P&L and CF on this same actuals tab are untouched (still
+  // only Non-Operating/Other-Income starts collapsed there), matching how they've
+  // always looked — this is a BS-only exception to that tab's original default.
   const [collapsed, setCollapsed] = useState(
-    isProjection ? !isCashSummarySection : /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section)
+    isProjection
+      ? !(isCashSummarySection || isProfitabilitySection)
+      : statementType === 'BS'
+      ? true
+      : /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section)
   );
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
@@ -2344,17 +2396,23 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
         const totalRows = rows.filter((r) => r.isTotal);
         return (
           <>
-            {!collapsed && nonTotalRows.map(renderRow)}
-            {!collapsed && onAddManualAccount && <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />}
-            {totalRows.map((row, i) => renderRow(row, { isSectionToggle: mergeHeaderIntoTotal && i === 0 }))}
-            {!collapsed && marginRows.map(renderRow)}
+            {!collapsed && nonTotalRows.map((row, i) => renderRow(row, { keySuffix: `line-${i}` }))}
+            {/* No "+ Add account" on PROFITABILITY (2026-08-20, Kayee: "you can remove
+                the profitability add account row above the gross profit. it doesn't do
+                anything") — it's a computed section (Gross Profit / Gross Profit
+                Margin %), not a real line-item section a manual account belongs in. */}
+            {!collapsed && onAddManualAccount && !isProfitabilitySection && (
+              <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />
+            )}
+            {totalRows.map((row, i) => renderRow(row, { isSectionToggle: mergeHeaderIntoTotal && i === 0, keySuffix: `total-${i}` }))}
+            {!collapsed && marginRows.map((row, i) => renderRow(row, { keySuffix: `margin-${i}` }))}
           </>
         );
       })()}
     </>
   );
 
-  function renderRow(row, { isSectionToggle = false } = {}) {
+  function renderRow(row, { isSectionToggle = false, keySuffix = '' } = {}) {
         // Calc-note lookup now runs ONCE per row, not once per month cell (2026-08-07,
         // Kayee: "the hover over explanation on the calculation only needs to appear
         // once at the account title") — the popover moves from every forecast $ cell
@@ -2420,7 +2478,19 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
         const isEndingCashRow = isProjection && CASH_ROW_PATTERNS.ending.test(row.label);
         return (
           <tr
-            key={row.key}
+            // Composite key, not just row.key (2026-08-20, Kayee, pointing at garbled/
+            // overlapping text on "Total Cash Out" plus mystery blank rows right below
+            // it: "i think here is blank because the text is black" — turned out to
+            // also be a duplicate-React-key rendering glitch. `row.key` comes straight
+            // from the sheet's own Key column (lib/data/sources/googleSheets.ts), and
+            // this client's CF tab apparently has two DIFFERENT rows sharing the same
+            // Key value — React silently reuses/misattributes DOM between same-keyed
+            // siblings, which looks exactly like this (one row's text bleeding into
+            // the next, another rendering as if empty). Section + row-group position
+            // (`keySuffix`, set by the three .map() call sites above) makes every
+            // rendered <tr> unique regardless of what the sheet's Key column contains,
+            // without needing to touch or "fix" the underlying data.
+            key={`${section}__${row.key}__${keySuffix}`}
             className={[
               isEndingCashRow
                 ? 'total cf-summary-ending'
@@ -2479,8 +2549,20 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                   a section name isn't a formula. */}
               {isSectionToggle ? (
                 <>
-                  <span className="report-section-chevron">▸</span>
-                  <span className="report-section-toggle-label">{sectionDisplayLabel(section, statementType)}</span>
+                  {/* on-dark variant (2026-08-20, Kayee, pointing at rows on the CF
+                      statement rendering with no visible label at all: "i think here
+                      is blank because the text is black") — this black/bold styling
+                      assumes the row underneath is the usual light total-soft
+                      background, but a section whose own Total row happens to be a
+                      HERO row (Total Cash In, Net Cash from Investing/Financing, etc.
+                      — see isHeroTotalRow) keeps its black background even while
+                      merged/collapsed, which made the label black-on-black and
+                      invisible. Switch to white text/chevron whenever that's the
+                      case. */}
+                  <span className={`report-section-chevron${isHeroTotalRow(row.label, statementType) ? ' on-dark' : ''}`}>▸</span>
+                  <span className={`report-section-toggle-label${isHeroTotalRow(row.label, statementType) ? ' on-dark' : ''}`}>
+                    {sectionDisplayLabel(section, statementType)}
+                  </span>
                 </>
               ) : rowCalcInfo ? (
                 <DrillPopover label={row.label} value={row.label} calcNote={rowCalcInfo.calcNote} />

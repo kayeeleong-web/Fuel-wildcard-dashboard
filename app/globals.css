@@ -429,6 +429,14 @@ tbody tr.report-section-toggle { cursor: pointer; }
   margin-right: 5px;
 }
 .report-section-chevron.open { transform: rotate(90deg); }
+/* 2026-08-20, Kayee, pointing at invisible-label rows on the CF statement: "i think
+   here is blank because the text is black" — a merged section-toggle row whose own
+   Total row is a HERO row (black background, e.g. "Total Cash In", "Net Cash from
+   Investing/Financing") needs a white label/chevron instead of the black/bold
+   styling below, which was written assuming the always-light total-soft background.
+   See isHeroTotalRow usage at the isSectionToggle render site in ReportsPanel.jsx. */
+.report-section-chevron.on-dark { color: #fff; }
+.report-section-toggle-label.on-dark { color: #fff; }
 /* Collapsed OpEx/CF section's merged header+Total row (2026-08-20, Kayee: "i want it
    to show 'SALARIES & BENEFITS' instead of total salaries and benefits... black font
    instead of the green one with the total") — same typography as the plain section
@@ -443,6 +451,14 @@ tbody tr.report-section-toggle { cursor: pointer; }
 }
 tbody tr.total td { font-weight: 700; background: var(--black); color: #fff; border-top: 2px solid var(--green); border-bottom: 2px solid var(--green); }
 tbody tr.total td:first-child { color: #fff; }
+/* Belt-and-suspenders (2026-08-20, Kayee, pointing at unreadable rows on the CF
+   statement: "i think here is blank because the text is black") — every hero (black)
+   Total row's own sticky label cell must always render white text, full stop, no
+   matter what other rule (a stray duplicate-key render, a future scoped override,
+   etc.) might otherwise land a dark color on it. Excludes `.total-soft` on purpose —
+   those rows are intentionally light-background/dark-text (see the total-soft block
+   below) and must NOT be forced white here. */
+.report-doc tbody tr.total:not(.total-soft) td:first-child { color: #fff !important; }
 tbody tr.total .g { color: #7FE3A4; }
 tbody tr.total .r { color: #FF8FA0; }
 tbody tr.total .m { color: var(--on-black-muted); }
@@ -468,8 +484,19 @@ tbody tr.total .m { color: var(--on-black-muted); }
    amounts (.g/.r, red-if-negative/green-if-positive) stay the normal light-background
    dark variants (var(--green-dark)/var(--pink)) since there's no dark bg to contend
    with here any more. */
-.report-doc tr.cf-summary-ending td { font-weight: 700; background: inherit; color: var(--text); border-top: 1.5px solid var(--border); }
-.report-doc tr.cf-summary-ending td:first-child { background: inherit; color: var(--text); }
+/* 2026-08-20 (later same day), Kayee, live on production: the plain-white "no dark
+   band at all" version above left the row's own sticky label cell unreadable — dark
+   text on top of the sticky first-column's own force-black background
+   (`.table-wrap table tbody tr.total td:first-child`, higher specificity than the
+   `background: inherit` rule right above), i.e. black text on black. Kayee's fix:
+   "the black part should be in medium grey" — so instead of fighting that sticky
+   override with more `inherit`, this row now owns an explicit medium-grey background
+   (var(--muted), the same grey token used everywhere else in the app) across every
+   cell, high-specificity enough (`[data-doc="CF"]` + `.cf-summary-ending` + `td`) to
+   beat both the sticky-column force-black AND the forecast-column force-black
+   (`tbody tr.total td.pr-fcst`) rules below. White text throughout for contrast. */
+.report-doc[data-doc="CF"] tr.cf-summary-ending td { font-weight: 700; background: var(--muted); color: #fff; border-top: 1.5px solid var(--border); }
+.report-doc[data-doc="CF"] tr.cf-summary-ending td:first-child { background: var(--muted); color: #fff; }
 .report-doc tr.cf-summary-ending td.active-col { background: var(--green-soft); color: var(--text); }
 
 /* Non-hero Total rows (Total Salaries & Benefits, Total Travel, Total Cash Out from

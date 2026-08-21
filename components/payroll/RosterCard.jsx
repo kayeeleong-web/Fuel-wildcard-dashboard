@@ -196,7 +196,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   }
 
   function removeEmployee(id, name) {
-    if (typeof window !== 'undefined' && !window.confirm(`Remove ${name || 'this person'} from the roster?`)) return;
+    // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete stuff").
     onChange(roster.filter((r) => r.id !== id));
   }
 
