@@ -1760,13 +1760,25 @@ function withCashFlowGrandTotals(rows, months) {
     patch(cashOutFromOps, cashOutFromOpsValues);
   }
 
-  if (cashOut && (cashOutFromOpsValues || otherCashOut)) {
+  // Total Cash Out now also folds in Investing/Financing section totals (2026-08-20,
+  // Kayee: "total cash out is the total of all operating, investing and financing") —
+  // it was Operations + Other only. Those section totals are excluded from
+  // opExpenseTotals above (they're not Operations), so no double count.
+  const invFinTotals = rows.filter(
+    (r) => r.isTotal && !excludedKeys.has(r.key) && /INVEST|FINANC/i.test(String(r.section ?? ''))
+  );
+  if (cashOut && (cashOutFromOpsValues || otherCashOut || invFinTotals.length > 0)) {
     const values = { ...cashOut.values };
     for (const m of months) {
       if (values[m] != null) continue;
       const a = cashOutFromOpsValues ? cashOutFromOpsValues[m] : cashOutFromOps?.values[m];
       const b = otherCashOut?.values[m];
-      if (a != null || b != null) values[m] = (Number(a) || 0) + (Number(b) || 0);
+      const hasInvFin = invFinTotals.some((r) => r.values[m] != null);
+      if (a != null || b != null || hasInvFin) {
+        let sum = (Number(a) || 0) + (Number(b) || 0);
+        for (const r of invFinTotals) sum += Number(r.values[m]) || 0;
+        values[m] = sum;
+      }
     }
     patch(cashOut, values);
   }
@@ -1788,6 +1800,32 @@ function withCashFlowGrandTotals(rows, months) {
 
   if (patched.size === 0) return rows;
   return rows.map((r) => patched.get(r.key) || r);
+}
+
+/** Moves the "Total Cash Out" row BELOW the Investing/Financing sections (2026-08-20,
+ *  Kayee: "total cash out should be below investing and financing because total cash
+ *  out is the total of all operating, investing and financing. so it makes sense to
+ *  go below") — the sheet places it right under "Total Cash Out from Operations",
+ *  which read as if Investing/Financing weren't part of it (they are now — see the
+ *  invFinTotals fold-in inside withCashFlowGrandTotals above). Reassigns the moved
+ *  row its own one-off section (its label) — groupBySection groups by section NAME
+ *  regardless of array position, so leaving it on its original shared section would
+ *  snap it right back next to Total Cash Out from Operations no matter where it sits
+ *  in the array. A section containing only a Total row never renders a header band
+ *  (see hasLineItems in FragmentRows), so this shows as exactly one standalone hero
+ *  row, nothing extra. */
+function withTotalCashOutBelowInvestingFinancing(rows) {
+  const idx = rows.findIndex((r) => r.isTotal && CF_GRAND_TOTAL_LABELS.cashOut.test(String(r.label ?? '').trim()));
+  if (idx === -1) return rows;
+  let lastInvFinIdx = -1;
+  rows.forEach((r, i) => {
+    if (/INVEST|FINANC/i.test(String(r.section ?? ''))) lastInvFinIdx = i;
+  });
+  if (lastInvFinIdx === -1 || lastInvFinIdx < idx) return rows;
+  const moved = { ...rows[idx], section: rows[idx].label };
+  const without = rows.filter((_, i) => i !== idx);
+  const insertAt = without.indexOf(rows[lastInvFinIdx]) + 1;
+  return [...without.slice(0, insertAt), moved, ...without.slice(insertAt)];
 }
 
 const TOTAL_REVENUE_ROW_LABELS = ['Total Revenue', 'TOTAL REVENUE'];
@@ -2196,6 +2234,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     // nets to), so showing both was just the same number twice under two different
     // names.
     rows = rows.filter((r) => !(r.isTotal && CF_GRAND_TOTAL_LABELS.netBurn.test(String(r.label ?? '').trim())));
+    try {
+      rows = withTotalCashOutBelowInvestingFinancing(rows);
+    } catch (err) {
+      console.warn('Total Cash Out reposition failed, showing sheet order:', err);
+    }
     try {
       rows = withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection);
     } catch (err) {
