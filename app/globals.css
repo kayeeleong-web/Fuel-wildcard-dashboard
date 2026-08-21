@@ -1175,6 +1175,17 @@ tbody tr.total td.pr-fcst { background: var(--black); border-top-color: var(--bl
   width: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   background: var(--black); color: #fff; padding: 13px 18px;
 }
+/* Every black card header bar renders the SAME height, button or no button
+   (2026-08-20, Kayee, comparing Employees/Bonus/Hiring Plan/Bonus collapsed bars:
+   "the height is not the same when collapsed... just make the height of the add role
+   button shorter so that they match... all needs to have the same height") — two
+   parts: (1) a shared min-height so a bare-title bar (Planned Bonus) matches, and
+   (2) every header control (+ Add Employee / + Add Role .btn, the "+ Add bonus
+   for…" select) shrunk to the title's own line height so it stops stretching its
+   bar taller than the rest. */
+.payroll-card-head { min-height: 46px; box-sizing: border-box; }
+.payroll-card-head .btn { padding: 3px 10px; font-size: 11px; white-space: nowrap; }
+.payroll-card-head .pr-input.pr-add-bonus { padding: 3px 10px; font-size: 11px; height: auto; }
 .payroll-card-title-btn {
   display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 600;
   background: none; border: none; color: #fff; font-family: inherit; padding: 0; cursor: pointer;
@@ -1310,11 +1321,18 @@ td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
    once the driver grid's gridlines went grey), so a year boundary was indistinguishable
    from any other column line. A solid dark grey reads as a real divider without being
    full black. */
-/* Matched to the frozen-column divider color (.pr-frozen-last below, "the line next
-   to price") 2026-08-20, Kayee: "the line right now is still too faint" — the old
-   solid #9CA3AF read lighter than that divider once both sat on screen together. */
-.pr-year-start { border-left: 2px solid rgba(17, 24, 39, .28); }
-thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.35); }
+/* ONE solid color for every year-separator line in the app (2026-08-20, Kayee: "the
+   line separating the year has different color in each section. make it the same
+   color... actual 3 statements and projection pl and cf. the line needs to be the
+   same color throughout so that it's not an eye sore") — the old translucent
+   rgba(17,24,39,.28) shifted shade with every row background it crossed (white line
+   items, green section bands, blue forecast cells), and black header/Total rows
+   needed their own white variant on top of that, so one "line" showed as four
+   different colors down the page. var(--muted) (#6B7280) is the one grey in the
+   palette readable on ALL of those backgrounds, light and black alike, so every
+   override collapses into this single rule. */
+.pr-year-start { border-left: 2px solid var(--muted); }
+thead .pr-year-start { border-left: 2px solid var(--muted); }
 
 /* Reports/Projection year-boundary divider (2026-08-19, Kayee: "put some line between
    the year"), and the same treatment for every other table in the app (Payroll,
@@ -1322,18 +1340,16 @@ thead .pr-year-start { border-left: 2px solid rgba(255,255,255,.35); }
    height of the table (header rows + every body row), not just the year-band row.
    Darkened 2026-08-20, same reason as .pr-year-start above. */
 .report-doc th.y-boundary,
-.report-doc td.y-boundary { border-left: 2px solid rgba(17, 24, 39, .28); }
-.report-doc thead th.y-boundary { border-left: 2px solid rgba(255,255,255,.35); }
-/* Fix: the line was disappearing every time it crossed a black `tr.total` band
-   (2026-08-20, Kayee: "this line needs to go all the way down separating different
-   year in all three statement in reports and projections") — a translucent dark-navy
-   border reads as basically invisible against the Total row's near-black background,
-   so on a statement like the Balance Sheet (mostly back-to-back Total rows) the
-   boundary visually stopped a few rows down instead of running the full table height.
-   Same light/white treatment the header row already gets above, reused here for any
-   black total row body-wide. `tr.total-soft` rows are light-background, so the
-   original dark color already reads fine there and doesn't need this override. */
-.report-doc tr.total td.y-boundary { border-left-color: rgba(255,255,255,.4); }
+.report-doc td.y-boundary { border-left: 2px solid var(--muted); }
+/* One color AND one thickness everywhere (2026-08-20, Kayee: "the line separating
+   the year has different color in each section. make it the same color... thickness
+   of the line needs to be the same and color") — the former white-on-black overrides
+   for the header row and black Total bands are gone: var(--muted) is readable on
+   every background this line crosses (white line items, green section bands, blue
+   forecast cells, black hero rows), so the same 2px grey runs the full table height
+   uninterrupted on all three statements, Reports and Projection alike. */
+.report-doc thead th.y-boundary { border-left: 2px solid var(--muted); }
+.report-doc tr.total td.y-boundary { border-left-color: var(--muted); }
 
 /* Same historical-month dark-grey header treatment as Reports' .r-historical, applied
    to PayrollTable-based tables (Payroll, Customer waterfalls/driver grids) — see
@@ -1652,6 +1668,13 @@ tr.pr-dragging { opacity: .4; }
 .pr-outer-head {
   width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   background: var(--panel-2); border: none; padding: 15px 18px; cursor: pointer; text-align: left;
+  /* Uniform header height whether or not a section carries headActions (2026-08-20,
+     Kayee, comparing collapsed "Current Customers" — which has pill toggle controls —
+     against "Cash Inflow Projection", which doesn't: "i want the height of these two
+     to be the same... the height is different for the two sections when collapsed").
+     66px fits the tallest content any section header has (the pill toggle groups);
+     text-only headers just get a bit more breathing room and everything lines up. */
+  min-height: 66px; box-sizing: border-box;
 }
 .pr-outer-head:hover { background: #ECEDEF; }
 .pr-outer-chevron {

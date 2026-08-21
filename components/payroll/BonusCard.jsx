@@ -8,9 +8,14 @@ const FROZEN_COLUMNS = [
   // against this sticky column's edge.
   { key: 'actions', label: '', width: 80 },
   { key: 'name', label: 'Name', width: 210 },
-  { key: 'base', label: 'Base', width: 110, align: 'right' },
-  { key: 'bonus', label: 'Bonus', width: 110, align: 'right' },
-  { key: 'ote', label: 'OTE', width: 110, align: 'right' },
+  // Base/Bonus/OTE widened 110 -> 130 each (2026-08-20, Kayee, red line down her
+  // screenshot of Hiring Plan and Bonus stacked: "these two need to be aligned too.
+  // why are they not the same in width") — both cards' frozen blocks now total the
+  // exact same 680px (80+210+130+110+150 = 80+210+130+130+130), so their month grids
+  // start at the same x and the year-divider lines run straight through both.
+  { key: 'base', label: 'Base', width: 130, align: 'right' },
+  { key: 'bonus', label: 'Bonus', width: 130, align: 'right' },
+  { key: 'ote', label: 'OTE', width: 130, align: 'right' },
 ];
 
 /**
