@@ -429,6 +429,18 @@ tbody tr.report-section-toggle { cursor: pointer; }
   margin-right: 5px;
 }
 .report-section-chevron.open { transform: rotate(90deg); }
+/* Collapsed OpEx/CF section's merged header+Total row (2026-08-20, Kayee: "i want it
+   to show 'SALARIES & BENEFITS' instead of total salaries and benefits... black font
+   instead of the green one with the total") — same typography as the plain section
+   header band above (tbody tr.section td), just without that band's own green-tinted
+   background, since this label sits inside the Total row's own total-soft tint
+   instead. A direct color here always wins over the inherited total-soft label color
+   (var(--green-dark)) regardless of selector specificity — it's a rule on the span
+   itself, not a descendant override. */
+.report-section-toggle-label {
+  font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase;
+  letter-spacing: .6px; font-family: 'Space Grotesk', sans-serif;
+}
 tbody tr.total td { font-weight: 700; background: var(--black); color: #fff; border-top: 2px solid var(--green); border-bottom: 2px solid var(--green); }
 tbody tr.total td:first-child { color: #fff; }
 tbody tr.total .g { color: #7FE3A4; }
@@ -437,17 +449,28 @@ tbody tr.total .m { color: var(--on-black-muted); }
 .pct-of { display: block; font-size: 10.5px; color: var(--muted-2); margin-top: 1px; }
 .g { color: var(--green-dark); } .r { color: var(--pink); } .m { color: var(--muted-2); }
 
-/* Ending Cash — medium grey, not full black (2026-08-20, Kayee: "the format need to
-   be better like ending cash in a medium grey instead of black"). It's the one Total
-   row inside the Beginning/Net Change/Ending Cash formula block (see
-   isCashSummarySection in ReportsPanel.jsx), which Kayee wants left permanently
-   expanded and visually calmer than a hero black band — same #6B7280 medium grey
-   already used for CustomerPanel's tr.summary-grand-total, reused here for the same
-   "quiet final answer" feel. Higher specificity than the base `tr.total` rule above
-   (adds `.total-grey`) so it wins without !important. */
-.report-doc tr.total-grey td { background: #6B7280; color: #fff; border-top-color: #6B7280; border-bottom-color: #6B7280; }
-.report-doc tr.total-grey td:first-child { background: #6B7280; color: #fff; }
-.report-doc tr.total-grey td.active-col { background: #565D6D; color: #fff; }
+/* Beginning/Net Change/Ending Cash as one boxed callout card (2026-08-20, Kayee: "i
+   want this to be in a box like this so the eye can get drawn to it", plus a
+   reference screenshot of a clean light card — plain rows, colored $ values, a bold
+   summary line at the bottom, no heavy black/grey banding at all). Went through two
+   earlier passes (full black, then medium grey, then light grey) before landing
+   here: a plain white card with a visible border box around the whole 3-row group
+   instead of any row having its own dark background. `.cf-summary-first`/`-last`
+   carry the box's top/bottom edge; every row in the group carries `.cf-summary-box`
+   for the left/right edges, so the three together trace one continuous rectangle. */
+.report-doc tr.cf-summary-box td:first-child { border-left: 1.5px solid var(--border); }
+.report-doc tr.cf-summary-box td:last-child { border-right: 1.5px solid var(--border); }
+.report-doc tr.cf-summary-first td { border-top: 1.5px solid var(--border); }
+.report-doc tr.cf-summary-last td { border-bottom: 1.5px solid var(--border); }
+/* Ending Cash keeps its bold weight and its own top border (the "= " sum line reads
+   as a formula total), but otherwise matches the plain white/zebra background every
+   other row in this box already has — no more dedicated dark band. Sign-colored
+   amounts (.g/.r, red-if-negative/green-if-positive) stay the normal light-background
+   dark variants (var(--green-dark)/var(--pink)) since there's no dark bg to contend
+   with here any more. */
+.report-doc tr.cf-summary-ending td { font-weight: 700; background: inherit; color: var(--text); border-top: 1.5px solid var(--border); }
+.report-doc tr.cf-summary-ending td:first-child { background: inherit; color: var(--text); }
+.report-doc tr.cf-summary-ending td.active-col { background: var(--green-soft); color: var(--text); }
 
 /* Non-hero Total rows (Total Salaries & Benefits, Total Travel, Total Cash Out from
    Operations, etc.) get a softer, blended treatment instead of the full black band —
@@ -471,25 +494,31 @@ tbody tr.total .m { color: var(--on-black-muted); }
    than every `tr.total` rule above (adds `.report-doc[data-doc="PL"/"CF"]` +
    `.total-soft`) so it always wins without needing !important. */
 .report-doc[data-doc="PL"] tr.total-soft td,
-.report-doc[data-doc="CF"] tr.total-soft td {
+.report-doc[data-doc="CF"] tr.total-soft td,
+.report-doc[data-doc="BS"] tr.total-soft td {
   font-weight: 700; background: #F0FAF3; color: var(--text);
   border-top: 1px solid rgba(43, 188, 98, .3); border-bottom: 1px solid rgba(43, 188, 98, .3);
   box-shadow: none;
 }
 .report-doc[data-doc="PL"] tr.total-soft td:first-child,
-.report-doc[data-doc="CF"] tr.total-soft td:first-child { background: #E7F7EC; color: var(--green-dark); }
+.report-doc[data-doc="CF"] tr.total-soft td:first-child,
+.report-doc[data-doc="BS"] tr.total-soft td:first-child { background: #E7F7EC; color: var(--green-dark); }
 .report-doc[data-doc="PL"] tr.total-soft td.pr-fcst,
-.report-doc[data-doc="CF"] tr.total-soft td.pr-fcst {
+.report-doc[data-doc="CF"] tr.total-soft td.pr-fcst,
+.report-doc[data-doc="BS"] tr.total-soft td.pr-fcst {
   background: #EAF8FD;
   border-top-color: rgba(17, 179, 231, .3); border-bottom-color: rgba(17, 179, 231, .3);
   box-shadow: none;
 }
 .report-doc[data-doc="PL"] tr.total-soft td.active-col,
-.report-doc[data-doc="CF"] tr.total-soft td.active-col { background: #D9F2E1; color: var(--text); }
+.report-doc[data-doc="CF"] tr.total-soft td.active-col,
+.report-doc[data-doc="BS"] tr.total-soft td.active-col { background: #D9F2E1; color: var(--text); }
 .report-doc[data-doc="PL"] tr.total-soft:hover td,
-.report-doc[data-doc="CF"] tr.total-soft:hover td { background: #E3F5E8; }
+.report-doc[data-doc="CF"] tr.total-soft:hover td,
+.report-doc[data-doc="BS"] tr.total-soft:hover td { background: #E3F5E8; }
 .report-doc[data-doc="PL"] tr.total-soft:hover td.pr-fcst,
-.report-doc[data-doc="CF"] tr.total-soft:hover td.pr-fcst { background: #DEF2FB; }
+.report-doc[data-doc="CF"] tr.total-soft:hover td.pr-fcst,
+.report-doc[data-doc="BS"] tr.total-soft:hover td.pr-fcst { background: #DEF2FB; }
 
 /* Current-period column highlight — must always show its value, on every row type,
    including total rows (design-rules.md §3: never a blank cell here). */

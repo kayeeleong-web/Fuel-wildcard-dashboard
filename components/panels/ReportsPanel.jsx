@@ -1785,17 +1785,50 @@ const GROSS_PROFIT_ROW_LABELS = ['Gross Profit'];
  *  "for total revenue total cogs and gross profit ebitda and net income it make
  *  sense to keep it black but the others it's just distracting... a green for actual
  *  and blue for forecast, blending in, like a modern fp&a webpage a designer made").
- *  Case-insensitive, trimmed compare — see isHeroTotalRow below. */
-const HERO_TOTAL_ROW_LABELS = new Set([
-  'total revenue', 'total cogs', 'gross profit', 'gross margin', 'ebitda', 'net income',
-  // Cash Flow hero rows (2026-08-20, Kayee: "in cash flow the important row keep it
-  // black like the total cash in total cash out and then total operating
-  // activities") — everything else on the CF doc's non-hero Total rows gets the same
-  // total-soft treatment as P&L's OpEx totals.
+ *  Split by statement type (2026-08-20, Kayee, pointing at CF's own "Total COGS" row
+ *  rendering black: "i dont want the style of total cogs to be black i want it to be
+ *  the same as the others") — CF's sheet mirrors the P&L's COGS/OpEx categorization
+ *  for cash-timing purposes, so "Total COGS" is a real row there too, but it isn't
+ *  one of CF's own hero rows the way it is on the P&L. Case-insensitive, trimmed
+ *  compare — see isHeroTotalRow below. */
+const PL_HERO_TOTAL_ROW_LABELS = new Set(['total revenue', 'total cogs', 'gross profit', 'gross margin', 'ebitda', 'net income']);
+// Cash Flow hero rows (2026-08-20, Kayee: "in cash flow the important row keep it
+// black like the total cash in total cash out and then total operating
+// activities") — everything else on the CF doc's non-hero Total rows gets the same
+// total-soft treatment as P&L's OpEx totals.
+const CF_HERO_TOTAL_ROW_LABELS = new Set([
   'total cash in', 'total cash out', 'total operating activities', 'total cash out from operations',
+  // 2026-08-20, Kayee: "net cash in from investing and from financing needs to be in
+  // the same color as total cash out from operating like in black background".
+  'net cash from investing', 'net cash from financing',
 ]);
-function isHeroTotalRow(label) {
-  return HERO_TOTAL_ROW_LABELS.has(String(label ?? '').trim().toLowerCase());
+// Balance Sheet hero rows (2026-08-20, Kayee, pointing at a wall of black Total
+// bands on BS: "this is very ugly. apply the same style") — only the rows that
+// represent the actual balance-sheet equation stay black; every other Total
+// (Total Cash & Equivalent, Total Deferred Revenue, Total Credit Card Payable,
+// etc.) gets the same total-soft treatment as P&L's OpEx and CF's own totals.
+const BS_HERO_TOTAL_ROW_LABELS = new Set(['total assets', 'total liabilities', 'total equity', 'total liabilities & equity', 'total liabilities and equity']);
+function isHeroTotalRow(label, statementType) {
+  const set = statementType === 'CF' ? CF_HERO_TOTAL_ROW_LABELS : statementType === 'BS' ? BS_HERO_TOTAL_ROW_LABELS : PL_HERO_TOTAL_ROW_LABELS;
+  return set.has(String(label ?? '').trim().toLowerCase());
+}
+
+/** CF-only section renames (2026-08-20, Kayee: "dont say revenue here in the cash
+ *  flow projection say operation cash in" / pointing at Non-Operating: "this you say
+ *  other operational cash in") — the CF sheet reuses "REVENUE" and "NON-OPERATING
+ *  INCOME & EXPENSES" as section names (same labels the P&L uses for the same GL
+ *  accounts), but on a Cash Flow statement they read as inflow buckets, not revenue
+ *  recognition — display-only, the underlying section string (used for grouping,
+ *  drag-and-drop category, etc.) is completely untouched. P&L keeps the original
+ *  section names exactly as the sheet reports them. */
+const CF_SECTION_DISPLAY_RENAMES = [
+  { pattern: /^revenue$/i, label: 'OPERATING CASH IN' },
+  { pattern: /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i, label: 'OTHER OPERATING CASH IN' },
+];
+function sectionDisplayLabel(section, statementType) {
+  if (statementType !== 'CF') return section;
+  const match = CF_SECTION_DISPLAY_RENAMES.find((r) => r.pattern.test(section));
+  return match ? match.label : section;
 }
 
 /** Kayee, 2026-08-10: "add gross profit margin % below gross profit both actual and
@@ -1896,6 +1929,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
                 key={section}
                 section={section}
                 statementType={statement.type}
+                isProjection={false}
                 rows={sectionRows}
                 months={months}
                 currentMonth={currentMonth}
@@ -2034,6 +2068,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     } catch (err) {
       console.warn('Cash Flow grand-total (Total Cash In/Out, Net Burn) rollup failed:', err);
     }
+    // (Net Burn)/Cash Generated removed entirely (2026-08-20, Kayee: "you can remove
+    // net burn/ cash generated since it's redundant") — it's mathematically identical
+    // to "Net Change in Cash" in the Beginning/Net Change/Ending Cash block up top
+    // (Total Cash In − Total Cash Out, same as Total Cash In from Operations activity
+    // nets to), so showing both was just the same number twice under two different
+    // names.
+    rows = rows.filter((r) => !(r.isTotal && CF_GRAND_TOTAL_LABELS.netBurn.test(String(r.label ?? '').trim())));
     try {
       rows = withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection);
     } catch (err) {
@@ -2160,6 +2201,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               key={section}
               section={section}
               statementType={statement.type}
+              isProjection={true}
               rows={sectionRows}
               months={months}
               currentMonth={currentMonth}
@@ -2178,7 +2220,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   );
 }
 
-function FragmentRows({ section, statementType, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount, onRemoveCostItem }) {
+function FragmentRows({ section, statementType, isProjection = true, rows, months, currentMonth, lastActualIndex, revenue, costCtx, onLinkCostItem, onAddManualAccount, onRemoveManualAccount, onRemoveCostItem }) {
   // Which row (by key) currently has a cost item dragged over it — purely visual
   // feedback for the drag-and-drop cost-item-to-P&L-row linking feature (2026-08-10,
   // see handleLinkCostItem in StatementDoc for the full reasoning). Local to this
@@ -2205,8 +2247,14 @@ function FragmentRows({ section, statementType, rows, months, currentMonth, last
   // formula (Beginning + Net Change = Ending); collapsing it away to just "= Ending
   // Cash" would hide the two lines that explain it. Detected by CASH_ROW_PATTERNS
   // rather than a hardcoded section name, since that reorder is itself name-agnostic.
+  // This whole default-collapse behavior is Projection-tab only (2026-08-20, Kayee:
+  // "this is only for cash flow projection by the way") — the plain actuals-only
+  // Reports tab keeps its original default (only Non-Operating/Other-Income starts
+  // collapsed; everything else starts open), matching how it's always looked.
   const isCashSummarySection = statementType === 'CF' && rows.some((r) => CASH_ROW_PATTERNS.ending.test(r.label));
-  const [collapsed, setCollapsed] = useState(!isCashSummarySection);
+  const [collapsed, setCollapsed] = useState(
+    isProjection ? !isCashSummarySection : /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section)
+  );
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
   // headcount cost to cogs and opex... if i add the cost in cogs it will only be
@@ -2255,7 +2303,7 @@ function FragmentRows({ section, statementType, rows, months, currentMonth, last
   // does (sectionCategory falls back to 'OpEx' for most of them by coincidence of
   // the same generic bucket logic above), so this checks statementType directly
   // instead of relying on that fallback.
-  const mergeHeaderIntoTotal = (sectionCategory === 'OpEx' || statementType === 'CF') && hasLineItems && collapsed;
+  const mergeHeaderIntoTotal = isProjection && (sectionCategory === 'OpEx' || statementType === 'CF') && hasLineItems && collapsed;
 
   return (
     <>
@@ -2267,7 +2315,7 @@ function FragmentRows({ section, statementType, rows, months, currentMonth, last
       <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
         <td>
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
-          {section}
+          {isProjection ? sectionDisplayLabel(section, statementType) : section}
         </td>
         <td colSpan={months.length}></td>
       </tr>
@@ -2352,14 +2400,34 @@ function FragmentRows({ section, statementType, rows, months, currentMonth, last
         // dropping a cost item on it would silently do nothing rather than actually
         // add the $ anywhere.
         const isDropTarget = !!onLinkCostItem && !row.driver && !row.payrollHeadcount && !row.isPercent && !!sectionCategory;
+        // Beginning/Net Change/Ending Cash as one boxed callout card, not three plain
+        // table rows (2026-08-20, Kayee: "i want this to be in a box like this. so
+        // the eye can get drawn to it", plus a reference screenshot of a clean
+        // white/light card with colored values and a bold summary line at the
+        // bottom) — see .cf-summary-box/-first/-last in globals.css. Ending Cash
+        // drops the flat grey band it had a moment ago in favor of this cleaner
+        // bordered-card look; it keeps its bold weight and red/green balance color,
+        // it just no longer needs its own background to read as "the answer" — the
+        // box and the bottom border do that job now.
+        // All of this — the boxed card, the soft/hero Total split — is Projection-tab
+        // only (2026-08-20, Kayee: "this is only for cash flow projection by the
+        // way"). The plain actuals-only Reports tab never reorders Beginning/Net
+        // Change/Ending into one shared section in the first place, so these three
+        // would only ever coincidentally label-match there; gating by isProjection
+        // keeps that tab's classic all-black Total styling exactly as it's always been.
+        const isBeginningCashRow = isProjection && CASH_ROW_PATTERNS.beginning.test(row.label);
+        const isNetChangeRow = isProjection && CASH_ROW_PATTERNS.netChange.test(row.label);
+        const isEndingCashRow = isProjection && CASH_ROW_PATTERNS.ending.test(row.label);
         return (
           <tr
             key={row.key}
             className={[
-              row.isTotal
-                ? CASH_ROW_PATTERNS.ending.test(row.label)
-                  ? 'total total-grey'
-                  : isHeroTotalRow(row.label)
+              isEndingCashRow
+                ? 'total cf-summary-ending'
+                : row.isTotal
+                ? !isProjection
+                  ? 'total'
+                  : isHeroTotalRow(row.label, statementType)
                   ? 'total'
                   : 'total total-soft'
                 : row.driver
@@ -2368,6 +2436,7 @@ function FragmentRows({ section, statementType, rows, months, currentMonth, last
                 ? 'cf-manual-row'
                 : null,
               isSectionToggle ? 'report-section-toggle' : null,
+              isBeginningCashRow ? 'cf-summary-box cf-summary-first' : isNetChangeRow ? 'cf-summary-box' : isEndingCashRow ? 'cf-summary-box cf-summary-last' : null,
             ].filter(Boolean).join(' ') || undefined}
             onClick={isSectionToggle ? () => setCollapsed((c) => !c) : undefined}
           >
@@ -2400,9 +2469,20 @@ function FragmentRows({ section, statementType, rows, months, currentMonth, last
               {/* isSectionToggle only ever renders while collapsed (mergeHeaderIntoTotal
                   requires it), so this chevron is always in the "closed" (▸, not
                   rotated) orientation — same glyph the section header shows before
-                  it's ever expanded. */}
-              {isSectionToggle && <span className="report-section-chevron">▸</span>}
-              {rowCalcInfo ? (
+                  it's ever expanded. Label text and styling also swap to match the
+                  plain section header exactly (2026-08-20, Kayee: "i want it to show
+                  'SALARIES & BENEFITS' instead of total salaries and benefits...
+                  black font instead of the green one with the total") — this row IS
+                  the section's stand-in while collapsed, so it reads like one
+                  (section name, black/bold/uppercase), not like a soft-tinted Total
+                  row that happens to also toggle. No calc-note popover here either —
+                  a section name isn't a formula. */}
+              {isSectionToggle ? (
+                <>
+                  <span className="report-section-chevron">▸</span>
+                  <span className="report-section-toggle-label">{sectionDisplayLabel(section, statementType)}</span>
+                </>
+              ) : rowCalcInfo ? (
                 <DrillPopover label={row.label} value={row.label} calcNote={rowCalcInfo.calcNote} />
               ) : (
                 row.label
