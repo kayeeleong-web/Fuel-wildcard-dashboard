@@ -1641,7 +1641,18 @@ function withSectionTotalRollups(statementType, rows, months, lastActualIndex) {
     const siblings = rows.filter((r) => !r.isTotal && r.section === row.section);
     if (siblings.length === 0) return row;
     const patchedValues = { ...row.values };
-    for (let i = lastActualIndex + 1; i < months.length; i++) {
+    // CF's Investing/Financing rollup rows fill ACTUAL months too (2026-08-20, Kayee,
+    // pointing at both rendering blank across Jan–Jun: "for investing and financing
+    // roll up here even if it's zero you still need to put the zero in. just an
+    // exception for the roll up row, nothing inside the collapse") — this client's
+    // sheet has no Investing/Financing activity at all yet, so the sheet-provided
+    // cells are blank for real months, and the normal forecast-only loop below never
+    // touches an actual month. Still fill-blanks-only: a real booked number, if the
+    // sheet ever reports one, is never overwritten. Line items inside the section
+    // stay blank as always — only the Total (rollup) row shows the $0.
+    const fillFrom =
+      statementType === 'CF' && /INVEST|FINANC/i.test(String(row.section ?? '')) ? 0 : lastActualIndex + 1;
+    for (let i = fillFrom; i < months.length; i++) {
       const iso = months[i];
       if (patchedValues[iso] != null) continue;
       // Always write the sum — even when every sibling is blank/zero, defaulting to
@@ -1845,27 +1856,37 @@ function sectionDisplayLabel(section, statementType) {
  *  `isPercent` so the cell renderer below formats it as "42.3%" instead of "$42". Safe
  *  no-op if "Gross Profit" isn't found on this sheet at all. */
 function withGrossProfitMarginRow(rows, months) {
-  const gpIdx = rows.findIndex((r) => GROSS_PROFIT_ROW_LABELS.includes(r.label));
-  if (gpIdx === -1) return rows;
-  const gpRow = rows[gpIdx];
+  return withMarginRowBelow(rows, months, GROSS_PROFIT_ROW_LABELS, 'gross_profit_margin_pct', 'Gross Profit Margin %');
+}
+
+/** Generalized from withGrossProfitMarginRow (2026-08-20, Kayee: "also add ebitda and
+ *  net income margin below just like gross profit margin") — same recipe for any
+ *  margin: target row's value ÷ whatever "Total Revenue" is ALREADY on screen for
+ *  that month × 100, actual and forecast alike, flagged isPercent, inserted directly
+ *  below its target row and carrying the target's own section so it renders inside
+ *  the same group. Safe no-op if the target row isn't on this sheet. */
+function withMarginRowBelow(rows, months, targetLabels, key, label) {
+  const idx = rows.findIndex((r) => targetLabels.includes(r.label));
+  if (idx === -1) return rows;
+  const targetRow = rows[idx];
   const revenueRow = rows.find((r) => TOTAL_REVENUE_ROW_LABELS.includes(r.label));
   const values = {};
   for (const iso of months) {
     const revenueVal = revenueRow ? revenueRow.values[iso] : null;
-    const gpVal = gpRow.values[iso];
-    if (revenueVal != null && gpVal != null && revenueVal !== 0) {
-      values[iso] = (gpVal / revenueVal) * 100;
+    const targetVal = targetRow.values[iso];
+    if (revenueVal != null && targetVal != null && revenueVal !== 0) {
+      values[iso] = (targetVal / revenueVal) * 100;
     }
   }
   const marginRow = {
-    key: 'gross_profit_margin_pct',
-    label: 'Gross Profit Margin %',
-    section: gpRow.section,
+    key,
+    label,
+    section: targetRow.section,
     isTotal: false,
     isPercent: true,
     values,
   };
-  return [...rows.slice(0, gpIdx + 1), marginRow, ...rows.slice(gpIdx + 1)];
+  return [...rows.slice(0, idx + 1), marginRow, ...rows.slice(idx + 1)];
 }
 
 /** EBITDA row was rendering as an empty hero band — every month blank, actual AND
@@ -2121,6 +2142,20 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withGrossProfitMarginRow(rows, months);
     } catch (err) {
       console.warn('Gross Profit Margin % row injection failed:', err);
+    }
+    // EBITDA Margin % / Net Income Margin % (2026-08-20, Kayee: "also add ebitda and
+    // net income margin below just like gross profit margin") — must run AFTER
+    // withEbitdaRollup/withNetIncomeRollup above so they're reading the freshly
+    // derived EBITDA/Net Income values, not the sheet's blanks.
+    try {
+      rows = withMarginRowBelow(rows, months, ['EBITDA'], 'ebitda_margin_pct', 'EBITDA Margin %');
+    } catch (err) {
+      console.warn('EBITDA Margin % row injection failed:', err);
+    }
+    try {
+      rows = withMarginRowBelow(rows, months, ['Net Income'], 'net_income_margin_pct', 'Net Income Margin %');
+    } catch (err) {
+      console.warn('Net Income Margin % row injection failed:', err);
     }
   }
   if (statement.type === 'CF') {
@@ -2456,7 +2491,12 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
               <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />
             )}
             {totalRows.map((row, i) => renderRow(row, { isSectionToggle: mergeHeaderIntoTotal && i === 0, keySuffix: `total-${i}` }))}
-            {!collapsed && marginRows.map((row, i) => renderRow(row, { keySuffix: `margin-${i}` }))}
+            {/* Margin % rows always render, collapsed or not (2026-08-20, Kayee: "add
+                ebitda and net income margin below just like gross profit margin") —
+                each one belongs to a hero Total that itself always shows, so hiding
+                the margin behind the section's collapse would orphan it from the very
+                number it annotates. */}
+            {marginRows.map((row, i) => renderRow(row, { keySuffix: `margin-${i}` }))}
           </>
         );
       })()}
@@ -2550,7 +2590,20 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                   ? 'total'
                   : isHeroTotalRow(row.label, statementType)
                   ? 'total'
-                  : 'total total-soft'
+                  : // While the section is EXPANDED, its own Total row swaps the green
+                    // total-soft tint for a neutral slate band (2026-08-20, Kayee:
+                    // "when i expand this the total went down to the bottom but
+                    // because it's the same green as the next section it is kinda
+                    // blending in... make it like a darker grey... i know this is a
+                    // total but i dont want it to be black, too distracting") — while
+                    // collapsed, green is right (the row IS the section stand-in,
+                    // sitting alongside other green section rows); expanded, it needs
+                    // to read as "the sum of the white rows above me", and a neutral
+                    // grey separates it from both those white line items and the next
+                    // section's green rows. See .total-soft-open in globals.css.
+                    collapsed
+                  ? 'total total-soft'
+                  : 'total total-soft total-soft-open'
                 : row.driver
                 ? 'report-driver-row'
                 : row.cfManualRow
@@ -2669,7 +2722,9 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
               // 0.0% is still a real, worth-showing number, not noise to blank out.
               let cellText;
               if (row.isPercent) {
-                cellText = row.values[m] != null ? `${row.values[m].toFixed(2)}%` : '';
+                // Whole percents only (2026-08-20, Kayee: "make all margin no decimal
+                // point") — was toFixed(2).
+                cellText = row.values[m] != null ? `${Math.round(row.values[m])}%` : '';
               } else if (row.isTotal) {
                 // A Total row's real $0 (from withSectionTotalRollups, 2026-08-20:
                 // "if the other total is zero need to show zero") stays "$0" — only
@@ -2693,7 +2748,10 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
               const isCashBalanceRow = CASH_ROW_PATTERNS.beginning.test(row.label) || CASH_ROW_PATTERNS.ending.test(row.label);
               const rawValue = row.values[m];
               let valueNode = cellText;
-              if (isCashBalanceRow && cellText !== '' && rawValue != null) {
+              // Margin % rows color by sign too (2026-08-20, Kayee: "red if it's
+              // negative and green if it's positive") — same .r/.g pair as the cash
+              // balances.
+              if ((isCashBalanceRow || row.isPercent) && cellText !== '' && rawValue != null) {
                 const signClass = rawValue < 0 ? 'r' : rawValue > 0 ? 'g' : null;
                 if (signClass) valueNode = <span className={signClass}>{cellText}</span>;
               }
