@@ -15,7 +15,13 @@ import { DateInput, FillRangeButton, MonthInput, PayrollTable, PickerInput, Text
 // ~1154px before a single month column started; trimmed to ~1020px so more months
 // fit in view, combined with the wider .page-wide cap in globals.css.
 const FROZEN_COLUMNS = [
-  { key: 'actions', label: '', width: 64 },
+  // Widened 64 -> 100 (2026-08-20, Kayee: "is there an option to delete? i added a
+  // few rows but i dont need all three") — a full (non-child, non-grouped) row packs
+  // 3 icon buttons in here (drag handle, fill-range, trash), each 28px wide with 4px
+  // gaps = 92px of icons alone; 64px was clipping the trash button off the edge of
+  // this sticky column, making "Remove from roster" invisible even though the button
+  // (and its onClick) was there all along.
+  { key: 'actions', label: '', width: 100 },
   { key: 'name', label: 'Name', width: 200 },
   { key: 'department', label: 'Department', width: 105 },
   { key: 'costType', label: 'CoGS or OpEx?', width: 90 },

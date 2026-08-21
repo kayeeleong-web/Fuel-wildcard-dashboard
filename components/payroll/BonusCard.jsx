@@ -4,7 +4,9 @@ import { bonusMonthlyFlow, formatPayrollAmount, generateId, oteFor } from '../..
 import { FillRangeButton, MonthInput, PayrollTable } from './PayrollTable';
 
 const FROZEN_COLUMNS = [
-  { key: 'actions', label: '', width: 64 },
+  // Widened to match RosterCard's fix (2026-08-20) — 64px was clipping icon buttons
+  // against this sticky column's edge.
+  { key: 'actions', label: '', width: 80 },
   { key: 'name', label: 'Name', width: 210 },
   { key: 'base', label: 'Base', width: 110, align: 'right' },
   { key: 'bonus', label: 'Bonus', width: 110, align: 'right' },

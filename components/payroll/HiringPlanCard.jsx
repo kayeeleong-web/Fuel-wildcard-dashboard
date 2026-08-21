@@ -11,7 +11,9 @@ import {
 import { FillRangeButton, HeadcountMonthInput, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
 const FROZEN_COLUMNS = [
-  { key: 'actions', label: '', width: 64 },
+  // Widened to match RosterCard's fix (2026-08-20) — 64px was clipping icon buttons
+  // against this sticky column's edge.
+  { key: 'actions', label: '', width: 80 },
   { key: 'name', label: 'Role', width: 210 },
   { key: 'department', label: 'Department', width: 130 },
   { key: 'costType', label: 'CoGS or OpEx?', width: 110 },
