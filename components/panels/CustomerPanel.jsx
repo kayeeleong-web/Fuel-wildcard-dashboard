@@ -212,7 +212,16 @@ function WaterfallTable({ title, subtitle, waterfall, months, todayIso }) {
       id: customer.name,
       monthCells,
       cells: {
-        name: customer.name,
+        // Never let a long name wrap to a second line (2026-08-20, Kayee, pointing at
+        // "Uncategorized (no counterparty)" wrapping: "because this text is longer it
+        // went into the wrap in the second row which makes the entire row bigger. i
+        // want the height of each row the same") — one line, ellipsis if it overruns
+        // the 200px column, full name on hover via title.
+        name: (
+          <span className="pr-nowrap-cell" title={customer.name}>
+            {customer.name}
+          </span>
+        ),
         startMonth: formatMonthLabel(customer.startMonth),
         total: <b>{formatPayrollAmount(customer.total) || '$0'}</b>,
       },
@@ -588,9 +597,14 @@ export function CustomerPanel({ glCash, glAccrued }) {
       id: `inactive:${name}`,
       cells: {
         name: (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between' }}>
-            <span>{name}</span>
-            <button type="button" className="btn" onClick={() => restoreGlCustomer(name)} title="Bring this customer back into the projection grid">
+          // Compact one-line row (2026-08-20, Kayee: "the restore button is comically
+          // bigger. i want every row the same height. so dont make it so fat") —
+          // btn-xs keeps the button inside the normal row height, and the name never
+          // wraps (ellipsis + full name on hover), so "Uncategorized (no
+          // counterparty)" can't stretch its row either.
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'space-between', minWidth: 0 }}>
+            <span className="pr-nowrap-cell" title={name}>{name}</span>
+            <button type="button" className="btn btn-xs" onClick={() => restoreGlCustomer(name)} title="Bring this customer back into the projection grid">
               Restore
             </button>
           </span>
