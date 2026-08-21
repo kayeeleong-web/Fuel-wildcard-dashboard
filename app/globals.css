@@ -437,6 +437,34 @@ tbody tr.total .m { color: var(--on-black-muted); }
 .pct-of { display: block; font-size: 10.5px; color: var(--muted-2); margin-top: 1px; }
 .g { color: var(--green-dark); } .r { color: var(--pink); } .m { color: var(--muted-2); }
 
+/* Non-hero P&L Total rows (Total Salaries & Benefits, Total Travel, Total Meals &
+   Entertainment, etc.) get a softer, blended treatment instead of the full black
+   band — 2026-08-20, Kayee: "for total revenue total cogs and gross profit ebitda
+   and net income it make sense to keep it black but the others it's just
+   distracting... how about a green for actual and blue for forecast? but like it's
+   blending in, not too in your face... a modern fp&a webpage, like a designer did
+   it." Total Revenue/Total COGS/Gross Profit/EBITDA/Net Income (see
+   HERO_TOTAL_ROW_LABELS in ReportsPanel.jsx) keep the original `tr.total` styling
+   above untouched — this only targets the `tr.total-soft` modifier class those
+   components add to every OTHER Total row, and only inside the P&L doc (CF/BS and
+   every other table in the app are unaffected). Specificity here is deliberately
+   higher than every `tr.total` rule above (adds `.report-doc[data-doc="PL"]` +
+   `.total-soft`) so it always wins without needing !important. */
+.report-doc[data-doc="PL"] tr.total-soft td {
+  font-weight: 700; background: rgba(43, 188, 98, .07); color: var(--text);
+  border-top: 1px solid rgba(43, 188, 98, .3); border-bottom: 1px solid rgba(43, 188, 98, .3);
+  box-shadow: none;
+}
+.report-doc[data-doc="PL"] tr.total-soft td:first-child { background: rgba(43, 188, 98, .1); color: var(--green-dark); }
+.report-doc[data-doc="PL"] tr.total-soft td.pr-fcst {
+  background: rgba(17, 179, 231, .07);
+  border-top-color: rgba(17, 179, 231, .3); border-bottom-color: rgba(17, 179, 231, .3);
+  box-shadow: none;
+}
+.report-doc[data-doc="PL"] tr.total-soft td.active-col { background: rgba(43, 188, 98, .16); color: var(--text); }
+.report-doc[data-doc="PL"] tr.total-soft:hover td { background: rgba(43, 188, 98, .12); }
+.report-doc[data-doc="PL"] tr.total-soft:hover td.pr-fcst { background: rgba(17, 179, 231, .12); }
+
 /* Current-period column highlight — must always show its value, on every row type,
    including total rows (design-rules.md §3: never a blank cell here). */
 th.active-col, td.active-col { background: var(--green-soft); }

@@ -127,13 +127,13 @@ function opexTotalForMonth(costItems, payrollState, iso) {
 const PL_COST_PROJECTIONS_BY_LABEL = {
   // Confirmed by Kayee (2026-08-06): "cost for campaign in cogs is last month's # of
   // campaign multiply by campaign cost of 250 in the assumption" — this row IS
-  // costPerCampaignForMonth, not a generic custom account.
-  // Moved onto the "Cost of Product" row (2026-08-20, Kayee: "move the calculation for
-  // cost of campaign into cost of product") — "Cost of campaigns" now stays actuals-only
-  // (blank in forecast months, same as every other unwired row), and its forecast
-  // number shows up on "Cost of Product" instead. Total COGS is untouched either way,
-  // since it sums costPerCampaignForMonth directly rather than reading this row.
-  'Cost of Product': (ctx, iso) => costPerCampaignForMonth(ctx.revenue, iso),
+  // costPerCampaignForMonth, not a generic custom account. Briefly moved onto the
+  // "Cost of Product" row (2026-08-20), then moved BACK here the same day (Kayee:
+  // "move cost of campaign projection back to cost of campaign") — "Cost of Product"
+  // is its own real row and shouldn't carry this number. Total COGS is unaffected
+  // either way, since it sums costPerCampaignForMonth directly rather than reading
+  // this row.
+  'Cost of campaigns': (ctx, iso) => costPerCampaignForMonth(ctx.revenue, iso),
   'Total COGS': (ctx, iso) => cogsTotalForMonth(ctx.revenue, ctx.costItems, ctx.payrollState, iso),
   'Total OpEx': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
   'Total OPEX': (ctx, iso) => opexTotalForMonth(ctx.costItems, ctx.payrollState, iso),
@@ -602,8 +602,8 @@ function costCalcExplanation(rowLabel, ctx) {
   if (rowLabel === 'Gross Profit Margin %') {
     return { calcNote: 'Gross Profit Margin % = Gross Profit ÷ Total Revenue × 100' };
   }
-  if (rowLabel === 'Cost of Product') {
-    return { calcNote: 'Cost of Product (forecast) = Campaigns (prior month) × Cost Per Campaign' };
+  if (rowLabel === 'Cost of campaigns') {
+    return { calcNote: 'Cost of Campaigns (forecast) = Campaigns (this month) × Cost Per Campaign' };
   }
   // Plural now (2026-08-10, Kayee: "I dragged Central - Bookkeeping and Central -
   // Payroll both to Tax and Accounting... it will add the amount") — more than one
@@ -1643,6 +1643,20 @@ function withSectionTotalRollups(statementType, rows, months, lastActualIndex) {
 const TOTAL_REVENUE_ROW_LABELS = ['Total Revenue', 'TOTAL REVENUE'];
 const GROSS_PROFIT_ROW_LABELS = ['Gross Profit'];
 
+/** The handful of Total rows that stay the classic bold black band — every other
+ *  Total row (Total Salaries & Benefits, Total Travel, Total Meals & Entertainment,
+ *  etc.) gets the softer green/blue tinted treatment instead (2026-08-20, Kayee:
+ *  "for total revenue total cogs and gross profit ebitda and net income it make
+ *  sense to keep it black but the others it's just distracting... a green for actual
+ *  and blue for forecast, blending in, like a modern fp&a webpage a designer made").
+ *  Case-insensitive, trimmed compare — see isHeroTotalRow below. */
+const HERO_TOTAL_ROW_LABELS = new Set([
+  'total revenue', 'total cogs', 'gross profit', 'gross margin', 'ebitda', 'net income',
+]);
+function isHeroTotalRow(label) {
+  return HERO_TOTAL_ROW_LABELS.has(String(label ?? '').trim().toLowerCase());
+}
+
 /** Kayee, 2026-08-10: "add gross profit margin % below gross profit both actual and
  *  projection" — unlike every other injected row on this tab, this one is NOT
  *  forecast-only: it's computed for every month, actual and projected alike, straight
@@ -2031,15 +2045,13 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
   // visible, same idea as the Payroll tab's own collapsible outer sections. Local to
   // this one section's row group, same as dragOverKey above — collapsing COGS has no
   // effect on OpEx's own state.
-  // Non-operating sections start COLLAPSED (2026-08-20, Kayee: "can you keep it
-  // collapsed? meaning non operating income expenses") — small ancillary items
-  // (interest, rewards, taxes) that don't need to be open by default; the section's
-  // own Total row stays visible, and one click expands the detail. Every other
-  // section still starts expanded, as before.
-  // Also matches the GAAP-friendlier names suggested for this section ("Other
-  // Operating Items" / "Other Income & Expenses") so renaming it in the sheet
-  // doesn't silently lose the collapsed default.
-  const [collapsed, setCollapsed] = useState(/NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section));
+  // ALL sections start COLLAPSED (2026-08-20, Kayee: "if i want it all default to
+  // collapsed" — widened from the 2026-08-20-earlier non-operating-only default).
+  // Every section lands on just its own header + Total row on first load; one click
+  // expands the detail underneath. The section's own Total row is never affected by
+  // this (see hasLineItems/collapsed gating below) — this is purely which line items
+  // show, never which totals do.
+  const [collapsed, setCollapsed] = useState(true);
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
   // headcount cost to cogs and opex... if i add the cost in cogs it will only be
@@ -2172,7 +2184,17 @@ function FragmentRows({ section, rows, months, currentMonth, lastActualIndex, re
         return (
           <tr
             key={row.key}
-            className={row.isTotal ? 'total' : row.driver ? 'report-driver-row' : row.cfManualRow ? 'cf-manual-row' : undefined}
+            className={
+              row.isTotal
+                ? isHeroTotalRow(row.label)
+                  ? 'total'
+                  : 'total total-soft'
+                : row.driver
+                ? 'report-driver-row'
+                : row.cfManualRow
+                ? 'cf-manual-row'
+                : undefined
+            }
           >
             <td
               className={isDropTarget && dragOverKey === row.key ? 'report-cost-drop-target is-drag-over' : isDropTarget ? 'report-cost-drop-target' : undefined}
