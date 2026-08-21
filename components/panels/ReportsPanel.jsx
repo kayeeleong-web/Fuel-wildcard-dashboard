@@ -228,11 +228,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // Lifted up from StatementDoc (2026-08-06) so the P&L Assumptions sidebar and the
   // table itself share ONE Assumptions state instead of each reading their own copy —
   // Kayee: "merge assumption into reports... so that everything is being in the same
-  // place, no need to switch between assumption and P&L." Sidebar defaults open so the
-  // merge is visible immediately; collapses to a slim rail when not needed, per Kayee's
-  // "like a lot of major websites... hide it into a hamburger."
+  // place, no need to switch between assumption and P&L." Shared by both the P&L and
+  // Cash Flow Projection sidebars below. Now defaults CLOSED (2026-08-20, Kayee:
+  // "default assumption to hide for both p&l and cash flow projection") — was
+  // "sidebar defaults open so the merge is visible immediately," but the rail-only
+  // view is what's wanted on first load now; still one click away via the hamburger.
   const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // Cash Flow timing state (2026-08-18 rebuild) — per-P&L-account cash-timing config
   // (Follow P&L / custom interval / manual), persisted to localStorage via the same
