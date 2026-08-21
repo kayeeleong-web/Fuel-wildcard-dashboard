@@ -229,12 +229,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // table itself share ONE Assumptions state instead of each reading their own copy —
   // Kayee: "merge assumption into reports... so that everything is being in the same
   // place, no need to switch between assumption and P&L." Shared by both the P&L and
-  // Cash Flow Projection sidebars below. Now defaults CLOSED (2026-08-20, Kayee:
-  // "default assumption to hide for both p&l and cash flow projection") — was
-  // "sidebar defaults open so the merge is visible immediately," but the rail-only
-  // view is what's wanted on first load now; still one click away via the hamburger.
+  // Cash Flow Projection sidebars below. Back to defaulting OPEN (2026-08-20, Kayee:
+  // briefly tried defaulting closed, then "change my mind dont default assumption to
+  // collapse") — sidebar defaults open so the merge is visible immediately; collapses
+  // to a slim rail when not needed, per Kayee's "like a lot of major websites... hide
+  // it into a hamburger."
   const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Cash Flow timing state (2026-08-18 rebuild) — per-P&L-account cash-timing config
   // (Follow P&L / custom interval / manual), persisted to localStorage via the same
@@ -1901,6 +1902,41 @@ function withEbitdaRollup(rows, months) {
   return next;
 }
 
+/** Net Income has the exact same "sheet never populates this row" gap EBITDA had
+ *  (2026-08-20, Kayee, right after the EBITDA fix went live: "there's no net
+ *  income") — blank for every month, actual and forecast alike, for the same reason:
+ *  PL_COST_PROJECTIONS_BY_LABEL deliberately never wires it (see that map's own
+ *  header comment), and the sheet itself has no per-month Net Income numbers to fall
+ *  back on. Worked out the real formula by matching this client's OWN historical
+ *  numbers rather than guessing at a textbook one: Net Income = EBITDA − Total Non
+ *  OPEX (the broader rollup a few rows down that already nets together Non-Operating
+ *  Income & Expenses AND Uncategorized/Non-OpEx-section activity) — verified against
+ *  6 real actual months to the dollar (within $1 rounding). Deliberately NOT "EBITDA
+ *  − Total Non-Operating Income & Expenses" alone — that smaller row undercounts
+ *  Uncategorized Expenses, which is exactly where May/June's real Net Income
+ *  diverged from a naive EBITDA-minus-non-operating guess. Same fill-blanks-only
+ *  rule as every other derived row here. */
+function withNetIncomeRollup(rows, months) {
+  const netIncomeIdx = rows.findIndex((r) => String(r.label ?? '').trim().toLowerCase() === 'net income');
+  if (netIncomeIdx === -1) return rows;
+  const ebitdaRow = rows.find((r) => String(r.label ?? '').trim().toLowerCase() === 'ebitda');
+  const totalNonOpexRow = rows.find((r) => /^total\s*non[\s-]?opex$/i.test(String(r.label ?? '').trim()));
+  if (!ebitdaRow || !totalNonOpexRow) return rows;
+  const netIncomeRow = rows[netIncomeIdx];
+  const patchedValues = { ...netIncomeRow.values };
+  for (const iso of months) {
+    if (patchedValues[iso] != null) continue;
+    const ebitdaVal = ebitdaRow.values[iso];
+    const nonOpexVal = totalNonOpexRow.values[iso];
+    if (ebitdaVal != null && nonOpexVal != null) {
+      patchedValues[iso] = ebitdaVal - nonOpexVal;
+    }
+  }
+  const next = [...rows];
+  next[netIncomeIdx] = { ...netIncomeRow, values: patchedValues };
+  return next;
+}
+
 function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection', cfProjection = null }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
@@ -2071,6 +2107,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withEbitdaRollup(rows, months);
     } catch (err) {
       console.warn('EBITDA rollup failed:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
+      rows = withNetIncomeRollup(rows, months);
+    } catch (err) {
+      console.warn('Net Income rollup failed:', err);
     }
   }
   if (statement.type === 'PL') {
@@ -2357,7 +2400,13 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // does (sectionCategory falls back to 'OpEx' for most of them by coincidence of
   // the same generic bucket logic above), so this checks statementType directly
   // instead of relying on that fallback.
-  const mergeHeaderIntoTotal = isProjection && (sectionCategory === 'OpEx' || statementType === 'CF') && hasLineItems && collapsed;
+  // Extended to P&L's "Other"-category sections too (2026-08-20, Kayee, pointing at
+  // Non-Operating Income & Expenses / Non OpEx still showing as two separate lines
+  // while collapsed: "do the same in non opex where the total when collapsed goes to
+  // the same line as the black font") — same merge, just widening which sections
+  // qualify on the P&L side (was OpEx-only there; CF already gets every section
+  // regardless of category, per the comment above).
+  const mergeHeaderIntoTotal = isProjection && (sectionCategory === 'OpEx' || sectionCategory === 'Other' || statementType === 'CF') && hasLineItems && collapsed;
 
   return (
     <>
