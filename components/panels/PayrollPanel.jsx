@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { PageHead } from '../ui/PageHead';
 import { PayrollAssumptionsSidebar } from '../payroll/PayrollAssumptionsSidebar';
 import { PayrollSummaryCard } from '../payroll/PayrollSummaryCard';
 import { RosterCard } from '../payroll/RosterCard';
@@ -73,12 +72,7 @@ export function PayrollPanel() {
   }
 
   if (!hydrated || !state) {
-    return (
-      <>
-        <PageHead title="Payroll" />
-        <div className="cap">Loading saved roster…</div>
-      </>
-    );
+    return <div className="cap">Loading saved roster…</div>;
   }
 
   function setRoster(roster) {
@@ -95,11 +89,10 @@ export function PayrollPanel() {
 
   return (
     <>
-      <PageHead title="Payroll">
-        <button type="button" className="btn" onClick={() => window.print()}>
-          Export PDF
-        </button>
-      </PageHead>
+      {/* PageHead ("Payroll" title + Export PDF) REMOVED (2026-08-20, Kayee: "waste
+          of space, remove payroll text and move export pdf to the very top right") —
+          the sub-tab pill already says Payroll, and Export PDF now lives on
+          ProjectionPanel's sub-tab toolbar row instead. */}
 
       {/* Same 2026-2028/Historical pair as Reports (2026-08-10) — one piece of state
           (`range`) feeding the SAME `visibleMonths` array to every card below is what

@@ -55,6 +55,16 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
             </button>
           ))}
         </div>
+        {/* Payroll's Export PDF lives up here on the sub-tab row now (2026-08-20,
+            Kayee: "waste of space, remove payroll text and move export pdf to the
+            very top right... at the same line as the toggle") — the PayrollPanel's
+            own PageHead row (title + button) is gone entirely; this was its only
+            surviving control. Payroll-sub-tab only: it prints the Payroll view. */}
+        {projectionSubTab === 'payroll' && (
+          <button type="button" className="btn" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>
+            Export PDF
+          </button>
+        )}
       </div>
 
       {/* P&L and Cash Flow projections both use ReportsPanel with mode='projection',

@@ -40,6 +40,13 @@
   --text: #111111;
   --muted: #6B7280;
   --muted-2: #9CA3AF;
+  /* THE one color+weight for every structural divider line in the data tables — year
+     boundaries and frozen-column edges alike (2026-08-20, Kayee: "the line needs to
+     be the same color throughout so that it's not an eye sore", then "all the lines
+     in a tone lighter, now it's a little too dark. just a smitch lighter") — a step
+     lighter than --muted, darker than --muted-2, solid (never rgba: translucent lines
+     shift shade over every background they cross, which was the original complaint). */
+  --grid-line: #838A96;
 
   --font-num: 'Inter', sans-serif;
 }
@@ -608,6 +615,14 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    since a transparent cell would let scrolled-past columns show through underneath it. */
 .table-wrap table th:first-child,
 .table-wrap table td:first-child { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 4px rgba(17,17,17,.04); }
+/* Persistent divider at the frozen label column's right edge in the statement docs
+   (2026-08-20, Kayee, red line down her scrolled screenshot: "when i scroll to the
+   right the line didn't stay") — an inset shadow on the sticky cell itself scrolls
+   WITH the frozen column, so the edge line holds its place no matter how far the
+   month grid is scrolled, same mechanism as .pr-frozen-last on the Payroll tables,
+   same --grid-line color as every other structural divider. */
+.report-doc table th:first-child,
+.report-doc table td:first-child { box-shadow: inset -2px 0 0 var(--grid-line), 2px 0 4px rgba(17,17,17,.04); }
 /* The header's first cell is sticky on BOTH axes at once (top from the rule above, left
    from here) — it's the "frozen corner" and needs the highest z-index so it stays above
    both a plain sticky-top header cell and a plain sticky-left body cell as they scroll under it. */
@@ -1262,8 +1277,8 @@ thead .pr-frozen { z-index: 5; }
    pixel widths the sticky-offset math above depends on. Two color variants:
    the header row has a black background (needs a light line), every body row
    has a white/panel background (needs a dark line). */
-.pr-frozen-last { box-shadow: inset -2px 0 0 rgba(17, 24, 39, 0.28); }
-thead .pr-frozen-last { box-shadow: inset -2px 0 0 rgba(255, 255, 255, 0.35); }
+.pr-frozen-last { box-shadow: inset -2px 0 0 var(--grid-line); }
+thead .pr-frozen-last { box-shadow: inset -2px 0 0 var(--grid-line); }
 
 /* A frozen-column label longer than its fixed width (e.g. "Cost Per Campaign (COGS,
    feeds next month)") used to visually bleed into the first month column instead of
@@ -1331,8 +1346,8 @@ td.pr-month-cell.pr-fcst { background: rgba(17, 179, 231, .06); }
    different colors down the page. var(--muted) (#6B7280) is the one grey in the
    palette readable on ALL of those backgrounds, light and black alike, so every
    override collapses into this single rule. */
-.pr-year-start { border-left: 2px solid var(--muted); }
-thead .pr-year-start { border-left: 2px solid var(--muted); }
+.pr-year-start { border-left: 2px solid var(--grid-line); }
+thead .pr-year-start { border-left: 2px solid var(--grid-line); }
 
 /* Reports/Projection year-boundary divider (2026-08-19, Kayee: "put some line between
    the year"), and the same treatment for every other table in the app (Payroll,
@@ -1340,7 +1355,7 @@ thead .pr-year-start { border-left: 2px solid var(--muted); }
    height of the table (header rows + every body row), not just the year-band row.
    Darkened 2026-08-20, same reason as .pr-year-start above. */
 .report-doc th.y-boundary,
-.report-doc td.y-boundary { border-left: 2px solid var(--muted); }
+.report-doc td.y-boundary { border-left: 2px solid var(--grid-line); }
 /* One color AND one thickness everywhere (2026-08-20, Kayee: "the line separating
    the year has different color in each section. make it the same color... thickness
    of the line needs to be the same and color") — the former white-on-black overrides
@@ -1348,8 +1363,8 @@ thead .pr-year-start { border-left: 2px solid var(--muted); }
    every background this line crosses (white line items, green section bands, blue
    forecast cells, black hero rows), so the same 2px grey runs the full table height
    uninterrupted on all three statements, Reports and Projection alike. */
-.report-doc thead th.y-boundary { border-left: 2px solid var(--muted); }
-.report-doc tr.total td.y-boundary { border-left-color: var(--muted); }
+.report-doc thead th.y-boundary { border-left: 2px solid var(--grid-line); }
+.report-doc tr.total td.y-boundary { border-left-color: var(--grid-line); }
 
 /* Same historical-month dark-grey header treatment as Reports' .r-historical, applied
    to PayrollTable-based tables (Payroll, Customer waterfalls/driver grids) — see

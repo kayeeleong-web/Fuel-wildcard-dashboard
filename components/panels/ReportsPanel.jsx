@@ -2498,7 +2498,16 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
           {isProjection ? sectionDisplayLabel(section, statementType) : section}
         </td>
-        <td colSpan={months.length}></td>
+        {/* Per-month empty cells instead of one colSpan cell (2026-08-20, Kayee,
+            circling the year divider vanishing across the REVENUE and COGS bands:
+            "you see here no line") — a single colSpan cell has no per-month borders,
+            so the year-boundary rule (td.y-boundary) had nothing to paint on and the
+            line visibly broke at every section header row. One td per month restores
+            it, and rangeClasses keeps these cells hiding in sync with the 2026-2028/
+            Historical toggle exactly like every data cell. */}
+        {months.map((m, i) => (
+          <td key={m} className={rangeClasses(i, lastActualIndex, m)}></td>
+        ))}
       </tr>
       )}
       {/* "+ Add account" now renders right BEFORE this section's own Total row
