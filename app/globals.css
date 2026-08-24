@@ -433,6 +433,14 @@ tbody td { padding: 10px 18px; text-align: right; color: var(--text); white-spac
 tbody td:first-child { text-align: left; color: var(--text); font-family: 'Space Grotesk', sans-serif; }
 tbody tr { border-bottom: 1px solid var(--border-soft); }
 tbody tr:nth-child(even) { background: var(--panel-2); }
+
+/* Genuine $0 cells (2026-08-24, Kayee: "for all the zeroes... make it like a shade
+   that's lighter so it will kinda be less obvious to the eyes... not only cash flow
+   but in all reports and projections") — a real zero on a Total row still displays
+   (per Kayee's own earlier rule), it just no longer competes visually with the real
+   numbers around it. Applies everywhere FragmentRows renders a cell, across every
+   statement type and both Reports/Projection modes. */
+.cell-zero { color: var(--muted-2); font-weight: 400; }
 tbody tr:hover { background: #F0FBF4; }
 tbody tr.section td { font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase; letter-spacing: .6px; background: var(--green-soft); padding-top: 9px; padding-bottom: 9px; font-family: 'Space Grotesk', sans-serif; }
 /* Collapsible P&L section (2026-08-10, Kayee: "have it collapsable for anything under

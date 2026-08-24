@@ -623,10 +623,13 @@ function yearLabelIndices(months) {
 function siblingValuesAtMonth(rows, row, month) {
   return rows
     .filter((r) => r.key !== row.key && !r.isTotal && !r.driver)
-    .map((r) => ({
-      label: r.label,
-      value: r.values[month] != null ? `$${Math.round(r.values[month]).toLocaleString('en-US')}` : '—',
-    }));
+    .map((r) => ({ label: r.label, raw: r.values[month] }))
+    // 2026-08-24 (Kayee, pointing at a breakdown full of $0 lines with one real
+    // number buried in the middle: "no need to show it here when it's zero it will
+    // only show the [real number]") — a component that contributed nothing to the
+    // total isn't part of "what this number breaks down into," it's just noise.
+    .filter((r) => r.raw != null && Math.round(r.raw) !== 0)
+    .map((r) => ({ label: r.label, value: `$${Math.round(r.raw).toLocaleString('en-US')}` }));
 }
 
 /** Explains HOW a projected revenue cell's number came about — same idea as the
@@ -3346,6 +3349,21 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                 const signClass = rawValue < 0 ? 'r' : rawValue > 0 ? 'g' : null;
                 if (signClass) valueNode = <span className={signClass}>{cellText}</span>;
               }
+              // A genuine zero on a Total row (or 0% on a percent row) still displays —
+              // Kayee's own earlier rule ("if the other total is zero need to show
+              // zero") — but 2026-08-24: "for all the zeroes... make it like a shade
+              // that's lighter so it will kinda be less obvious to the eyes... not only
+              // cash flow but in all reports and projections." Same rule everywhere
+              // this table type renders (P&L, CF, Weekly CF, Balance Sheet, actual and
+              // projection alike), since they all go through this one FragmentRows cell
+              // renderer. Doesn't touch cash-balance/margin rows already colored red or
+              // green above — a colored $0/0% stays exactly as prominent as it already
+              // was, this only dims the plain, uncolored zeroes.
+              const isZeroCell = cellText !== '' && rawValue === 0 && valueNode === cellText;
+              if (isZeroCell) valueNode = <span className="cell-zero">{cellText}</span>;
+              // Only compute the breakdown when there's actually a chance of showing
+              // one — skip it for zero/blank cells outright.
+              const components = row.isTotal && cellText !== '' && !isZeroCell ? siblingValuesAtMonth(rows, row, m) : [];
               return (
                 <td
                   key={m}
@@ -3354,9 +3372,22 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                   {/* A Total row's per-month breakdown (what real line items sum to it
                       THIS month) is a separate feature from the calc-note above — it's
                       inherently monthly, real numbers, so it stays exactly where it was.
-                      Skipped for a blank cell — nothing to break down. */}
-                  {row.isTotal && cellText !== '' ? (
-                    <DrillPopover label={row.label} value={valueNode} components={siblingValuesAtMonth(rows, row, m)} />
+                      Skipped for a blank cell — nothing to break down. 2026-08-24
+                      (Kayee: "if it's zero then no need to show the drill down when
+                      hover over") — also skipped for a genuine $0. And 2026-08-24
+                      again, pointing at "Total Cash Out from Operations" popping up a
+                      hover box with nothing in it: "also total cash out and total cash
+                      in also ending cash also no need hover over drill down function
+                      only the ones with breakdown is needed" — a rollforward row like
+                      Total Cash In/Out or Ending Cash has no real siblings-in-section
+                      to break down (it's a cross-section or rollforward figure, not a
+                      sum of the rows sitting right above it), so siblingValuesAtMonth
+                      correctly comes back empty for it; gating on components.length
+                      here means ANY row without a genuine breakdown — not just these
+                      three by name — quietly stops offering a hover with nothing in
+                      it, everywhere this renderer is used. */}
+                  {components.length > 0 ? (
+                    <DrillPopover label={row.label} value={valueNode} components={components} />
                   ) : (
                     valueNode
                   )}
