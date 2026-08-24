@@ -19,7 +19,7 @@ import {
   extendWeeksThrough,
   primaryMonthForWeek,
   weeksInSameMonth,
-  isLastWeekOfMonth,
+  placementMonthForWeek,
   cashOutflowForWeek,
   weekRangeLabel,
 } from '../../lib/cashflow/weeklyCashProjection';
@@ -1710,9 +1710,17 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
  *  lands in the single week containing that month's actual last calendar day, same
  *  "cash clears once, it doesn't smear across the month" rule cashOutflowForWeek
  *  applies on the expense side (2026-08-24, Kayee: "that's not accrual accounting...
- *  put them all in the last week of the month") — every other week in that month gets
- *  $0. No separate weekly config for revenue rows — matches Monthly CF's own
- *  behavior, which has no manual per-account override for revenue either. */
+ *  put them all in the last week of the month") — every other week gets $0. No
+ *  separate weekly config for revenue rows — matches Monthly CF's own behavior,
+ *  which has no manual per-account override for revenue either.
+ *
+ *  2026-08-24 bug fix (Kayee: "why do i still have no projection for august and
+ *  september" / "also operational cash in in weekly also not showing up") — this
+ *  used to look up `month = primaryMonthForWeek(weekIso)` and then ask "is this week
+ *  THAT month's last week," which is wrong for boundary weeks (see
+ *  placementMonthForWeek's comment for the full explanation) and silently zeroed out
+ *  entire months of revenue. Now uses placementMonthForWeek to find the right month
+ *  directly instead of assuming the week's majority-owner month is the right one. */
 function withWeeklyCFRevenueInflowRows(rows, weeks, lastActualIndex, cfProjection) {
   const { accrualCtx, customerInflow } = cfProjection;
   const forecastWeeks = weeks.slice(lastActualIndex + 1);
@@ -1724,11 +1732,14 @@ function withWeeklyCFRevenueInflowRows(rows, weeks, lastActualIndex, cfProjectio
     if (!formula) return row;
     const values = { ...row.values };
     for (const weekIso of forecastWeeks) {
-      const month = primaryMonthForWeek(weekIso);
+      const month = placementMonthForWeek(weekIso, null);
+      if (month == null) {
+        values[weekIso] = 0;
+        continue;
+      }
       const fromCustomer = customerInflow?.[formula.customerField]?.[month];
-      const monthlyTotal =
+      values[weekIso] =
         fromCustomer != null ? fromCustomer : accrualCtx?.revenue ? formula.fallback(accrualCtx.revenue, month) || 0 : 0;
-      values[weekIso] = isLastWeekOfMonth(weekIso, month) ? monthlyTotal : 0;
     }
     return { ...row, values };
   });
@@ -1908,21 +1919,27 @@ function withWeeklyCashFlowRollforward(rows, weeks, lastActualIndex, cfProjectio
 
   const netValues = {};
   for (const weekIso of forecastWeeks) {
-    const month = primaryMonthForWeek(weekIso);
     const n = weeksInSameMonth(forecastWeeks, weekIso);
-    const fromCustomer = customerInflow?.totalsByMonth?.[month];
-    const monthlyInflow =
-      fromCustomer != null
-        ? fromCustomer
-        : accrualCtx?.revenue
-        ? meetingRevenueForMonth(accrualCtx.revenue, month) + upfrontRevenueForMonth(accrualCtx.revenue, month)
-        : null;
     // Lands the whole month's inflow in its last-calendar-day week, same rule as
     // withWeeklyCFRevenueInflowRows/cashOutflowForWeek (2026-08-24) — this rollforward
     // computes Net Change independently rather than reading the already-rendered
     // Revenue/COGS/OpEx rows, so it has to apply the exact same placement rule itself
     // or Beginning/Ending Cash would silently disagree with what's shown above them.
-    const inflow = isLastWeekOfMonth(weekIso, month) ? monthlyInflow : 0;
+    // 2026-08-24 bug fix: previously looked up `month = primaryMonthForWeek(weekIso)`
+    // and asked "is this THAT month's last week" — wrong for boundary weeks (see
+    // placementMonthForWeek's comment), which silently dropped Beginning/Ending Cash's
+    // Net Change for entire months. Uses placementMonthForWeek directly instead.
+    const month = placementMonthForWeek(weekIso, null);
+    let inflow = 0;
+    if (month != null) {
+      const fromCustomer = customerInflow?.totalsByMonth?.[month];
+      inflow =
+        fromCustomer != null
+          ? fromCustomer
+          : accrualCtx?.revenue
+          ? meetingRevenueForMonth(accrualCtx.revenue, month) + upfrontRevenueForMonth(accrualCtx.revenue, month)
+          : 0;
+    }
     let outflow = 0;
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
       outflow += cashOutflowForWeek(account, timingByAccount[account.id], weekIso, n, forecastMonthSet, accrualCtx);
