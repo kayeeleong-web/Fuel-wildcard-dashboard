@@ -488,6 +488,17 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 setAssumptionsState={setAssumptionsState}
                 assumptionsHydrated={assumptionsHydrated}
                 mode={mode}
+                // Weekly CF's own actual/forecast boundary (2026-08-24, Kayee: "it
+                // should show up until end of june because that's when my actual end
+                // in p&l") — the Weekly CF tab is a separate, user-maintained sheet
+                // (its own SUMIFS formulas, see googleSheets.ts), so however many
+                // real weekly columns happen to be filled in there won't necessarily
+                // line up with the monthly statements' actual cutoff. Passing the
+                // monthly CF's last real month through lets StatementDoc re-derive
+                // which weeks are "actual" from THAT (the one true cutoff this whole
+                // dashboard already uses), instead of trusting the Weekly sheet's own
+                // column count, which is what it did before this fix.
+                monthlyActualCutoff={statements?.CF?.months?.[statements.CF.months.length - 1] ?? null}
                 cfProjection={
                   reportType === 'CF' || reportType === 'WeeklyCF'
                     ? {
@@ -2336,13 +2347,10 @@ function withNetIncomeRollup(rows, months) {
   return next;
 }
 
-function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection', cfProjection = null }) {
+function StatementDoc({ statement, range, assumptionsState, setAssumptionsState, assumptionsHydrated, mode = 'projection', cfProjection = null, monthlyActualCutoff = null }) {
   const { state: payrollState, hydrated: payrollHydrated } = usePayrollState();
 
   if (!statement) return <div className="cap">No data for this statement yet.</div>;
-  // currentMonth = the last ACTUAL month (before any blank padding), so "active-col"
-  // still marks the latest real reporting month, not the padded 2030 horizon.
-  const currentMonth = statement.months[statement.months.length - 1];
   // Weekly CF (2026-08-24) carries full dates ("YYYY-MM-DD", length 10) as its period
   // keys instead of "YYYY-MM" (length 7) — this is the ONLY thing that tells this
   // shared component it's looking at weeks instead of months; everything below
@@ -2359,7 +2367,34 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       : isWeekly
       ? extendWeeksThrough(statement.months, WEEKLY_HORIZON)
       : extendMonthsThrough(statement.months, PROJECTION_HORIZON);
-  const lastActualIndex = statement.months.length - 1;
+  // Weekly CF's actual/forecast boundary (2026-08-24, Kayee: "the date range is
+  // correct but the bold date is confusing... it should show up until end of june
+  // because that's when my actual end in p&l") — the Weekly CF tab is its own,
+  // separately-maintained sheet (see googleSheets.ts getWeeklyCashFlow), so trusting
+  // "however many weekly columns happen to be filled in there" as the actual/
+  // forecast split (the plain `statement.months.length - 1` every other statement
+  // uses) can drift from the ONE cutoff this whole dashboard is actually built
+  // around: the monthly statements' last real month. When the monthly CF's cutoff
+  // is available (passed down as `monthlyActualCutoff`), a week counts as actual
+  // only if the calendar month it mostly falls in (primaryMonthForWeek — the same
+  // majority-of-days rule the even-split forecast math already uses) is on or
+  // before that cutoff month; the raw sheet's own column count is only a fallback
+  // for when that prop isn't available yet.
+  const lastActualIndex = (() => {
+    if (!isWeekly || !monthlyActualCutoff) return statement.months.length - 1;
+    let idx = -1;
+    for (let i = 0; i < statement.months.length; i++) {
+      if (primaryMonthForWeek(statement.months[i]) <= monthlyActualCutoff) idx = i;
+      else break;
+    }
+    return idx;
+  })();
+  // currentMonth = the last ACTUAL period (before any blank padding), so "active-col"
+  // still marks the latest real reporting period, not the padded future horizon.
+  // Reads off the just-computed lastActualIndex (rather than always the sheet's own
+  // final column) so weekly's re-derived cutoff — see lastActualIndex above — is
+  // what decides the highlighted column, not raw sheet column count.
+  const currentMonth = statement.months[lastActualIndex] ?? statement.months[statement.months.length - 1];
   const revenue = assumptionsHydrated ? assumptionsState?.revenue : null;
   const costCtx = {
     revenue,
@@ -2744,19 +2779,24 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
                 >
                   {/* Weekly CF forecast columns (2026-08-24, Kayee: "label the week #
                       like first week of projection is week 1... show specific date
-                      range") — "Week 1" counting from the first forecast week, with
-                      the actual Mon–Sun date range on the line below instead of the
-                      ACT/FCST tag (the pr-fcst blue styling already marks forecast
-                      columns visually, so the date range doesn't need to compete with
-                      a status word for the same line). Actual weeks keep their real
-                      date (via formatMonthLabel's day-aware branch) up top and get the
-                      SAME date-range line below for orientation. */}
+                      range") — "Week 1" counting from the first forecast week.
+                      2026-08-24 follow-up (Kayee: "the bold date is confusing...
+                      you should label them act or forecast because starting july is
+                      projection. and it's blue") — dropping the ACT/FCST tag in
+                      favor of the date range was a mistake: the pr-fcst blue tint
+                      alone wasn't a clear enough signal on its own. Now shows all
+                      three for a weekly column: ACT/FCST status (blue when FCST,
+                      same convention as every monthly column), THEN the date range
+                      on its own line below, so nothing about a week's status is
+                      ambiguous. Actual weeks show their real start date up top (via
+                      formatMonthLabel's day-aware branch), same as before. */}
                   <div className="report-month-label">
                     {isWeekly && isForecast ? `Week ${i - lastActualIndex}` : formatMonthLabel(m)}
                   </div>
                   <div className={`report-month-status${isForecast ? ' fcst' : ''}`}>
-                    {isWeekly ? weekRangeLabel(m) : isForecast ? 'FCST' : 'ACT'}
+                    {isForecast ? 'FCST' : 'ACT'}
                   </div>
+                  {isWeekly && <div className="report-month-range">{weekRangeLabel(m)}</div>}
                 </th>
               );
             })}
