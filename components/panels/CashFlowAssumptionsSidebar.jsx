@@ -275,18 +275,26 @@ function CustomDayField({ value, onCommit }) {
   }, [value]);
 
   return (
-    <input
-      type="number"
-      className="sidebar-input"
-      style={{ marginTop: 6 }}
-      value={draft}
-      onFocus={(e) => e.target.select()}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        const n = Number(draft);
-        onCommit(Number.isFinite(n) ? n : 0);
-      }}
-    />
+    // 2026-08-24 fix (Kayee: "the 15 and 50% boxes is not align, it has different
+    // height") — this field used to sit stacked under its own label with a marginTop
+    // spacer; now that it's inline in a flex row next to PctField, that leftover
+    // marginTop was pushing it down out of alignment. Wrapped the same way as
+    // PctField (input + unit suffix) so both fields share identical box height and
+    // the "days" label tells the user what the number means.
+    <span className="sidebar-pct-wrap">
+      <input
+        type="number"
+        className="sidebar-input sidebar-pct-input"
+        value={draft}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const n = Number(draft);
+          onCommit(Number.isFinite(n) ? n : 0);
+        }}
+      />
+      <span className="sidebar-pct-suffix">days</span>
+    </span>
   );
 }
 
@@ -398,10 +406,10 @@ function PaymentSplitEditor({ account, timing, onSetTiming }) {
             <option value="first">1st of the month</option>
             <option value="custom">Custom day…</option>
           </select>
+          {multi && <PctField value={p.pct} onCommit={(n) => setPct(idx, n)} />}
           {p.day != null && p.day !== '' && Number(p.day) !== 1 && (
             <CustomDayField value={p.day} onCommit={(n) => setDay(idx, n)} />
           )}
-          {multi && <PctField value={p.pct} onCommit={(n) => setPct(idx, n)} />}
           {multi && (
             <button
               type="button"
