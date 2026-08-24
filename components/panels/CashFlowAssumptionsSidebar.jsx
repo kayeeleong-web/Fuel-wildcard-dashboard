@@ -1,6 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+// Manual input mode hidden from the UI for now (2026-08-24, Kayee: "you can remove
+// manual input option for now. but we might bring it back so you can just hide this
+// option for user") — flip back to true to restore the radio option. The underlying
+// mode:'manual' handling (manualByMonth/manualByWeek cells, live-editable Cash Flow
+// grid inputs) is untouched, so any account already saved in manual mode keeps
+// working exactly as before; it just can't be freshly picked from this sidebar.
+const SHOW_MANUAL_INPUT_OPTION = false;
 
 /**
  * Cash Flow Assumptions sidebar (2026-08-18 UX redesign — v2 "list every account"
@@ -235,6 +243,40 @@ function weekPlacementSuffix(timing) {
   return ` · day ${day}`;
 }
 
+/** Commits on blur (2026-08-24 fix, Kayee: "the selection is very laggy when i try to
+ *  type which week does it land in") — typing a custom placement day used to call
+ *  setWeekPlacementDay on every single keystroke via onChange, and each call flows
+ *  all the way through onSetTiming into the shared cash-timing state, which re-runs
+ *  the ENTIRE Weekly CF pipeline (every account, every visible week) plus a
+ *  localStorage write — on every keystroke. Same "commit on blur, not on every
+ *  keystroke" pattern as AssumptionField (payroll/AssumptionsBar.jsx) and every other
+ *  editable number field in this app: keeps a local draft while typing, only commits
+ *  the expensive real state update once, when the field loses focus. */
+function CustomDayField({ value, onCommit }) {
+  const [draft, setDraft] = useState(value);
+
+  // Keep the draft in sync if the stored value changes from elsewhere (e.g. switching
+  // the dropdown to "Custom day…" resets it to 0) without fighting the user's typing.
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <input
+      type="number"
+      className="sidebar-input"
+      style={{ marginTop: 6 }}
+      value={draft}
+      onFocus={(e) => e.target.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        const n = Number(draft);
+        onCommit(Number.isFinite(n) ? n : 0);
+      }}
+    />
+  );
+}
+
 function timingTag(timing) {
   const mode = timing?.mode || 'followPL';
   const suffix = weekPlacementSuffix(timing);
@@ -331,10 +373,19 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
               <input type="radio" checked={mode === 'interval'} onChange={() => setMode('interval')} />
               Custom interval — pick frequency &amp; payment month
             </label>
-            <label className="sidebar-radio-label">
-              <input type="radio" checked={mode === 'manual'} onChange={() => setMode('manual')} />
-              Manual input — type cash $ directly in the Cash Flow grid
-            </label>
+            {/* Manual input hidden for now (2026-08-24, Kayee: "you can remove manual
+                input option for now. but we might bring it back so you can just hide
+                this option for user") — SHOW_MANUAL_INPUT_OPTION flips it back on;
+                setMode('manual')/mode==='manual' handling elsewhere in this component
+                is untouched, so any account already saved in manual mode still works
+                exactly as before, it just can't be freshly selected from this radio
+                group right now. */}
+            {SHOW_MANUAL_INPUT_OPTION && (
+              <label className="sidebar-radio-label">
+                <input type="radio" checked={mode === 'manual'} onChange={() => setMode('manual')} />
+                Manual input — type cash $ directly in the Cash Flow grid
+              </label>
+            )}
           </div>
 
           {mode !== 'manual' && (
@@ -353,7 +404,19 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
                   const v = e.target.value;
                   if (v === 'last') setWeekPlacementDay(null);
                   else if (v === 'first') setWeekPlacementDay(1);
-                  else setWeekPlacementDay(timing?.weekPlacementDay != null && timing.weekPlacementDay !== '' ? timing.weekPlacementDay : 0);
+                  else {
+                    // Picking "Custom day…" must always land on a value the <select>
+                    // itself doesn't already read back as 'last' or 'first' (2026-08-24
+                    // bug: switching to Custom while the stored value was still 1 — from
+                    // a prior "1st of the month" pick — carried 1 straight over, so the
+                    // derived `value` above recomputed to 'first' again and the number
+                    // input never appeared, snapping the dropdown right back). Only
+                    // carry the existing value over if it's ALREADY a genuine custom
+                    // one; otherwise start the box at 0.
+                    const existing = timing?.weekPlacementDay;
+                    const isAlreadyCustom = existing != null && existing !== '' && Number(existing) !== 1;
+                    setWeekPlacementDay(isAlreadyCustom ? existing : 0);
+                  }
                 }}
               >
                 <option value="last">Last day of the month (default)</option>
@@ -362,12 +425,9 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
               </select>
               {timing?.weekPlacementDay != null && timing.weekPlacementDay !== '' && Number(timing.weekPlacementDay) !== 1 && (
                 <>
-                  <input
-                    type="number"
-                    className="sidebar-input"
-                    style={{ marginTop: 6 }}
+                  <CustomDayField
                     value={timing.weekPlacementDay}
-                    onChange={(e) => setWeekPlacementDay(e.target.value === '' ? 0 : Number(e.target.value))}
+                    onCommit={(n) => setWeekPlacementDay(n)}
                   />
                   <div className="sidebar-section-note">
                     Day of the payment month this clears — 1 = the 1st, 0 = the last day
