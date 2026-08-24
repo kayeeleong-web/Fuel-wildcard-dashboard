@@ -8,7 +8,6 @@ import { CustomerPanel } from './CustomerPanel';
 const SUB_TABS = [
   { id: 'pl', label: 'P&L' },
   { id: 'cf', label: 'Cash Flow' },
-  { id: 'weeklycf', label: 'Weekly Cash Flow' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'customer', label: 'Customer' },
 ];
@@ -35,6 +34,17 @@ const SUB_TAB_IDS = SUB_TABS.map((t) => t.id);
 export function ProjectionPanel({ statements, customReports, glCash, glAccrued }) {
   const [projectionSubTab, setProjectionSubTab] = useState('pl');
 
+  // Cash Flow granularity toggle (2026-08-24, Kayee: "keep one tab for cash flow...
+  // give me a toggle to change it between monthly and weekly" — replacing the earlier
+  // separate "Weekly Cash Flow" sub-tab). Monthly and Weekly are the SAME ReportsPanel
+  // instance staying mounted, just fed a different `fixedType` — its own
+  // `useEffect(() => { if (fixedType) setReportType(fixedType) }, [fixedType])` reacts
+  // to that prop change, so this is a live re-render, not a remount. That's actually a
+  // stronger sync than two separate sub-tabs would give: the Cash Timing Assumptions
+  // sidebar (cashTimingState) and its collapsed/open state carry over instantly when
+  // you flip the toggle, not just "eventually consistent" the next time you visit.
+  const [cfGranularity, setCfGranularity] = useState('monthly');
+
   function changeSubTab(tab) {
     setProjectionSubTab(tab);
   }
@@ -56,6 +66,33 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
             </button>
           ))}
         </div>
+        {/* Cash Flow's Monthly/Weekly toggle (2026-08-24) — same slot/pattern as
+            Payroll's Export PDF button below, just for the 'cf' sub-tab instead.
+            Weekly shares the exact same Cash Timing Assumptions sidebar/state as
+            Monthly (Kayee: "I still want it to sync... if I add a new assumption in
+            cash flow monthly it should show up in weekly and vice versa") — flipping
+            this toggle only changes which `fixedType` ReportsPanel is fed, not which
+            timingByAccount it reads. Weekly's own addition on top of that shared
+            config is a per-week manual override (manualByWeek) so a Manual-mode
+            account can also be steered to land in one SPECIFIC week, not just spread
+            evenly across a month's weeks (the default). See
+            lib/cashflow/weeklyCashProjection.js for the full mechanism. */}
+        {projectionSubTab === 'cf' && (
+          <div className="seg" style={{ marginLeft: 'auto' }}>
+            <button
+              className={cfGranularity === 'monthly' ? 'active' : undefined}
+              onClick={() => setCfGranularity('monthly')}
+            >
+              Monthly
+            </button>
+            <button
+              className={cfGranularity === 'weekly' ? 'active' : undefined}
+              onClick={() => setCfGranularity('weekly')}
+            >
+              Weekly
+            </button>
+          </div>
+        )}
         {/* Payroll's Export PDF lives up here on the sub-tab row now (2026-08-20,
             Kayee: "waste of space, remove payroll text and move export pdf to the
             very top right... at the same line as the toggle") — the PayrollPanel's
@@ -77,27 +114,19 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
         <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="PL" />
       )}
 
+      {/* Cash Flow — fixedType switches between 'CF' (monthly) and 'WeeklyCF' off the
+          toggle above. This ReportsPanel instance stays mounted across that switch
+          (same conditional branch, just a different prop), so its own
+          `useEffect(() => { if (fixedType) setReportType(fixedType) }, [fixedType])`
+          picks up the change live — the Cash Timing Assumptions sidebar and its
+          collapsed/open state carry over instantly, not just on next visit. */}
       {projectionSubTab === 'cf' && (
-        <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="CF" />
-      )}
-
-      {/* Weekly CF (2026-08-24) — the client's own "Weekly CF" sheet tab, same rows/
-          sections as Monthly CF but one column per week. Runs mode="projection" just
-          like Monthly CF, and shares its EXACT Cash Timing Assumptions sidebar/state
-          (Kayee: "I still want it to sync... if I add a new assumption in cash flow
-          monthly it should show up in weekly and vice versa") — set an account's
-          timing from either tab, it applies to both, since both read/write the same
-          localStorage-backed timingByAccount. Weekly's own addition on top of that
-          shared config is a per-week manual override (manualByWeek) so a Manual-mode
-          account can also be steered to land in one SPECIFIC week, not just spread
-          evenly across a month's weeks (the default). Forecast weeks are extended and
-          rolled forward by ReportsPanel's own weekly-native pipeline (isWeekly branch,
-          gated on the week-shaped "YYYY-MM-DD" period keys, never the monthly one) —
-          see lib/cashflow/weeklyCashProjection.js for the full mechanism.
-          statements.WeeklyCF is fetched with type:"CF" (see googleSheets.ts) purely so
-          it inherits CF's hero-total / Beginning-Net Change-Ending Cash box styling. */}
-      {projectionSubTab === 'weeklycf' && (
-        <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="WeeklyCF" />
+        <ReportsPanel
+          statements={statements}
+          customReports={customReports}
+          mode="projection"
+          fixedType={cfGranularity === 'weekly' ? 'WeeklyCF' : 'CF'}
+        />
       )}
 
       {projectionSubTab === 'payroll' && (
