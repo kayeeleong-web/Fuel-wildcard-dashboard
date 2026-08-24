@@ -478,15 +478,38 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                   only apply to the projection section"): the Reports (actual) tab has
                   no editable cells to explain. */}
               {mode === 'projection' && reportType === 'PL' && (
-                <div className="report-legend">
-                  <span className="report-legend-item">
-                    <span className="report-legend-swatch report-legend-swatch-editable" />
-                    Editable input
-                  </span>
-                  <span className="report-legend-item">
-                    <span className="report-legend-swatch report-legend-swatch-formula" />
-                    From formula / actuals
-                  </span>
+                <div className="report-legend-row">
+                  <div className="report-legend">
+                    <span className="report-legend-item">
+                      <span className="report-legend-swatch report-legend-swatch-editable" />
+                      Editable input
+                    </span>
+                    <span className="report-legend-item">
+                      <span className="report-legend-swatch report-legend-swatch-formula" />
+                      From formula / actuals
+                    </span>
+                  </div>
+                  {/* Save button relocated here (2026-08-24, Kayee, circling the empty
+                      top-right corner: "move save button here so that the user can see
+                      and make it like a color so user wont miss") — was tucked into the
+                      narrow Assumptions sidebar next to Hide, easy to miss. This row
+                      spans the full width of the main content column, so putting it on
+                      the far right here is the most visible spot on the page without
+                      it floating outside the actual table/legend layout. Colored solid
+                      blue on purpose — every other button on this page is white/black,
+                      so this one doesn't blend in. Same onSaveNow/lastSavedAt this
+                      sidebar already had — still just a visible confirmation of the
+                      auto-save that already happens on every edit, not new behavior. */}
+                  {saveAssumptionsNow && (
+                    <div className="report-save-block">
+                      <button type="button" className="report-save-btn" onClick={saveAssumptionsNow} title="Force-save Assumptions to this browser now">
+                        Save
+                      </button>
+                      {assumptionsLastSavedAt != null && (
+                        <span className="report-saved-note">Saved {new Date(assumptionsLastSavedAt).toLocaleTimeString()}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <StatementDoc
@@ -2873,6 +2896,12 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // exception above: these are derived hero metrics meant to be visible at a glance,
   // not detail rows worth hiding behind a click.
   const isProfitabilitySection = statementType === 'PL' && /^profitability$/i.test(section.trim());
+  // EBITDA gets the exact same treatment as PROFITABILITY just above (2026-08-24,
+  // Kayee: "we dont need ebitda section that add account. ebitda is just the blank
+  // row calculation... ebitda doesnt need to be able to expand") — it's a single
+  // derived hero metric (withEbitdaRollup), not a real line-item section with
+  // accounts of its own to collapse or add to.
+  const isEbitdaSection = statementType === 'PL' && /^ebitda$/i.test(section.trim());
   // Balance Sheet on the plain actuals-only Reports tab also starts fully collapsed
   // by default (2026-08-20, Kayee, pointing at a BS view with every section already
   // closed to just its header + Total row: "keep it collapsed like this for balance
@@ -2883,7 +2912,7 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // always looked — this is a BS-only exception to that tab's original default.
   const [collapsed, setCollapsed] = useState(
     isProjection
-      ? !(isCashSummarySection || isProfitabilitySection)
+      ? !(isCashSummarySection || isProfitabilitySection || isEbitdaSection)
       : statementType === 'BS'
       ? true
       : /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section)
@@ -2954,8 +2983,13 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
           profitability row") — Gross Profit and Gross Profit Margin % already read as
           self-labeling hero rows right under COGS's Total, so the "▸ PROFITABILITY"
           band above them was a redundant extra line, not a real collapsible section
-          (it never collapses — see isProfitabilitySection above). */}
-      {hasLineItems && !mergeHeaderIntoTotal && !isProfitabilitySection && (
+          (it never collapses — see isProfitabilitySection above). EBITDA's own header
+          band removed the same way, same day, same reasoning (Kayee: "ebitda doesnt
+          need to be able to expand... ebitda is just the blank row calculation") — the
+          black EBITDA hero row is the whole story; a "▸ EBITDA" band above it (plus its
+          own now-removed "+ Add account" trigger, see isEbitdaSection below) implied
+          it was a real expandable section of accounts, which it never was. */}
+      {hasLineItems && !mergeHeaderIntoTotal && !isProfitabilitySection && !isEbitdaSection && (
       <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
         <td>
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
@@ -3002,7 +3036,7 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                 the profitability add account row above the gross profit. it doesn't do
                 anything") — it's a computed section (Gross Profit / Gross Profit
                 Margin %), not a real line-item section a manual account belongs in. */}
-            {!collapsed && onAddManualAccount && !isProfitabilitySection && (
+            {!collapsed && onAddManualAccount && !isProfitabilitySection && !isEbitdaSection && (
               <AddAccountRow section={section} months={months} onAdd={onAddManualAccount} />
             )}
             {totalRows.map((row, i) => renderRow(row, { isSectionToggle: mergeHeaderIntoTotal && i === 0, keySuffix: `total-${i}` }))}
@@ -3105,6 +3139,19 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                   ? 'total'
                   : isHeroTotalRow(row.label, statementType)
                   ? 'total'
+                  : // Total OPEX / Total Non OPEX are cross-section grand totals (they
+                    // sum OTHER sections' own Total rows, not a single section's line
+                    // items — see withTotalNonOpexRollup's header comment), so they
+                    // don't belong to any one section's own collapsed/expanded state
+                    // the way a normal section Total does. 2026-08-24, Kayee: first
+                    // "total opex should be blank background" / "total non opex also
+                    // should be blank", then "actually total opex and total non opex
+                    // make it dark gret" — always dark grey (never the light green
+                    // collapsed-section tint), regardless of whatever section this
+                    // particular row instance happens to render inside.
+                    /^total\s*opex$/i.test(String(row.label ?? '').trim()) ||
+                    /^total\s*non[\s-]?opex$/i.test(String(row.label ?? '').trim())
+                  ? 'total total-soft total-soft-open'
                   : // While the section is EXPANDED, its own Total row swaps the green
                     // total-soft tint for a neutral slate band (2026-08-20, Kayee:
                     // "when i expand this the total went down to the bottom but
