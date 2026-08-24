@@ -1105,15 +1105,19 @@ tr.cf-manual-row .pr-input { padding: 4px 6px; font-size: 11px; }
 .report-year-row th:first-child { background: var(--black); }
 .report-year-row + tr th { top: 26px; }
 
-/* Month header now stacks a label + an ACT/FCST status chip instead of plain text. */
+/* Month header now stacks a label + an ACT/FCST status chip instead of plain text.
+   2026-08-24 (Kayee: "this needs to be in white fonts") — the muted/blue tints below
+   were nearly unreadable at this font size against the black header, especially the
+   Weekly CF date-range line boxed in her screenshot. Both now render solid white. */
 .report-month-label { font-size: 10.5px; }
-.report-month-status { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; color: var(--on-black-muted); margin-top: 3px; }
-.report-month-status.fcst { color: var(--blue); }
+.report-month-status { font-size: 8.5px; font-weight: 700; letter-spacing: .5px; color: #fff; margin-top: 3px; }
+.report-month-status.fcst { color: #fff; }
 /* Weekly CF's date-range line (2026-08-24) — sits below the ACT/FCST status line,
    showing the week's actual Mon-Sun span ("Apr 1 - Apr 7") since "Week 3" alone on
-   the label line above isn't enough to place it on a calendar. Deliberately lighter/
-   smaller than report-month-status so ACT/FCST stays the most prominent signal. */
-.report-month-range { font-size: 7.5px; font-weight: 500; color: var(--on-black-muted); margin-top: 2px; opacity: .75; }
+   the label line above isn't enough to place it on a calendar. Still slightly smaller
+   than report-month-status so ACT/FCST stays the most prominent signal, but full
+   white now (was near-invisible dark/muted text on the black header). */
+.report-month-range { font-size: 7.5px; font-weight: 500; color: #fff; margin-top: 2px; opacity: .85; }
 
 /* Historical months (anything before Jan-2026) — Kayee, 2026-08-19: the 2026-2028/
    Historical toggle doesn't hide these columns in every table (the waterfalls always
