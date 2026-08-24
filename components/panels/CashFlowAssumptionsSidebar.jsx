@@ -365,13 +365,26 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
       {expanded && (
         <div className="sidebar-card-body">
           <div className="sidebar-control-group">
-            <label className="sidebar-radio-label">
-              <input type="radio" checked={mode !== 'interval' && mode !== 'manual'} onChange={() => setMode('followPL')} />
-              Follow P&amp;L cadence — just choose which week below
+            <div className="sidebar-input-label">How often is this paid?</div>
+            {/* 2026-08-24 reworded (Kayee: "these three options needs to be more clear
+                and precise... not formal") — plain-language labels + a one-line
+                explanation under each, instead of jargon ("Follow P&L cadence",
+                "Custom interval") that only made sense if you already knew what it
+                meant. Each option's SECOND line is the actual explanation; the radio's
+                own label stays short. */}
+            <label className="sidebar-radio-label sidebar-radio-label-stacked">
+              <span>
+                <input type="radio" checked={mode !== 'interval' && mode !== 'manual'} onChange={() => setMode('followPL')} />
+                Every month, same as the P&amp;L
+              </span>
+              <span className="sidebar-radio-sublabel">You only pick which week it lands in, below.</span>
             </label>
-            <label className="sidebar-radio-label">
-              <input type="radio" checked={mode === 'interval'} onChange={() => setMode('interval')} />
-              Custom interval — pick frequency &amp; payment month
+            <label className="sidebar-radio-label sidebar-radio-label-stacked">
+              <span>
+                <input type="radio" checked={mode === 'interval'} onChange={() => setMode('interval')} />
+                Less often — quarterly or annually
+              </span>
+              <span className="sidebar-radio-sublabel">You pick how often it's paid, which month, and which week.</span>
             </label>
             {/* Manual input hidden for now (2026-08-24, Kayee: "you can remove manual
                 input option for now. but we might bring it back so you can just hide
@@ -381,16 +394,19 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
                 exactly as before, it just can't be freshly selected from this radio
                 group right now. */}
             {SHOW_MANUAL_INPUT_OPTION && (
-              <label className="sidebar-radio-label">
-                <input type="radio" checked={mode === 'manual'} onChange={() => setMode('manual')} />
-                Manual input — type cash $ directly in the Cash Flow grid
+              <label className="sidebar-radio-label sidebar-radio-label-stacked">
+                <span>
+                  <input type="radio" checked={mode === 'manual'} onChange={() => setMode('manual')} />
+                  Type the exact $ myself
+                </span>
+                <span className="sidebar-radio-sublabel">You enter the cash amount directly in the Cash Flow grid, month by month.</span>
               </label>
             )}
           </div>
 
           {mode !== 'manual' && (
             <div className="sidebar-control-group">
-              <label className="sidebar-input-label">Which week does it land in?</label>
+              <label className="sidebar-input-label">Which week of that month does it land in?</label>
               <select
                 className="sidebar-select"
                 value={
@@ -442,19 +458,19 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
 
           {mode === 'interval' && (
             <div className="sidebar-control-group">
-              <label className="sidebar-input-label">Payment frequency</label>
+              <label className="sidebar-input-label">How often?</label>
               <select
                 className="sidebar-select"
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
               >
-                <option value="quarterly">Quarterly</option>
-                <option value="annually">Annually</option>
+                <option value="quarterly">Every quarter</option>
+                <option value="annually">Once a year</option>
               </select>
 
               {frequency === 'quarterly' && (
                 <>
-                  <label className="sidebar-input-label">Payment lands in</label>
+                  <label className="sidebar-input-label">Which month of the quarter?</label>
                   <select
                     className="sidebar-select"
                     value={Math.min(3, Math.max(1, Number(timing?.payMonth) || 3))}
@@ -471,7 +487,7 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
 
               {frequency === 'annually' && (
                 <>
-                  <label className="sidebar-input-label">Payment lands in</label>
+                  <label className="sidebar-input-label">Which month of the year?</label>
                   <select
                     className="sidebar-select"
                     value={Math.min(12, Math.max(1, Number(timing?.payMonth) || 1))}

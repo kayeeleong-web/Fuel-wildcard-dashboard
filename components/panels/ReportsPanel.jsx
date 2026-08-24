@@ -18,7 +18,6 @@ import {
 import {
   extendWeeksThrough,
   primaryMonthForWeek,
-  weeksInSameMonth,
   placementMonthForWeek,
   cashOutflowForWeek,
   weekRangeLabel,
@@ -1796,12 +1795,11 @@ function withWeeklyCFExpenseCashOutflowRows(rows, weeks, lastActualIndex, cfProj
     const monthCells = { ...(row.monthCells || {}) };
     let hasManualCell = false;
     for (const weekIso of forecastWeeks) {
-      const n = weeksInSameMonth(forecastWeeks, weekIso);
       const { value, cell } = weeklyOutflowCell(
         account,
         timingByAccount[account.id],
         weekIso,
-        n,
+        null,
         forecastMonthSet,
         accrualCtx,
         onSetTiming
@@ -1843,12 +1841,11 @@ function withWeeklyCFExpenseCashOutflowRows(rows, weeks, lastActualIndex, cfProj
       const values = {};
       const monthCells = {};
       for (const weekIso of forecastWeeks) {
-        const n = weeksInSameMonth(forecastWeeks, weekIso);
         const { value, cell } = weeklyOutflowCell(
           payrollAccount,
           timingByAccount[payrollAccount.id],
           weekIso,
-          n,
+          null,
           forecastMonthSet,
           accrualCtx,
           onSetTiming
@@ -1881,12 +1878,11 @@ function withWeeklyCFExpenseCashOutflowRows(rows, weeks, lastActualIndex, cfProj
     const values = {};
     const monthCells = {};
     for (const weekIso of forecastWeeks) {
-      const n = weeksInSameMonth(forecastWeeks, weekIso);
       const { value, cell } = weeklyOutflowCell(
         account,
         timingByAccount[account.id],
         weekIso,
-        n,
+        null,
         forecastMonthSet,
         accrualCtx,
         onSetTiming
@@ -1919,7 +1915,6 @@ function withWeeklyCashFlowRollforward(rows, weeks, lastActualIndex, cfProjectio
 
   const netValues = {};
   for (const weekIso of forecastWeeks) {
-    const n = weeksInSameMonth(forecastWeeks, weekIso);
     // Lands the whole month's inflow in its last-calendar-day week, same rule as
     // withWeeklyCFRevenueInflowRows/cashOutflowForWeek (2026-08-24) — this rollforward
     // computes Net Change independently rather than reading the already-rendered
@@ -1942,7 +1937,7 @@ function withWeeklyCashFlowRollforward(rows, weeks, lastActualIndex, cfProjectio
     }
     let outflow = 0;
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
-      outflow += cashOutflowForWeek(account, timingByAccount[account.id], weekIso, n, forecastMonthSet, accrualCtx);
+      outflow += cashOutflowForWeek(account, timingByAccount[account.id], weekIso, null, forecastMonthSet, accrualCtx);
     }
     netValues[weekIso] = (inflow || 0) - outflow;
   }
