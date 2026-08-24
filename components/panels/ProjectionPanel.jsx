@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel } from './CustomerPanel';
+import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 
 const SUB_TABS = [
   { id: 'pl', label: 'P&L' },
@@ -44,6 +45,16 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
   // sidebar (cashTimingState) and its collapsed/open state carry over instantly when
   // you flip the toggle, not just "eventually consistent" the next time you visit.
   const [cfGranularity, setCfGranularity] = useState('monthly');
+
+  // Assumptions state now lives HERE (2026-08-24, Kayee: "sabe button is really
+  // ugly... it should be right align all the way to the right") — moved up from
+  // ReportsPanel so the Save button can render in THIS toolbar, which is the one row
+  // that actually spans the full page width (ReportsPanel's own column sits beside the
+  // Assumptions sidebar, so its "far right" was only the far right of that narrower
+  // column). Passed down to ReportsPanel as the `assumptions` prop; ReportsPanel falls
+  // back to its own internal hook when the prop is absent, so the plain actual-mode
+  // Reports view elsewhere in the app is unaffected.
+  const assumptions = useAssumptionsState();
 
   function changeSubTab(tab) {
     setProjectionSubTab(tab);
@@ -93,6 +104,23 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
             </button>
           </div>
         )}
+        {/* Save button (2026-08-24, relocated per Kayee: "right align all the way to
+            the right") — same neutral .btn theme as Export PDF below, not a special
+            color, at the true right edge of the page since this toolbar row spans the
+            full page width. Only on the P&L sub-tab, since that's the only place
+            Assumptions (revenue rates + cost items) are actually edited; Cash Flow's
+            own timing config is a separate localStorage key with no save affordance
+            needed here. */}
+        {projectionSubTab === 'pl' && (
+          <div className="report-save-block" style={{ marginLeft: 'auto' }}>
+            {assumptions.lastSavedAt != null && (
+              <span className="report-saved-note">Saved {new Date(assumptions.lastSavedAt).toLocaleTimeString()}</span>
+            )}
+            <button type="button" className="btn" onClick={assumptions.saveNow} title="Force-save Assumptions to this browser now">
+              Save
+            </button>
+          </div>
+        )}
         {/* Payroll's Export PDF lives up here on the sub-tab row now (2026-08-20,
             Kayee: "waste of space, remove payroll text and move export pdf to the
             very top right... at the same line as the toggle") — the PayrollPanel's
@@ -111,7 +139,13 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
           Payroll and Assumptions are their own panels (different UI entirely). */}
 
       {projectionSubTab === 'pl' && (
-        <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="PL" />
+        <ReportsPanel
+          statements={statements}
+          customReports={customReports}
+          mode="projection"
+          fixedType="PL"
+          assumptions={assumptions}
+        />
       )}
 
       {/* Cash Flow — fixedType switches between 'CF' (monthly) and 'WeeklyCF' off the
@@ -126,6 +160,7 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
           customReports={customReports}
           mode="projection"
           fixedType={cfGranularity === 'weekly' ? 'WeeklyCF' : 'CF'}
+          assumptions={assumptions}
         />
       )}
 

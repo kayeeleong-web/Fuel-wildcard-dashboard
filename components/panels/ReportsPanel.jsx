@@ -244,7 +244,7 @@ function extendMonthsThrough(months, throughIso) {
 // the statement type, so a second selector here would be redundant. Custom is gone
 // entirely (both as a main-bar tab and as a 4th button here) — Kayee: "remove the
 // custom tab in the main bar and inside of reports."
-export function ReportsPanel({ statements, customReports, mode = 'actual', fixedType }) {
+export function ReportsPanel({ statements, customReports, mode = 'actual', fixedType, assumptions }) {
   // If fixedType is set (Projection sub-tabs), lock the type to that value;
   // otherwise, allow the user to toggle via buttons (Reports tab)
   const [reportType, setReportType] = useState(fixedType || 'PL');
@@ -269,13 +269,23 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // collapse") — sidebar defaults open so the merge is visible immediately; collapses
   // to a slim rail when not needed, per Kayee's "like a lot of major websites... hide
   // it into a hamburger."
+  // 2026-08-24 (Kayee: "move save button here so that the user can see... right align
+  // all the way to the right") — the Save button/timestamp moved OUT of this panel
+  // entirely, into ProjectionPanel's own full-page-width toolbar (same row as the
+  // Monthly/Weekly toggle), because THIS panel's own column never reaches the true
+  // right edge of the page (it sits beside the Assumptions sidebar). ProjectionPanel
+  // now owns the one real useAssumptionsState() instance for the 'pl'/'cf' sub-tabs
+  // and passes it down as the `assumptions` prop so the Save button always acts on the
+  // SAME live state this panel edits — never a second, stale copy. Falls back to its
+  // own internal hook when no prop is passed (the plain actual-mode Reports call site
+  // in DashboardApp doesn't need Assumptions at all, so this keeps working unchanged).
+  const internalAssumptions = useAssumptionsState();
+  const assumptionsCtl = assumptions || internalAssumptions;
   const {
     state: assumptionsState,
     setState: setAssumptionsState,
     hydrated: assumptionsHydrated,
-    lastSavedAt: assumptionsLastSavedAt,
-    saveNow: saveAssumptionsNow,
-  } = useAssumptionsState();
+  } = assumptionsCtl;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Cash Flow timing state (2026-08-18 rebuild) — per-P&L-account cash-timing config
@@ -446,8 +456,6 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
                 onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
                 costItemOrder={costItemOrder}
-                lastSavedAt={assumptionsLastSavedAt}
-                onSaveNow={saveAssumptionsNow}
               />
             ) : reportType === 'CF' || reportType === 'WeeklyCF' ? (
               // WeeklyCF (2026-08-24) reuses this EXACT sidebar, unchanged — it reads/
@@ -477,6 +485,9 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                   Projection-P&L only ("we shouldnt have this text anymore since this
                   only apply to the projection section"): the Reports (actual) tab has
                   no editable cells to explain. */}
+              {/* Save button no longer rendered here (2026-08-24) — see the comment on
+                  internalAssumptions/assumptionsCtl above. It now lives in
+                  ProjectionPanel's toolbar, at the true right edge of the page. */}
               {mode === 'projection' && reportType === 'PL' && (
                 <div className="report-legend-row">
                   <div className="report-legend">
@@ -489,27 +500,6 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                       From formula / actuals
                     </span>
                   </div>
-                  {/* Save button relocated here (2026-08-24, Kayee, circling the empty
-                      top-right corner: "move save button here so that the user can see
-                      and make it like a color so user wont miss") — was tucked into the
-                      narrow Assumptions sidebar next to Hide, easy to miss. This row
-                      spans the full width of the main content column, so putting it on
-                      the far right here is the most visible spot on the page without
-                      it floating outside the actual table/legend layout. Colored solid
-                      blue on purpose — every other button on this page is white/black,
-                      so this one doesn't blend in. Same onSaveNow/lastSavedAt this
-                      sidebar already had — still just a visible confirmation of the
-                      auto-save that already happens on every edit, not new behavior. */}
-                  {saveAssumptionsNow && (
-                    <div className="report-save-block">
-                      <button type="button" className="report-save-btn" onClick={saveAssumptionsNow} title="Force-save Assumptions to this browser now">
-                        Save
-                      </button>
-                      {assumptionsLastSavedAt != null && (
-                        <span className="report-saved-note">Saved {new Date(assumptionsLastSavedAt).toLocaleTimeString()}</span>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
               <StatementDoc

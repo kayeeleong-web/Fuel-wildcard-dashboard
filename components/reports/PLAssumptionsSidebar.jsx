@@ -20,7 +20,7 @@ import { ScheduledRateField } from './RateScheduleControl';
  * table can reclaim the full page width when the sidebar isn't needed (Kayee: "like a
  * lot of major websites... if I click a button you can hide it into a hamburger").
  */
-export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange, costItemOrder, lastSavedAt, onSaveNow }) {
+export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange, costItemOrder }) {
   // 2026-08-20 (Kayee: "make it collapsable so that it's not just fit into one page...
   // keep it default collapse for each section, that way you can keep each and stay
   // when scroll") — collapsed by default so Revenue Assumptions + the CoGS/OpEx cost
@@ -78,14 +78,14 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           Hide
         </button>
       </div>
-      {/* Save button moved OUT of this sidebar (2026-08-24, Kayee, circling the empty
-          top-right corner of the page: "move save button here so that the user can see
-          and make it like a color so user wont miss") — tucked in here next to Hide, it
-          read as a minor sidebar control easy to overlook. It's now a prominent colored
-          button in ReportsPanel's legend row up top instead (see report-save-btn in
-          ReportsPanel.jsx), which is where Kayee actually pointed. lastSavedAt/onSaveNow
-          props kept on this component's signature harmlessly unused for now rather than
-          ripped out, in case a second save affordance down here is ever wanted again. */}
+      {/* Save button moved OUT of this sidebar entirely (2026-08-24, Kayee: first "move
+          save button here... make it like a color so user wont miss" put it in
+          ReportsPanel's legend row, then "sabe button is really ugly... right align
+          all the way to the right" moved it again). It now lives in ProjectionPanel's
+          own toolbar — the one row that spans the FULL page width — styled as a plain
+          .btn like every other button, not a special color. That toolbar owns the one
+          real useAssumptionsState() instance for this whole Projection tab now (see
+          ProjectionPanel.jsx), so there's nothing to plumb through this component. */}
 
       <div className="payroll-card">
         <div className="payroll-card-head">

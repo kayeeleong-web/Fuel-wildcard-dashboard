@@ -144,12 +144,13 @@ function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMo
 
   function addAccount(accountId) {
     if (!accountId) return;
-    // Starting config: quarterly interval (2026-08-19 — "Monthly" was dropped as an
-    // interval choice since it's already identical to the implicit Follow P&L default,
-    // so offering it here was a redundant, confusing extra step). The card opens
-    // expanded so the user immediately picks the frequency/mode they actually came
-    // here to set.
-    onSetTiming(accountId, { mode: 'interval', frequency: 'quarterly', payMonth: 3 });
+    // Starting config: Follow P&L cadence (2026-08-24 — changed from a forced
+    // quarterly-interval default, since the most common reason to add an account now
+    // is just to set WHICH WEEK it lands in — e.g. payroll clearing on the 1st — not
+    // to change its monthly cadence at all. Frequency/interval is still one click away
+    // via the radio group below.) The card opens expanded so the user lands straight
+    // in its controls.
+    onSetTiming(accountId, { mode: 'followPL' });
     setJustAddedId(accountId);
     setPicking(false);
   }
@@ -222,15 +223,27 @@ const CALENDAR_MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+/** Human label for the week-placement override, e.g. "day 1", "day 0 (last day of
+ *  prior month)" — shown as a suffix on the tag so a card's header alone tells you
+ *  both the cadence AND which week it lands in without expanding it. */
+function weekPlacementSuffix(timing) {
+  if (timing?.weekPlacementDay == null || timing.weekPlacementDay === '') return '';
+  const day = Number(timing.weekPlacementDay);
+  if (day === 1) return ' · 1st of month';
+  if (day === 0) return ' · last day of prior month';
+  if (day < 0) return ` · ${Math.abs(day)}d before month start`;
+  return ` · day ${day}`;
+}
+
 function timingTag(timing) {
   const mode = timing?.mode || 'followPL';
-  // Only reachable by a legacy stored entry — the new UI never writes followPL.
-  if (mode === 'followPL') return 'Follow P&L';
+  const suffix = weekPlacementSuffix(timing);
   if (mode === 'manual') return 'Manual input';
+  if (mode === 'followPL') return `Follow P&L${suffix}`;
   const frequency = timing?.frequency || 'monthly';
-  if (frequency === 'monthly') return 'Monthly';
-  if (frequency === 'quarterly') return `Quarterly · M${Math.min(3, Math.max(1, Number(timing?.payMonth) || 3))}`;
-  return `Annually · ${CALENDAR_MONTHS[Math.min(12, Math.max(1, Number(timing?.payMonth) || 1)) - 1].slice(0, 3)}`;
+  if (frequency === 'monthly') return `Monthly${suffix}`;
+  if (frequency === 'quarterly') return `Quarterly · M${Math.min(3, Math.max(1, Number(timing?.payMonth) || 3))}${suffix}`;
+  return `Annually · ${CALENDAR_MONTHS[Math.min(12, Math.max(1, Number(timing?.payMonth) || 1)) - 1].slice(0, 3)}${suffix}`;
 }
 
 /** One OVERRIDDEN account's cash-timing card — header row (name + current-mode tag +
@@ -244,15 +257,21 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
   function setMode(nextMode) {
     if (nextMode === 'interval') {
       onSetTiming(account.id, {
+        ...timing,
         mode: 'interval',
         frequency: timing?.frequency && timing.frequency !== 'monthly' ? timing.frequency : 'quarterly',
         payMonth: timing?.payMonth || 3,
       });
-    } else {
+    } else if (nextMode === 'manual') {
       onSetTiming(account.id, {
+        ...timing,
         mode: 'manual',
         manualByMonth: timing?.manualByMonth || {},
       });
+    } else {
+      // Follow P&L cadence — keeps whatever weekPlacementDay override is already set,
+      // just drops the quarterly/annual interval config.
+      onSetTiming(account.id, { ...timing, mode: 'followPL' });
     }
   }
 
@@ -264,6 +283,15 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
 
   function setPayMonth(payMonth) {
     onSetTiming(account.id, { ...timing, mode: 'interval', payMonth });
+  }
+
+  // Which WEEK (within whichever month the payment cadence above lands it in) this
+  // account's cash actually clears — orthogonal to frequency (2026-08-24, Kayee:
+  // "cash flow in reality is messy like payroll might happen the first day of the
+  // month or last day of last month... give me that freedom from the UX/UI
+  // perspective"). null/unset = the original last-calendar-day-of-month default.
+  function setWeekPlacementDay(day) {
+    onSetTiming(account.id, { ...timing, weekPlacementDay: day });
   }
 
   // "Monthly" dropped as a Custom interval choice (2026-08-19, Kayee: "custom interval
@@ -296,6 +324,10 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
         <div className="sidebar-card-body">
           <div className="sidebar-control-group">
             <label className="sidebar-radio-label">
+              <input type="radio" checked={mode !== 'interval' && mode !== 'manual'} onChange={() => setMode('followPL')} />
+              Follow P&amp;L cadence — just choose which week below
+            </label>
+            <label className="sidebar-radio-label">
               <input type="radio" checked={mode === 'interval'} onChange={() => setMode('interval')} />
               Custom interval — pick frequency &amp; payment month
             </label>
@@ -304,6 +336,49 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
               Manual input — type cash $ directly in the Cash Flow grid
             </label>
           </div>
+
+          {mode !== 'manual' && (
+            <div className="sidebar-control-group">
+              <label className="sidebar-input-label">Which week does it land in?</label>
+              <select
+                className="sidebar-select"
+                value={
+                  timing?.weekPlacementDay == null || timing.weekPlacementDay === ''
+                    ? 'last'
+                    : Number(timing.weekPlacementDay) === 1
+                    ? 'first'
+                    : 'custom'
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === 'last') setWeekPlacementDay(null);
+                  else if (v === 'first') setWeekPlacementDay(1);
+                  else setWeekPlacementDay(timing?.weekPlacementDay != null && timing.weekPlacementDay !== '' ? timing.weekPlacementDay : 0);
+                }}
+              >
+                <option value="last">Last day of the month (default)</option>
+                <option value="first">1st of the month</option>
+                <option value="custom">Custom day…</option>
+              </select>
+              {timing?.weekPlacementDay != null && timing.weekPlacementDay !== '' && Number(timing.weekPlacementDay) !== 1 && (
+                <>
+                  <input
+                    type="number"
+                    className="sidebar-input"
+                    style={{ marginTop: 6 }}
+                    value={timing.weekPlacementDay}
+                    onChange={(e) => setWeekPlacementDay(e.target.value === '' ? 0 : Number(e.target.value))}
+                  />
+                  <div className="sidebar-section-note">
+                    Day of the payment month this clears — 1 = the 1st, 0 = the last day
+                    of the PRIOR month, negative = earlier than that, 28–31 = month-end.
+                    Only which WEEK it lands in changes; the amount and which month still
+                    follow the cadence above.
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {mode === 'interval' && (
             <div className="sidebar-control-group">
