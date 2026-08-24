@@ -27,6 +27,11 @@ export interface DataSource {
    *  Cash Flow waterfall. Throws when the tab is missing/misshapen — callers wrap
    *  the call and surface a visible misconfigured-data state (see app/page.js). */
   getGLTransactions(tab: GLTab): Promise<GLTransactionData>;
+  /** Weekly Cash Flow — the client-authored "Weekly CF" tab (same Section|Key|Label|
+   *  IsTotal|<period columns> shape as PL/CF/BS, but each column is a week-start ISO
+   *  date "YYYY-MM-DD" instead of a month). Returned with `type: "CF"` so it reuses
+   *  Cash-Flow-specific rendering for free — see the implementation for why. */
+  getWeeklyCashFlow(): Promise<FinancialStatementData>;
 }
 
 /** How long fetched data may be served stale before re-fetching, in seconds. */

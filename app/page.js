@@ -62,13 +62,14 @@ export default async function HomePage() {
 
   const source = getDataSource();
 
-  const [kpiData, dashboardSummary, pl, cf, bs, customReportsList, glCash, glAccrued] =
+  const [kpiData, dashboardSummary, pl, cf, bs, weeklyCf, customReportsList, glCash, glAccrued] =
     await Promise.all([
       source.getKPIData(),
       source.getDashboardSummary(),
       source.getStatement('PL', '24M'),
       source.getStatement('CF', '24M'),
       source.getStatement('BS', '24M'),
+      source.getWeeklyCashFlow(),
       source.listCustomReports(),
       safeGLTransactions(source, 'GL Cash'),
       safeGLTransactions(source, 'GL Accu'), // sheet tab is literally named "GL Accu"
@@ -80,7 +81,7 @@ export default async function HomePage() {
       initialActiveTab={initialActiveTab}
       kpiData={kpiData}
       dashboardSummary={dashboardSummary}
-      statements={{ PL: pl, CF: cf, BS: bs }}
+      statements={{ PL: pl, CF: cf, BS: bs, WeeklyCF: weeklyCf }}
       customReportsList={customReportsList}
       glCash={glCash}
       glAccrued={glAccrued}

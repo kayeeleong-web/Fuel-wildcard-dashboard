@@ -8,6 +8,7 @@ import { CustomerPanel } from './CustomerPanel';
 const SUB_TABS = [
   { id: 'pl', label: 'P&L Projection' },
   { id: 'cf', label: 'Cash Flow Projection' },
+  { id: 'weeklycf', label: 'Weekly CF' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'customer', label: 'Customer' },
 ];
@@ -78,6 +79,16 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
 
       {projectionSubTab === 'cf' && (
         <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="CF" />
+      )}
+
+      {/* Weekly CF (2026-08-24) — the client's own "Weekly CF" sheet tab, same rows/
+          sections as monthly CF but one column per week. This is actual-only: no
+          Assumptions sidebar, no forecast pipeline (mode="actual", not "projection") —
+          those all assume monthly cadence and would misbehave against week columns.
+          statements.WeeklyCF is fetched with type:"CF" (see googleSheets.ts) purely so
+          it inherits CF's hero-total / Beginning-Net Change-Ending Cash box styling. */}
+      {projectionSubTab === 'weeklycf' && (
+        <ReportsPanel statements={statements} customReports={customReports} mode="actual" fixedType="WeeklyCF" />
       )}
 
       {projectionSubTab === 'payroll' && (

@@ -292,6 +292,72 @@ export class GoogleSheetsDataSource implements DataSource {
   }
 
   /**
+   * Weekly Cash Flow (2026-08-24, Kayee) — a separate "Weekly CF" tab the client
+   * authors alongside the monthly CF tab, same Section|Key|Label|IsTotal|<period
+   * columns> contract, but each period column is a week-start ISO date
+   * ("YYYY-MM-DD") instead of a month ("YYYY-MM"). Tab name has a space, so the A1
+   * range must be single-quoted (same reason as getGLTransactions above).
+   *
+   * Deliberately returned with `type: "CF"` even though this isn't really the
+   * monthly CF statement — ReportsPanel/StatementDoc key ALL their Cash-Flow-specific
+   * rendering (hero total rows, the boxed Beginning/Net Change/Ending Cash treatment,
+   * green section bands) off `statement.type`, not off which tab it came from. Since
+   * this tab is rendered with mode="actual" (see ProjectionPanel's "Weekly CF" sub-
+   * tab), none of the monthly-cadence Assumptions/forecast pipeline — which is what
+   * would actually break on weekly data — ever runs against it; that pipeline is
+   * gated entirely behind mode==='projection'. This is purely a styling reuse trick.
+   *
+   * No range slicing (unlike getStatement) — fetches every week column the tab has.
+   * If this tab grows very large, add a trailing-N-weeks slice here the same way
+   * monthsForRange() does for the monthly statements.
+   */
+  async getWeeklyCashFlow(): Promise<FinancialStatementData> {
+    const tab = "Weekly CF";
+    const header = await getValues(this.sheetId, `'${tab}'!1:1`);
+    const periodCols = (header[0] ?? []).slice(4); // after Section|Key|Label|IsTotal
+    if (periodCols.length === 0) return { type: "CF", months: [], rows: [] };
+
+    const body = await getValues(this.sheetId, `'${tab}'!A2:${colLetter(3 + periodCols.length)}`);
+
+    const rows: FinancialStatementRow[] = body
+      .filter((r) => r[1])
+      .map((r) => {
+        const values: Record<string, number | null> = {};
+        periodCols.forEach((period, i) => {
+          values[period] = toNumberOrNull(r[4 + i]);
+        });
+        return {
+          key: r[1],
+          label: r[2] ?? r[1],
+          section: r[0] ?? "Uncategorized",
+          isTotal: (r[3] ?? "").toLowerCase() === "true",
+          values,
+        };
+      });
+
+    // Same duplicate-Total merge as getStatement (see the CF comment above) — in case
+    // this tab inherits the same two-stacked-Total-rows pattern from the monthly one.
+    const mergedRows: FinancialStatementRow[] = [];
+    const totalsByKey = new Map<string, FinancialStatementRow>();
+    for (const row of rows) {
+      const mergeKey = row.isTotal ? `${row.section}|${row.label}` : null;
+      const existing = mergeKey ? totalsByKey.get(mergeKey) : undefined;
+      if (existing) {
+        for (const period of periodCols) {
+          const a = existing.values[period];
+          const b = row.values[period];
+          existing.values[period] = a === null && b === null ? null : (a ?? 0) + (b ?? 0);
+        }
+        continue;
+      }
+      if (mergeKey) totalsByKey.set(mergeKey, row);
+      mergedRows.push(row);
+    }
+
+    return { type: "CF", months: periodCols, rows: mergedRows };
+  }
+
+  /**
    * Raw transaction-level GL export ("GL Cash" / "GL Accrued") for the Customer Cash
    * Flow waterfall. These tabs are bookkeeping-tool exports, so unlike KPI_Report/PL/
    * CF/BS the exact column ORDER is not part of the sheet contract — columns are
