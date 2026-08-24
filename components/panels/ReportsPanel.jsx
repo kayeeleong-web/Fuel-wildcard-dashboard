@@ -636,6 +636,10 @@ function siblingValuesAtMonth(rows, row, month) {
     // only show the [real number]") — a component that contributed nothing to the
     // total isn't part of "what this number breaks down into," it's just noise.
     .filter((r) => r.raw != null && Math.round(r.raw) !== 0)
+    // 2026-08-24 (Kayee: "arrange highest to the lowest") — largest contributor first,
+    // so the popover reads like a ranked breakdown instead of whatever order the rows
+    // happen to sit in on the P&L.
+    .sort((a, b) => b.raw - a.raw)
     .map((r) => ({ label: r.label, value: `$${Math.round(r.raw).toLocaleString('en-US')}` }));
 }
 

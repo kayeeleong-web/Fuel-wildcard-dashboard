@@ -322,8 +322,15 @@ a {
 }
 .chart-panel:has(.bar-highlight:hover) .drill-panel { opacity: 1; visibility: visible; transform: translateY(0); pointer-events: auto; }
 
-.comp-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: var(--muted); }
-.comp-row b { font-family: var(--font-num); color: var(--text); font-weight: 600; }
+.comp-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 12px; padding: 4px 0; color: var(--muted); }
+/* 2026-08-24 fix (Kayee: "the number is not right, the 5 got moved to the second
+   row") — with the label and number sharing one flex row at a fixed 240px popover
+   width, a long label (e.g. "Software - Operating Expense") had no room left and the
+   number itself wrapped mid-digit. The label now shrinks/wraps freely (flex:1,
+   min-width:0) while the number never wraps and never shrinks (white-space: nowrap,
+   flex-shrink: 0), so "$10,515" always renders as one unbroken run. */
+.comp-row span { flex: 1; min-width: 0; }
+.comp-row b { font-family: var(--font-num); color: var(--text); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
 .comp-row b.r { color: var(--pink); }
 .calc-note { font-size: 11px; color: var(--muted-2); margin-top: 8px; font-style: italic; }
 
@@ -331,7 +338,7 @@ a {
 .drillable { position: relative; display: inline-block; cursor: help; border-bottom: 1px dashed var(--muted-2); }
 .drillable .drill-pop {
   position: absolute; z-index: 50; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%) translateY(4px);
-  width: 240px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  width: 260px; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
   box-shadow: 0 16px 40px rgba(17,17,17,.18); opacity: 0; visibility: hidden; pointer-events: none;
   transition: opacity .12s ease, transform .12s ease; z-index: 50; text-align: left;
   /* 2026-08-10 (Kayee: "the text is coming out of the box, it's overflowing, keep the
