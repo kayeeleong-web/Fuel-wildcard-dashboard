@@ -6,9 +6,9 @@ import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel } from './CustomerPanel';
 
 const SUB_TABS = [
-  { id: 'pl', label: 'P&L Projection' },
-  { id: 'cf', label: 'Cash Flow Projection' },
-  { id: 'weeklycf', label: 'Weekly CF' },
+  { id: 'pl', label: 'P&L' },
+  { id: 'cf', label: 'Cash Flow' },
+  { id: 'weeklycf', label: 'Weekly Cash Flow' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'customer', label: 'Customer' },
 ];
