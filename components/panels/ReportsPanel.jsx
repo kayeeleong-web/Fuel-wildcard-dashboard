@@ -16,6 +16,14 @@ import {
   readCustomerInflowTotals,
 } from '../../lib/cashflow/cashProjection';
 import {
+  extendWeeksThrough,
+  primaryMonthForWeek,
+  weeksInSameMonth,
+  evenSplitAcrossWeeks,
+  cashOutflowForWeek,
+  weekRangeLabel,
+} from '../../lib/cashflow/weeklyCashProjection';
+import {
   headcountCostByCostType,
   headcountSalariesByCostType,
   headcountPayrollTaxesByCostType,
@@ -168,6 +176,13 @@ const STATUS_CLASS = { Ready: 'good', 'In Review': undefined, Scheduled: undefin
 // actually returned) ever carry a value; every padded month renders "—" via the same
 // `row.values[m] != null` check already used for a genuinely missing actual figure.
 const PROJECTION_HORIZON = '2030-12';
+
+// Weekly CF's own forward window (2026-08-24) — capped at the app's default
+// 2026-2028 forward-looking window (a full date, not "YYYY-MM", since weekly columns
+// are dates) rather than matching PROJECTION_HORIZON's 2030 reach: at 7-day columns,
+// extending that much further would roughly double an already-wide table for months
+// nobody's shown looking at yet. Revisit this constant if that changes.
+const WEEKLY_HORIZON = '2028-12-31';
 
 /** Appends blank placeholder months after the last real month, through `throughIso` —
  *  pure column padding, never fabricated data. */
@@ -331,8 +346,10 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
     return () => document.removeEventListener('dragover', handleDragOver);
   }, []);
 
-  // Show sidebar for P&L (Assumptions) and CF (Cash Timing) in projection mode
-  const showSidebar = mode === 'projection' && (reportType === 'PL' || reportType === 'CF');
+  // Show sidebar for P&L (Assumptions) and CF (Cash Timing) in projection mode.
+  // WeeklyCF shares the exact same Cash Timing sidebar as CF (2026-08-24) — same
+  // timingByAccount state, same component, see weeklyCashProjection.js.
+  const showSidebar = mode === 'projection' && (reportType === 'PL' || reportType === 'CF' || reportType === 'WeeklyCF');
 
   // Non-Headcount Costs display order, matching their real P&L row positions
   // (2026-08-07, Kayee: "make this align with what they actually are"). Recomputed
@@ -404,7 +421,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
                 costItemOrder={costItemOrder}
               />
-            ) : reportType === 'CF' ? (
+            ) : reportType === 'CF' || reportType === 'WeeklyCF' ? (
+              // WeeklyCF (2026-08-24) reuses this EXACT sidebar, unchanged — it reads/
+              // writes the same cashTimingState this ReportsPanel instance already
+              // holds, which is the same localStorage key Monthly CF's own instance
+              // reads/writes. Setting an account's timing from either tab is visible
+              // on the other the moment you switch (only one CF-family sub-tab is
+              // ever mounted at a time — see weeklyCashProjection.js header comment).
               <CashFlowAssumptionsSidebar
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
@@ -446,7 +469,7 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 assumptionsHydrated={assumptionsHydrated}
                 mode={mode}
                 cfProjection={
-                  reportType === 'CF'
+                  reportType === 'CF' || reportType === 'WeeklyCF'
                     ? {
                         expenseAccounts,
                         timingByAccount: (cashTimingHydrated && cashTimingState?.timingByAccount) || {},
@@ -480,7 +503,7 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
  *  6M/12M/24M trailing-window classes off `lastActualIndex` are gone along with those
  *  toggle buttons). `lastActualIndex`/`monthIndex` are unused now but left as params so
  *  every call site below doesn't need touching. */
-function rangeClasses(monthIndex, lastActualIndex, month) {
+function rangeClasses(monthIndex, lastActualIndex, month, prevPeriod) {
   const classes = ['r-all'];
   if (month) classes.push(`y${month.slice(0, 4)}`);
   // Kayee, 2026-08-19: "the toggle of 2026-2028 is pretty much useless. because it's
@@ -493,10 +516,18 @@ function rangeClasses(monthIndex, lastActualIndex, month) {
   if (month && month < '2026-01') classes.push('r-historical');
   // Kayee, 2026-08-19: "put some line between the year. and then the year should be
   // center align" — a vertical divider at every year boundary, running the full height
-  // of the table (header + every body row), not just the year-band row itself. Months
-  // here are always a continuous monthly sequence, so "first month of a year" is simply
-  // January — no need to compare against the previous month.
-  if (month && month.endsWith('-01') && monthIndex > 0) classes.push('y-boundary');
+  // of the table (header + every body row), not just the year-band row itself.
+  //
+  // For a continuous MONTHLY sequence, "first month of a year" is simply January
+  // (`month.endsWith('-01')`) — no need to compare against the previous month. Weekly
+  // CF (2026-08-24) reuses this same function with week-start DATES ("YYYY-MM-DD")
+  // instead, where `.endsWith('-01')` means something completely different (day 01 of
+  // ANY month, firing a false boundary at the start of every month) — so the actual
+  // year-over-year transition (`prevPeriod`'s year !== this period's year) is checked
+  // first and takes priority whenever a previous period is available; the endsWith
+  // fallback only covers the very first call site that never bothered passing one.
+  const yearChanged = prevPeriod ? month?.slice(0, 4) !== prevPeriod.slice(0, 4) : month?.endsWith('-01');
+  if (month && yearChanged && monthIndex > 0) classes.push('y-boundary');
   return classes.join(' ');
 }
 
@@ -1609,6 +1640,257 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
   return rowsWithRollforward;
 }
 
+/** Weekly analog of withCFRevenueInflowRows above — same Customer-tab-first,
+ *  P&L-Assumptions-fallback source per CF_REVENUE_ROW_FORMULAS, but the monthly $ is
+ *  split evenly across however many forecast weeks share that calendar month (see
+ *  weeklyCashProjection.js). No separate weekly config for revenue rows — matches
+ *  Monthly CF's own behavior, which has no manual per-account override for revenue
+ *  either. */
+function withWeeklyCFRevenueInflowRows(rows, weeks, lastActualIndex, cfProjection) {
+  const { accrualCtx, customerInflow } = cfProjection;
+  const forecastWeeks = weeks.slice(lastActualIndex + 1);
+  if (forecastWeeks.length === 0) return rows;
+
+  return rows.map((row) => {
+    if (row.isTotal) return row;
+    const formula = CF_REVENUE_ROW_FORMULAS[String(row.label ?? '').trim()];
+    if (!formula) return row;
+    const values = { ...row.values };
+    for (const weekIso of forecastWeeks) {
+      const month = primaryMonthForWeek(weekIso);
+      const n = weeksInSameMonth(forecastWeeks, weekIso);
+      const fromCustomer = customerInflow?.[formula.customerField]?.[month];
+      const monthlyTotal =
+        fromCustomer != null ? fromCustomer : accrualCtx?.revenue ? formula.fallback(accrualCtx.revenue, month) || 0 : 0;
+      values[weekIso] = evenSplitAcrossWeeks(monthlyTotal, n);
+    }
+    return { ...row, values };
+  });
+}
+
+/** Weekly analog of cfOutflowCell above — same manual-mode live editable cell, but
+ *  reading/writing `timing.manualByWeek[weekIso]` instead of `timing.manualByMonth[iso]`
+ *  so a Manual account can carry independent monthly AND weekly figures at once (see
+ *  weeklyCashProjection.js header comment for why that never collides). */
+function weeklyOutflowCell(account, timing, weekIso, weeksInMonthCount, forecastMonthSet, accrualCtx, onSetTiming) {
+  const value = cashOutflowForWeek(account, timing, weekIso, weeksInMonthCount, forecastMonthSet, accrualCtx);
+  if (timing?.mode !== 'manual' || !onSetTiming) return { value, cell: undefined };
+  const cell = (
+    <MonthInput
+      value={Number(timing?.manualByWeek?.[weekIso]) || 0}
+      onCommit={(n) =>
+        onSetTiming(account.id, {
+          ...timing,
+          mode: 'manual',
+          manualByWeek: { ...(timing?.manualByWeek || {}), [weekIso]: n },
+        })
+      }
+    />
+  );
+  return { value, cell };
+}
+
+/** Weekly analog of withCFExpenseCashOutflowRows above — identical account/label
+ *  matching and the SAME shared timingByAccount config (set from either Monthly or
+ *  Weekly CF, applies to both), just weeklyOutflowCell()'s per-week math instead of
+ *  cfOutflowCell()'s per-month math. */
+function withWeeklyCFExpenseCashOutflowRows(rows, weeks, lastActualIndex, cfProjection) {
+  const { expenseAccounts, timingByAccount, accrualCtx, onSetTiming } = cfProjection;
+  const forecastWeeks = weeks.slice(lastActualIndex + 1);
+  if (forecastWeeks.length === 0) return rows;
+  // The set of calendar months the forecast weeks actually cover — cashOutflowForWeek
+  // passes this straight through to cashOutflowForMonth's own quarterly/annual
+  // cycle-aggregation guard, unchanged from how the monthly pipeline uses it.
+  const forecastMonthSet = new Set(forecastWeeks.map((w) => primaryMonthForWeek(w)));
+
+  const accountByLabel = new Map();
+  for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
+    const label = String(account.label ?? '').trim();
+    if (label && !accountByLabel.has(label)) accountByLabel.set(label, account);
+  }
+
+  const matchedIds = new Set();
+  let next = rows.map((row) => {
+    if (row.isTotal) return row;
+    const account = accountByLabel.get(String(row.label ?? '').trim());
+    if (!account) return row;
+    matchedIds.add(account.id);
+    const values = { ...row.values };
+    const monthCells = { ...(row.monthCells || {}) };
+    let hasManualCell = false;
+    for (const weekIso of forecastWeeks) {
+      const n = weeksInSameMonth(forecastWeeks, weekIso);
+      const { value, cell } = weeklyOutflowCell(
+        account,
+        timingByAccount[account.id],
+        weekIso,
+        n,
+        forecastMonthSet,
+        accrualCtx,
+        onSetTiming
+      );
+      values[weekIso] = value;
+      if (cell !== undefined) {
+        monthCells[weekIso] = cell;
+        hasManualCell = true;
+      } else {
+        delete monthCells[weekIso];
+      }
+    }
+    return hasManualCell || row.monthCells
+      ? { ...row, values, monthCells, cfManualRow: hasManualCell || row.cfManualRow }
+      : { ...row, values };
+  });
+
+  // Synthetic "Headcount (Payroll)" COGS row — same insertion rule as the monthly
+  // version (right above CF's own Total COGS band, falling back to end of the COGS
+  // section), just weekly cell math.
+  const payrollAccount = expenseAccounts.cogsAccounts.find((a) => a.synthetic === 'payrollCogs');
+  if (payrollAccount && !matchedIds.has(payrollAccount.id)) {
+    let insertAt = -1;
+    let section = null;
+    const totalIdx = next.findIndex((r) => r.isTotal && PAYROLL_HEADCOUNT_TOTAL_LABELS.CoGS.includes(r.label));
+    if (totalIdx !== -1) {
+      insertAt = totalIdx;
+      section = next[totalIdx].section;
+    } else {
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (String(next[i].section ?? '').trim().toUpperCase() === 'COGS') {
+          insertAt = i + 1;
+          section = next[i].section;
+          break;
+        }
+      }
+    }
+    if (insertAt !== -1) {
+      const values = {};
+      const monthCells = {};
+      for (const weekIso of forecastWeeks) {
+        const n = weeksInSameMonth(forecastWeeks, weekIso);
+        const { value, cell } = weeklyOutflowCell(
+          payrollAccount,
+          timingByAccount[payrollAccount.id],
+          weekIso,
+          n,
+          forecastMonthSet,
+          accrualCtx,
+          onSetTiming
+        );
+        values[weekIso] = value;
+        if (cell !== undefined) monthCells[weekIso] = cell;
+      }
+      next = [
+        ...next.slice(0, insertAt),
+        { key: 'cf_weekly_payroll_headcount_cogs', label: 'Headcount (Payroll)', section, isTotal: false, values, monthCells },
+        ...next.slice(insertAt),
+      ];
+    }
+  }
+
+  // Manual/custom P&L accounts with no real CF sheet row — same insertion rule as the
+  // monthly version.
+  for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
+    if (!account.manual || matchedIds.has(account.id)) continue;
+    let insertAt = next.findIndex((r) => r.isTotal && r.section === account.section);
+    if (insertAt === -1) {
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].section === account.section) {
+          insertAt = i + 1;
+          break;
+        }
+      }
+    }
+    if (insertAt === -1) continue;
+    const values = {};
+    const monthCells = {};
+    for (const weekIso of forecastWeeks) {
+      const n = weeksInSameMonth(forecastWeeks, weekIso);
+      const { value, cell } = weeklyOutflowCell(
+        account,
+        timingByAccount[account.id],
+        weekIso,
+        n,
+        forecastMonthSet,
+        accrualCtx,
+        onSetTiming
+      );
+      values[weekIso] = value;
+      if (cell !== undefined) monthCells[weekIso] = cell;
+    }
+    next = [
+      ...next.slice(0, insertAt),
+      { key: `cf_weekly_${account.id}`, label: account.label, section: account.section, isTotal: false, values, monthCells },
+      ...next.slice(insertAt),
+    ];
+  }
+
+  return next;
+}
+
+/** Weekly analog of withCashFlowProjectionRows above — rolls Beginning/Net Change/
+ *  Ending Cash forward week by week instead of month by month. Same seed (the last
+ *  ACTUAL week's real Ending Cash) and same formula (beginning = prior week's ending;
+ *  ending = beginning + net change); net change per week reuses the EXACT same
+ *  per-week revenue/expense split as the two row-injection functions above, so this
+ *  always agrees with what's actually shown in the Transaction/Subscription Revenue
+ *  and COGS/OpEx rows for that same week. */
+function withWeeklyCashFlowRollforward(rows, weeks, lastActualIndex, cfProjection) {
+  const { expenseAccounts, timingByAccount, accrualCtx, customerInflow } = cfProjection;
+  const forecastWeeks = weeks.slice(lastActualIndex + 1);
+  if (forecastWeeks.length === 0) return rows;
+  const forecastMonthSet = new Set(forecastWeeks.map((w) => primaryMonthForWeek(w)));
+
+  const netValues = {};
+  for (const weekIso of forecastWeeks) {
+    const month = primaryMonthForWeek(weekIso);
+    const n = weeksInSameMonth(forecastWeeks, weekIso);
+    const fromCustomer = customerInflow?.totalsByMonth?.[month];
+    const monthlyInflow =
+      fromCustomer != null
+        ? fromCustomer
+        : accrualCtx?.revenue
+        ? meetingRevenueForMonth(accrualCtx.revenue, month) + upfrontRevenueForMonth(accrualCtx.revenue, month)
+        : null;
+    const inflow = evenSplitAcrossWeeks(monthlyInflow, n);
+    let outflow = 0;
+    for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
+      outflow += cashOutflowForWeek(account, timingByAccount[account.id], weekIso, n, forecastMonthSet, accrualCtx);
+    }
+    netValues[weekIso] = (inflow || 0) - outflow;
+  }
+
+  const beginningIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.beginning.test(r.label));
+  const netChangeIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.netChange.test(r.label));
+  const endingIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.ending.test(r.label));
+  if (beginningIdx === -1 || netChangeIdx === -1 || endingIdx === -1) return rows;
+
+  const lastActualWeek = weeks[lastActualIndex];
+  let priorEnding = lastActualWeek != null ? Number(rows[endingIdx].values?.[lastActualWeek]) || 0 : 0;
+
+  const beginningValues = { ...rows[beginningIdx].values };
+  const netChangeValues = { ...rows[netChangeIdx].values };
+  const endingValues = { ...rows[endingIdx].values };
+  for (const weekIso of forecastWeeks) {
+    const netChange = Number(netValues[weekIso]) || 0;
+    beginningValues[weekIso] = priorEnding;
+    netChangeValues[weekIso] = netChange;
+    endingValues[weekIso] = priorEnding + netChange;
+    priorEnding = endingValues[weekIso];
+  }
+  for (const weekIso of weeks) {
+    if (netChangeValues[weekIso] != null) continue;
+    const beginning = beginningValues[weekIso];
+    const ending = endingValues[weekIso];
+    if (beginning != null && ending != null) netChangeValues[weekIso] = Number(ending) - Number(beginning);
+  }
+
+  const next = [...rows];
+  next[beginningIdx] = { ...rows[beginningIdx], values: beginningValues };
+  next[netChangeIdx] = { ...rows[netChangeIdx], values: netChangeValues };
+  next[endingIdx] = { ...rows[endingIdx], values: endingValues };
+  return next;
+}
+
 /** Generic fallback so every fine-grained section Total (e.g. "Total Meals &
  *  Entertainment", "Total Professional Services") also projects forward, not just the
  *  handful of labels PL_COST_PROJECTIONS_BY_LABEL knows a bespoke formula for (Total
@@ -2003,10 +2285,22 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // currentMonth = the last ACTUAL month (before any blank padding), so "active-col"
   // still marks the latest real reporting month, not the padded 2030 horizon.
   const currentMonth = statement.months[statement.months.length - 1];
+  // Weekly CF (2026-08-24) carries full dates ("YYYY-MM-DD", length 10) as its period
+  // keys instead of "YYYY-MM" (length 7) — this is the ONLY thing that tells this
+  // shared component it's looking at weeks instead of months; everything below
+  // branches off it rather than off statement.type (which is 'CF' for both, on
+  // purpose — see googleSheets.ts getWeeklyCashFlow for why).
+  const isWeekly = statement.months.length > 0 && statement.months[0].length === 10;
   // In actual mode (2026-08-17, Kayee: "in report it will only show actual"), never
   // extend beyond what the real data has — no forecast columns, no padding. In
-  // projection mode, extend through PROJECTION_HORIZON same as always.
-  const months = mode === 'actual' ? statement.months : extendMonthsThrough(statement.months, PROJECTION_HORIZON);
+  // projection mode, extend through PROJECTION_HORIZON (months) or WEEKLY_HORIZON
+  // (weeks) same as always.
+  const months =
+    mode === 'actual'
+      ? statement.months
+      : isWeekly
+      ? extendWeeksThrough(statement.months, WEEKLY_HORIZON)
+      : extendMonthsThrough(statement.months, PROJECTION_HORIZON);
   const lastActualIndex = statement.months.length - 1;
   const revenue = assumptionsHydrated ? assumptionsState?.revenue : null;
   const costCtx = {
@@ -2203,7 +2497,47 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       console.warn('Cash Flow row reorder failed, showing sheet order:', err);
     }
   }
-  if (statement.type === 'CF' && cfProjection) {
+  if (statement.type === 'CF' && cfProjection && isWeekly) {
+    // Weekly CF (2026-08-24) — exact same pipeline SHAPE as Monthly CF below, same
+    // isolation rule (each step guarded separately), but the revenue-inflow/expense-
+    // outflow/rollforward steps are the weekly-native functions from
+    // weeklyCashProjection.js instead of the monthly ones. withSectionTotalRollups /
+    // withCashFlowGrandTotals / withTotalCashOutBelowInvestingFinancing are pure
+    // label-and-summation logic with no month-format assumption baked in, so they're
+    // reused completely unchanged — this branch never touches, and can never regress,
+    // Monthly CF's own code path below.
+    try {
+      rows = withWeeklyCFRevenueInflowRows(rows, months, lastActualIndex, cfProjection);
+    } catch (err) {
+      console.warn('Weekly Cash Flow revenue inflow projection failed:', err);
+    }
+    try {
+      rows = withWeeklyCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjection);
+    } catch (err) {
+      console.warn('Weekly Cash Flow expense cash-outflow projection failed:', err);
+    }
+    try {
+      rows = withSectionTotalRollups(statement.type, rows, months, lastActualIndex);
+    } catch (err) {
+      console.warn('Weekly Cash Flow section Total rollup failed:', err);
+    }
+    try {
+      rows = withCashFlowGrandTotals(rows, months);
+    } catch (err) {
+      console.warn('Weekly Cash Flow grand-total (Total Cash In/Out, Net Burn) rollup failed:', err);
+    }
+    rows = rows.filter((r) => !(r.isTotal && CF_GRAND_TOTAL_LABELS.netBurn.test(String(r.label ?? '').trim())));
+    try {
+      rows = withTotalCashOutBelowInvestingFinancing(rows);
+    } catch (err) {
+      console.warn('Weekly Total Cash Out reposition failed, showing sheet order:', err);
+    }
+    try {
+      rows = withWeeklyCashFlowRollforward(rows, months, lastActualIndex, cfProjection);
+    } catch (err) {
+      console.warn('Weekly Cash Flow rollforward failed:', err);
+    }
+  } else if (statement.type === 'CF' && cfProjection) {
     // Order matters: fill the real COGS/OpEx rows first, then roll those into CF's own
     // Total bands, then append the summary section — each step guarded separately,
     // same isolation rule as the P&L pipeline above.
@@ -2329,7 +2663,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               // (yearLabelIndices, 2026-08-19: "the year should be center align") —
               // every cell in the run still shares the same background, so
               // consecutive same-year cells read as one continuous band either way.
-              <th key={m} className={rangeClasses(i, lastActualIndex, m)}>
+              <th key={m} className={rangeClasses(i, lastActualIndex, m, months[i - 1])}>
                 {yearLabels.has(i) ? m.slice(0, 4) : ''}
               </th>
             ))}
@@ -2341,11 +2675,22 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
               return (
                 <th
                   key={m}
-                  className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                  className={`${rangeClasses(i, lastActualIndex, m, months[i - 1])}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
                 >
-                  <div className="report-month-label">{formatMonthLabel(m)}</div>
+                  {/* Weekly CF forecast columns (2026-08-24, Kayee: "label the week #
+                      like first week of projection is week 1... show specific date
+                      range") — "Week 1" counting from the first forecast week, with
+                      the actual Mon–Sun date range on the line below instead of the
+                      ACT/FCST tag (the pr-fcst blue styling already marks forecast
+                      columns visually, so the date range doesn't need to compete with
+                      a status word for the same line). Actual weeks keep their real
+                      date (via formatMonthLabel's day-aware branch) up top and get the
+                      SAME date-range line below for orientation. */}
+                  <div className="report-month-label">
+                    {isWeekly && isForecast ? `Week ${i - lastActualIndex}` : formatMonthLabel(m)}
+                  </div>
                   <div className={`report-month-status${isForecast ? ' fcst' : ''}`}>
-                    {isForecast ? 'FCST' : 'ACT'}
+                    {isWeekly ? weekRangeLabel(m) : isForecast ? 'FCST' : 'ACT'}
                   </div>
                 </th>
               );
@@ -2506,7 +2851,7 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
             it, and rangeClasses keeps these cells hiding in sync with the 2026-2028/
             Historical toggle exactly like every data cell. */}
         {months.map((m, i) => (
-          <td key={m} className={rangeClasses(i, lastActualIndex, m)}></td>
+          <td key={m} className={rangeClasses(i, lastActualIndex, m, months[i - 1])}></td>
         ))}
       </tr>
       )}
@@ -2758,7 +3103,7 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
               // uses, so this table can hold a real <input>, not just formatted text.
               if (row.monthCells && row.monthCells[m] !== undefined) {
                 return (
-                  <td key={m} className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}`}>
+                  <td key={m} className={`${rangeClasses(i, lastActualIndex, m, months[i - 1])}${m === currentMonth ? ' active-col' : ''}`}>
                     {row.monthCells[m]}
                   </td>
                 );
@@ -2810,7 +3155,7 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
               return (
                 <td
                   key={m}
-                  className={`${rangeClasses(i, lastActualIndex, m)}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
+                  className={`${rangeClasses(i, lastActualIndex, m, months[i - 1])}${m === currentMonth ? ' active-col' : ''}${isForecast ? ' pr-fcst' : ''}`}
                 >
                   {/* A Total row's per-month breakdown (what real line items sum to it
                       THIS month) is a separate feature from the calc-note above — it's

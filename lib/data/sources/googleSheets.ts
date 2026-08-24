@@ -302,10 +302,13 @@ export class GoogleSheetsDataSource implements DataSource {
    * monthly CF statement — ReportsPanel/StatementDoc key ALL their Cash-Flow-specific
    * rendering (hero total rows, the boxed Beginning/Net Change/Ending Cash treatment,
    * green section bands) off `statement.type`, not off which tab it came from. Since
-   * this tab is rendered with mode="actual" (see ProjectionPanel's "Weekly CF" sub-
-   * tab), none of the monthly-cadence Assumptions/forecast pipeline — which is what
-   * would actually break on weekly data — ever runs against it; that pipeline is
-   * gated entirely behind mode==='projection'. This is purely a styling reuse trick.
+   * this tab is rendered with mode="projection" (see ProjectionPanel's "Weekly CF"
+   * sub-tab), it DOES get a full forecast pipeline — but a separate, weekly-native one
+   * (lib/cashflow/weeklyCashProjection.js + ReportsPanel's `isWeekly` branch), which
+   * StatementDoc picks by checking whether these period keys are dates ("YYYY-MM-DD",
+   * length 10) rather than months ("YYYY-MM", length 7) — never by `statement.type`,
+   * since that's 'CF' for both. The monthly CF forecast pipeline is never invoked
+   * against this data.
    *
    * No range slicing (unlike getStatement) — fetches every week column the tab has.
    * If this tab grows very large, add a trailing-N-weeks slice here the same way

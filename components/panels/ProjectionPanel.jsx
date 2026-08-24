@@ -82,13 +82,22 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
       )}
 
       {/* Weekly CF (2026-08-24) — the client's own "Weekly CF" sheet tab, same rows/
-          sections as monthly CF but one column per week. This is actual-only: no
-          Assumptions sidebar, no forecast pipeline (mode="actual", not "projection") —
-          those all assume monthly cadence and would misbehave against week columns.
+          sections as Monthly CF but one column per week. Runs mode="projection" just
+          like Monthly CF, and shares its EXACT Cash Timing Assumptions sidebar/state
+          (Kayee: "I still want it to sync... if I add a new assumption in cash flow
+          monthly it should show up in weekly and vice versa") — set an account's
+          timing from either tab, it applies to both, since both read/write the same
+          localStorage-backed timingByAccount. Weekly's own addition on top of that
+          shared config is a per-week manual override (manualByWeek) so a Manual-mode
+          account can also be steered to land in one SPECIFIC week, not just spread
+          evenly across a month's weeks (the default). Forecast weeks are extended and
+          rolled forward by ReportsPanel's own weekly-native pipeline (isWeekly branch,
+          gated on the week-shaped "YYYY-MM-DD" period keys, never the monthly one) —
+          see lib/cashflow/weeklyCashProjection.js for the full mechanism.
           statements.WeeklyCF is fetched with type:"CF" (see googleSheets.ts) purely so
           it inherits CF's hero-total / Beginning-Net Change-Ending Cash box styling. */}
       {projectionSubTab === 'weeklycf' && (
-        <ReportsPanel statements={statements} customReports={customReports} mode="actual" fixedType="WeeklyCF" />
+        <ReportsPanel statements={statements} customReports={customReports} mode="projection" fixedType="WeeklyCF" />
       )}
 
       {projectionSubTab === 'payroll' && (
