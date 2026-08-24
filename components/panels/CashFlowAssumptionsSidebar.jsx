@@ -231,10 +231,13 @@ const CALENDAR_MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-/** Human label for the week-placement override, e.g. "day 1", "day 0 (last day of
- *  prior month)" — shown as a suffix on the tag so a card's header alone tells you
- *  both the cadence AND which week it lands in without expanding it. */
+/** Human label for the week-placement override, e.g. "day 1", "2 payments/mo" —
+ *  shown as a suffix on the tag so a card's header alone tells you both the cadence
+ *  AND which week(s) it lands in without expanding it. */
 function weekPlacementSuffix(timing) {
+  if (Array.isArray(timing?.weekPlacements) && timing.weekPlacements.length > 1) {
+    return ` · ${timing.weekPlacements.length} payments/mo`;
+  }
   if (timing?.weekPlacementDay == null || timing.weekPlacementDay === '') return '';
   const day = Number(timing.weekPlacementDay);
   if (day === 1) return ' · 1st of month';
@@ -274,6 +277,150 @@ function CustomDayField({ value, onCommit }) {
         onCommit(Number.isFinite(n) ? n : 0);
       }}
     />
+  );
+}
+
+/** Same commit-on-blur pattern as CustomDayField, for a payment split's % share. */
+function PctField({ value, onCommit }) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <span className="sidebar-pct-wrap">
+      <input
+        type="number"
+        className="sidebar-input sidebar-pct-input"
+        value={draft}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const n = Number(draft);
+          onCommit(Number.isFinite(n) ? n : 0);
+        }}
+      />
+      <span className="sidebar-pct-suffix">%</span>
+    </span>
+  );
+}
+
+/** How many times a month, and on which day(s), this account's cash actually clears
+ *  (2026-08-24, Kayee: "you might do multiply payments in each month for example
+ *  salaries & benefits i do payroll twice a month... give the user the options to
+ *  split the P&L cadence into different weeks... not only opex but also cogs").
+ *  Defaults to ONE payment — the same Last day / 1st / Custom day picker this always
+ *  had — so splitting is strictly opt-in and every account set up before this
+ *  feature keeps behaving exactly as it did. This component is shared by BOTH the
+ *  COGS Outflow and OpEx Outflow sections (see TimingSection/AccountTimingCard
+ *  above), so there's nothing extra to wire up per section — split payments work
+ *  the same everywhere an account can have custom timing at all.
+ *
+ *  Each split is { day, pct } — `day` uses the exact same "day of the payment month"
+ *  convention as the single-payment picker (1 = the 1st, 0 = the last day of the
+ *  PRIOR month, etc.), `pct` is that split's share of the month's total. Two payment
+ *  days are always more than a week apart, so each lands in its own distinct week —
+ *  see cashOutflowForWeek in weeklyCashProjection.js for why that's always safe. */
+function PaymentSplitEditor({ account, timing, onSetTiming }) {
+  const placements =
+    Array.isArray(timing?.weekPlacements) && timing.weekPlacements.length > 0
+      ? timing.weekPlacements
+      : [{ day: timing?.weekPlacementDay ?? null, pct: 100 }];
+
+  function commit(nextPlacements) {
+    if (nextPlacements.length <= 1) {
+      // Back down to one payment — drop weekPlacements entirely and store the day on
+      // the original single-payment field, so a one-payment account's saved shape
+      // never changes and stays byte-identical to accounts that never split at all.
+      const day = nextPlacements[0]?.day ?? null;
+      const { weekPlacements, ...rest } = timing || {};
+      onSetTiming(account.id, day == null ? rest : { ...rest, weekPlacementDay: day });
+    } else {
+      onSetTiming(account.id, { ...timing, weekPlacementDay: undefined, weekPlacements: nextPlacements });
+    }
+  }
+
+  function addPayment() {
+    const evenPct = Math.round(100 / (placements.length + 1));
+    commit([...placements.map((p) => ({ ...p, pct: evenPct })), { day: null, pct: evenPct }]);
+  }
+
+  function removePayment(idx) {
+    const next = placements.filter((_, i) => i !== idx);
+    commit(next.length > 0 ? next : [{ day: null, pct: 100 }]);
+  }
+
+  function setDay(idx, day) {
+    commit(placements.map((p, i) => (i === idx ? { ...p, day } : p)));
+  }
+
+  function setPct(idx, pct) {
+    commit(placements.map((p, i) => (i === idx ? { ...p, pct } : p)));
+  }
+
+  const totalPct = placements.reduce((s, p) => s + (Number(p.pct) || 0), 0);
+  const multi = placements.length > 1;
+
+  return (
+    <div className="sidebar-control-group">
+      <label className="sidebar-input-label">
+        {multi ? 'Payment schedule this month' : 'Which week of that month does it land in?'}
+      </label>
+      {placements.map((p, idx) => (
+        <div key={idx} className="sidebar-split-row">
+          <select
+            className="sidebar-select"
+            value={p.day == null || p.day === '' ? 'last' : Number(p.day) === 1 ? 'first' : 'custom'}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === 'last') setDay(idx, null);
+              else if (v === 'first') setDay(idx, 1);
+              else {
+                // Same "always land on a genuinely-custom value" fix as the original
+                // single-payment picker — see the 2026-08-24 bug note further up.
+                const isAlreadyCustom = p.day != null && p.day !== '' && Number(p.day) !== 1;
+                setDay(idx, isAlreadyCustom ? p.day : 0);
+              }
+            }}
+          >
+            <option value="last">Last day of the month</option>
+            <option value="first">1st of the month</option>
+            <option value="custom">Custom day…</option>
+          </select>
+          {p.day != null && p.day !== '' && Number(p.day) !== 1 && (
+            <CustomDayField value={p.day} onCommit={(n) => setDay(idx, n)} />
+          )}
+          {multi && <PctField value={p.pct} onCommit={(n) => setPct(idx, n)} />}
+          {multi && (
+            <button
+              type="button"
+              className="sidebar-card-remove"
+              title="Remove this payment"
+              onClick={() => removePayment(idx)}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+      {multi && Math.round(totalPct) !== 100 && (
+        <div className="sidebar-section-note sidebar-split-warning">
+          Adds up to {Math.round(totalPct)}%, not 100% — the real month's total still
+          gets split between these payments proportionally either way, but the % you
+          typed won't match what actually lands in each week.
+        </div>
+      )}
+      <button type="button" className="pr-schedule-add-link" onClick={addPayment}>
+        + Split into another payment{!multi ? ' (e.g. twice a month)' : ''}
+      </button>
+      <div className="sidebar-section-note">
+        {multi
+          ? 'Each payment takes its own day of the month and its own share of the total — 1 = the 1st, 0 = the last day of the PRIOR month, 28–31 = month-end.'
+          : 'Day of the payment month this clears — 1 = the 1st, 0 = the last day of the PRIOR month, negative = earlier than that, 28–31 = month-end.'}{' '}
+        Only which week(s) it lands in changes; the month it's paid in still follows the cadence above.
+      </div>
+    </div>
   );
 }
 
@@ -325,15 +472,6 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
 
   function setPayMonth(payMonth) {
     onSetTiming(account.id, { ...timing, mode: 'interval', payMonth });
-  }
-
-  // Which WEEK (within whichever month the payment cadence above lands it in) this
-  // account's cash actually clears — orthogonal to frequency (2026-08-24, Kayee:
-  // "cash flow in reality is messy like payroll might happen the first day of the
-  // month or last day of last month... give me that freedom from the UX/UI
-  // perspective"). null/unset = the original last-calendar-day-of-month default.
-  function setWeekPlacementDay(day) {
-    onSetTiming(account.id, { ...timing, weekPlacementDay: day });
   }
 
   // "Monthly" dropped as a Custom interval choice (2026-08-19, Kayee: "custom interval
@@ -405,55 +543,7 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
           </div>
 
           {mode !== 'manual' && (
-            <div className="sidebar-control-group">
-              <label className="sidebar-input-label">Which week of that month does it land in?</label>
-              <select
-                className="sidebar-select"
-                value={
-                  timing?.weekPlacementDay == null || timing.weekPlacementDay === ''
-                    ? 'last'
-                    : Number(timing.weekPlacementDay) === 1
-                    ? 'first'
-                    : 'custom'
-                }
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === 'last') setWeekPlacementDay(null);
-                  else if (v === 'first') setWeekPlacementDay(1);
-                  else {
-                    // Picking "Custom day…" must always land on a value the <select>
-                    // itself doesn't already read back as 'last' or 'first' (2026-08-24
-                    // bug: switching to Custom while the stored value was still 1 — from
-                    // a prior "1st of the month" pick — carried 1 straight over, so the
-                    // derived `value` above recomputed to 'first' again and the number
-                    // input never appeared, snapping the dropdown right back). Only
-                    // carry the existing value over if it's ALREADY a genuine custom
-                    // one; otherwise start the box at 0.
-                    const existing = timing?.weekPlacementDay;
-                    const isAlreadyCustom = existing != null && existing !== '' && Number(existing) !== 1;
-                    setWeekPlacementDay(isAlreadyCustom ? existing : 0);
-                  }
-                }}
-              >
-                <option value="last">Last day of the month (default)</option>
-                <option value="first">1st of the month</option>
-                <option value="custom">Custom day…</option>
-              </select>
-              {timing?.weekPlacementDay != null && timing.weekPlacementDay !== '' && Number(timing.weekPlacementDay) !== 1 && (
-                <>
-                  <CustomDayField
-                    value={timing.weekPlacementDay}
-                    onCommit={(n) => setWeekPlacementDay(n)}
-                  />
-                  <div className="sidebar-section-note">
-                    Day of the payment month this clears — 1 = the 1st, 0 = the last day
-                    of the PRIOR month, negative = earlier than that, 28–31 = month-end.
-                    Only which WEEK it lands in changes; the amount and which month still
-                    follow the cadence above.
-                  </div>
-                </>
-              )}
-            </div>
+            <PaymentSplitEditor account={account} timing={timing} onSetTiming={onSetTiming} />
           )}
 
           {mode === 'interval' && (
