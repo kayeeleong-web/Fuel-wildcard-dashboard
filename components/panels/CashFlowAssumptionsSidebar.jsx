@@ -52,6 +52,13 @@ export function CashFlowAssumptionsSidebar({
   onSetTiming,
   manualMonths,
   accrualFor,
+  // 2026-08-24 (Kayee: "maybe like the weekly option only show up when we go to
+  // weekly toggle and monthly only apply to monthly... make it easy for user") — the
+  // "which week does it land in" / payment-split controls only make sense when
+  // you're actually looking at the Weekly grid; showing them on Monthly was pure
+  // clutter for a choice that had no visible effect there. Threaded down into
+  // AccountTimingCard, which is the only place that decides whether to render them.
+  isWeekly = false,
 }) {
   if (collapsed) {
     // Same full-height black/white rail as the P&L sidebar (2026-08-07, Kayee: "make
@@ -119,6 +126,7 @@ export function CashFlowAssumptionsSidebar({
             onSetTiming={onSetTiming}
             manualMonths={manualMonths}
             accrualFor={accrualFor}
+            isWeekly={isWeekly}
           />
           <TimingSection
             label="OpEx Outflow"
@@ -127,6 +135,7 @@ export function CashFlowAssumptionsSidebar({
             onSetTiming={onSetTiming}
             manualMonths={manualMonths}
             accrualFor={accrualFor}
+            isWeekly={isWeekly}
           />
         </div>
       </div>
@@ -141,7 +150,7 @@ export function CashFlowAssumptionsSidebar({
  * Any stored entry renders as a card regardless of its mode (even a legacy
  * mode:'followPL' entry from the old UI — never silently drop user data).
  */
-function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMonths, accrualFor }) {
+function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMonths, accrualFor, isWeekly }) {
   const [picking, setPicking] = useState(false);
   // The account just added via the picker starts expanded so the user lands
   // straight in its controls instead of on a collapsed card.
@@ -184,6 +193,7 @@ function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMo
               manualMonths={manualMonths}
               accrualFor={accrualFor}
               defaultExpanded={account.id === justAddedId}
+              isWeekly={isWeekly}
             />
           ))}
 
@@ -424,9 +434,11 @@ function PaymentSplitEditor({ account, timing, onSetTiming }) {
   );
 }
 
-function timingTag(timing) {
+function timingTag(timing, isWeekly) {
   const mode = timing?.mode || 'followPL';
-  const suffix = weekPlacementSuffix(timing);
+  // Week-placement suffix only means anything on the Weekly view — Monthly CF has no
+  // concept of "which week", so keep the tag focused on cadence there.
+  const suffix = isWeekly ? weekPlacementSuffix(timing) : '';
   if (mode === 'manual') return 'Manual input';
   if (mode === 'followPL') return `Follow P&L${suffix}`;
   const frequency = timing?.frequency || 'monthly';
@@ -439,7 +451,7 @@ function timingTag(timing) {
  *  "×" remove), expanding to the Custom interval / Manual input controls. Removing
  *  deletes the account's timing entry entirely, reverting it to the implicit Follow
  *  P&L default. All classes are the existing .sidebar-* set from globals.css. */
-function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrualFor, defaultExpanded }) {
+function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrualFor, defaultExpanded, isWeekly }) {
   const [expanded, setExpanded] = useState(!!defaultExpanded);
   const mode = timing?.mode || 'followPL';
 
@@ -486,7 +498,7 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
     <div className="sidebar-card">
       <div className="sidebar-card-header" onClick={() => setExpanded((e) => !e)}>
         <span className="sidebar-card-label">{account.label}</span>
-        <span className="sidebar-card-value">{timingTag(timing)}</span>
+        <span className="sidebar-card-value">{timingTag(timing, isWeekly)}</span>
         <button
           type="button"
           className="sidebar-card-remove"
@@ -502,27 +514,26 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
 
       {expanded && (
         <div className="sidebar-card-body">
+          {/* 2026-08-24 redesign (Kayee: "the additional options is good and all but
+              it's getting messy here... make it easy for user as an expert of UX/UI")
+              — logical top-to-bottom flow is now: (1) how often is it paid, (2) if
+              "less often", which month, (3) if on the Weekly view, which week/split.
+              The week-placement editor is gated on isWeekly entirely (see below) so
+              Monthly CF's cards stay to just step 1–2 and never show a control that
+              doesn't apply to a monthly grid. */}
           <div className="sidebar-control-group">
             <div className="sidebar-input-label">How often is this paid?</div>
-            {/* 2026-08-24 reworded (Kayee: "these three options needs to be more clear
-                and precise... not formal") — plain-language labels + a one-line
-                explanation under each, instead of jargon ("Follow P&L cadence",
-                "Custom interval") that only made sense if you already knew what it
-                meant. Each option's SECOND line is the actual explanation; the radio's
-                own label stays short. */}
             <label className="sidebar-radio-label sidebar-radio-label-stacked">
               <span>
                 <input type="radio" checked={mode !== 'interval' && mode !== 'manual'} onChange={() => setMode('followPL')} />
                 Every month, same as the P&amp;L
               </span>
-              <span className="sidebar-radio-sublabel">You only pick which week it lands in, below.</span>
             </label>
             <label className="sidebar-radio-label sidebar-radio-label-stacked">
               <span>
                 <input type="radio" checked={mode === 'interval'} onChange={() => setMode('interval')} />
                 Less often — quarterly or annually
               </span>
-              <span className="sidebar-radio-sublabel">You pick how often it's paid, which month, and which week.</span>
             </label>
             {/* Manual input hidden for now (2026-08-24, Kayee: "you can remove manual
                 input option for now. but we might bring it back so you can just hide
@@ -540,27 +551,19 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
                 <span className="sidebar-radio-sublabel">You enter the cash amount directly in the Cash Flow grid, month by month.</span>
               </label>
             )}
-          </div>
 
-          {mode !== 'manual' && (
-            <PaymentSplitEditor account={account} timing={timing} onSetTiming={onSetTiming} />
-          )}
+            {mode === 'interval' && (
+              <div className="sidebar-nested-control">
+                <select
+                  className="sidebar-select"
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value)}
+                >
+                  <option value="quarterly">Every quarter</option>
+                  <option value="annually">Once a year</option>
+                </select>
 
-          {mode === 'interval' && (
-            <div className="sidebar-control-group">
-              <label className="sidebar-input-label">How often?</label>
-              <select
-                className="sidebar-select"
-                value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
-              >
-                <option value="quarterly">Every quarter</option>
-                <option value="annually">Once a year</option>
-              </select>
-
-              {frequency === 'quarterly' && (
-                <>
-                  <label className="sidebar-input-label">Which month of the quarter?</label>
+                {frequency === 'quarterly' && (
                   <select
                     className="sidebar-select"
                     value={Math.min(3, Math.max(1, Number(timing?.payMonth) || 3))}
@@ -572,12 +575,9 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
                       </option>
                     ))}
                   </select>
-                </>
-              )}
+                )}
 
-              {frequency === 'annually' && (
-                <>
-                  <label className="sidebar-input-label">Which month of the year?</label>
+                {frequency === 'annually' && (
                   <select
                     className="sidebar-select"
                     value={Math.min(12, Math.max(1, Number(timing?.payMonth) || 1))}
@@ -589,9 +589,18 @@ function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrual
                       </option>
                     ))}
                   </select>
-                </>
-              )}
-            </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Week-placement / split-payment controls only make sense on the Weekly
+              view — Monthly CF has no notion of "which week", so this whole block is
+              simply absent there (2026-08-24, Kayee: "maybe like the weekly option
+              only show up when we go to weekly toggle and monthly only apply to
+              monthly"). */}
+          {isWeekly && mode !== 'manual' && (
+            <PaymentSplitEditor account={account} timing={timing} onSetTiming={onSetTiming} />
           )}
 
           {mode === 'manual' && (

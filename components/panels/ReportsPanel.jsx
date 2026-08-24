@@ -485,6 +485,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 onSetTiming={handleSetTiming}
                 manualMonths={cfManualMonths}
                 accrualFor={(account, iso) => plAccrualForMonth(account, iso, cfAccrualCtx)}
+                // 2026-08-24 (Kayee: "maybe like the weekly option only show up when
+                // we go to weekly toggle and monthly only apply to monthly") — "which
+                // week does it land in" / payment-split controls are meaningless on
+                // the Monthly view, so they only render when this sidebar is actually
+                // showing for the Weekly sub-tab, cutting real clutter for the common
+                // (Monthly) case without removing anything Weekly still needs.
+                isWeekly={reportType === 'WeeklyCF'}
               />
             ) : null}
             <div className="reports-main">

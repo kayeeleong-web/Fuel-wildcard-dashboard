@@ -1929,6 +1929,16 @@ tr.pr-dragging { opacity: .4; }
   letter-spacing: 0.3px;
 }
 
+/* Nested control (2026-08-24) — the frequency/month selects that only appear under
+   the "Less often" radio, indented to read as belonging to that choice rather than as
+   a separate top-level control group (part of the sidebar UX cleanup). */
+.sidebar-nested-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 2px 19px;
+}
+
 .sidebar-radio-label {
   display: flex;
   align-items: center;

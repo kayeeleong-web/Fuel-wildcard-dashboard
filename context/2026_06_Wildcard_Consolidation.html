@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Wildcard — Accounting Controller Workflow — June 2026 Consolidated Report</title>
+<style>
+body { font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 900px; margin: 40px auto; color: #222; line-height: 1.5; }
+h1 { color: #1F4E78; }
+h2 { color: #1F4E78; border-bottom: 2px solid #1F4E78; padding-bottom: 4px; margin-top: 36px; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0 24px; }
+th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: #1F4E78; color: #fff; }
+tr:nth-child(even) { background: #f7f9fb; }
+.high { background: #F8CBAD; }
+.medium { background: #FFE699; }
+.low { background: #E2EFDA; }
+.structural { background: #DDEBF7; }
+.gap { background: #D9D9D9; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; }
+.tie { color: #1a7a1a; font-weight: bold; }
+.note { font-size: 0.9em; color: #555; }
+</style>
+</head>
+<body>
+
+<h1>Wildcard — Accounting Controller Workflow (Simplified)</h1>
+<p><strong>Client:</strong> Wildcard (Mems Studio, Inc. DBA Wildcard) &nbsp;|&nbsp; <strong>Period:</strong> June 2026 &nbsp;|&nbsp; <strong>Report type:</strong> Consolidated close report</p>
+<p class="note">This session was a full fresh re-run of the entire workflow — Intake Agent and all 6 Sub-agents were re-executed from the beginning, per FM instruction. Every step below ran this session; none of the results shown are carried forward from a prior session without being re-confirmed.</p>
+
+<h2>What ran this session</h2>
+<table>
+<tr><th>Stage</th><th>Ran this session?</th><th>Result</th></tr>
+<tr><td>Intake Agent</td><td>✅ Yes</td><td>All 6 standard inputs checked; ctx_09 present; ctx_17 and bank statements still missing (standing gap, FM override to proceed)</td></tr>
+<tr><td>1. System Changes</td><td>✅ Yes</td><td>Confidence 1.0 — no closed-period edits, chart of accounts stable</td></tr>
+<tr><td>2. Completeness</td><td>✅ Yes</td><td>Confidence 0.7 — Modules 1-4 run, bank rec limited by missing bank statement</td></tr>
+<tr><td>3. P&amp;L Consistency</td><td>✅ Yes</td><td>Confidence 0.7 — Revenue/COGS tie exactly, Deferred Revenue tie exactly</td></tr>
+<tr><td>4. Payroll</td><td>✅ Yes</td><td>Confidence 0.8 — all 3 payroll categories tie exactly</td></tr>
+<tr><td>6. CF Consistency</td><td>✅ Yes</td><td>Confidence 0.8 — CF internal integrity holds; CF-vs-BS variance re-confirmed as structural, not an error</td></tr>
+<tr><td>5. Balance Sheet</td><td>✅ Yes</td><td>Confidence 0.8 — BS ties exactly; every account's movement explained except the carried-forward $2.00 item</td></tr>
+</table>
+
+<h2>Compounded outcome reliability</h2>
+<p>Chain anchor: <strong>Balance Sheet Agent</strong> (highest-sequence Sub-agent with resolved output this session).</p>
+<p>Compounded outcome_reliability through the chain anchor: <span class="tie">1.0</span></p>
+<p>This Consolidation Agent's own outcome_reliability (session-detection/relay process adherence, multiplied by the chain anchor's value): <span class="tie">1.0</span></p>
+
+<h2>Key tie-outs confirmed clean this session</h2>
+<table>
+<tr><th>Tie-out</th><th>Result</th></tr>
+<tr><td>Total Revenue (GL vs P&amp;L)</td><td class="tie">$364,000.00 = $364,000.00 — EXACT TIE</td></tr>
+<tr><td>Total COGS (GL vs P&amp;L)</td><td class="tie">$42,395.75 = $42,395.75 — EXACT TIE</td></tr>
+<tr><td>Balance Sheet ties (Assets = Liabilities + Equity)</td><td class="tie">$519,363.38 = $116,358.64 + $403,004.74 — EXACT TIE</td></tr>
+<tr><td>Deferred Revenue movement (GL vs BS)</td><td class="tie">-$72,000.00 — EXACT TIE</td></tr>
+<tr><td>Payroll categories (Salaries+Bonus+Commission, ER Taxes, ER Benefits)</td><td class="tie">All tie exactly, GL to payroll sheet</td></tr>
+<tr><td>CF internal integrity (Starting Cash + Net Cash Flow = Ending Cash)</td><td class="tie">Holds exactly, May and June 2026</td></tr>
+<tr><td>Duplicate detection / closed-period edits / chart of accounts</td><td class="tie">No duplicates, no closed-period edits, chart of accounts stable</td></tr>
+</table>
+
+<h2>Open items requiring your attention</h2>
+<table>
+<tr><th>#</th><th>Severity</th><th>Item</th><th>Raised by</th><th>What to do next</th></tr>
+<tr class="high"><td>1</td><td><span class="badge">HIGH</span></td><td>Transfers in Transit: Payment Processor — flat $2.00 balance carried across multiple months, unresolved since a 2026-07-28 transition note.</td><td>System Changes / Balance Sheet</td><td>Confirm with bookkeeper/payment processor and clear or explain.</td></tr>
+<tr class="medium"><td>2</td><td><span class="badge">MEDIUM</span></td><td>$7,500 unexplained bank transaction dated 2026-06-04.</td><td>Completeness</td><td>Confirm with bookkeeper the nature of this transaction.</td></tr>
+<tr class="medium"><td>3</td><td><span class="badge">MEDIUM</span></td><td>Undocumented "Brex" counterparty in transaction memos.</td><td>Completeness</td><td>Confirm with bookkeeper/client the nature of this relationship.</td></tr>
+<tr class="medium"><td>4</td><td><span class="badge">MEDIUM</span></td><td>Bonus/commission of $15,250 bundled into Salaries+Bonus+Commission, not a separate GL line.</td><td>Payroll</td><td>Decide whether a separate GL line should be created going forward.</td></tr>
+<tr class="structural"><td>5</td><td><span class="badge">STRUCTURAL</span></td><td>CF tab vs BS ending cash variance of $50,058.53 (June) — CF tab is a simplified Operating-only construction; GL and BS agree with each other exactly.</td><td>CF Consistency / Balance Sheet</td><td>No action needed on GL/BS; consider expanding the CF tab's construction if a full 3-statement CF view is desired.</td></tr>
+<tr class="low"><td>6</td><td><span class="badge">LOW</span></td><td>Headcount per June payroll (13) vs ctx_13's stale reference (~15).</td><td>Payroll</td><td>Update ctx_13 when convenient.</td></tr>
+<tr class="low"><td>7</td><td><span class="badge">LOW</span></td><td>ctx_14 payroll-processing-fee assumption appears stale.</td><td>Payroll</td><td>Update ctx_14 when convenient.</td></tr>
+<tr class="gap"><td>8</td><td><span class="badge">STANDING GAP</span></td><td>ctx_17_accounting-policy-framework.md still missing — blocks formal materiality-threshold confirmation platform-wide.</td><td>Intake (standing, FM-overridden)</td><td>Source or approve ctx_17 for future runs.</td></tr>
+<tr class="gap"><td>9</td><td><span class="badge">STANDING GAP</span></td><td>No bank statements (Chase/Amex) available — blocks full bank reconciliation and 3-way CF cross-check.</td><td>Intake (standing, FM-overridden)</td><td>Provide bank statement access for future runs.</td></tr>
+</table>
+
+<h2>Bottom line</h2>
+<p>All 6 Sub-agents plus the Intake Agent were re-executed in full this session — no step was skipped or relied upon from a prior run. Every core tie-out (Revenue, COGS, Balance Sheet, Deferred Revenue, Payroll categories, CF integrity) reconciled exactly. Nine open items carry forward, one at HIGH severity (the $2.00 Transfers in Transit item) and two are standing, FM-overridden gaps (missing ctx_17, missing bank statements) that limit how far any Sub-agent could verify materiality or complete bank reconciliation this period. No critical-severity escalation occurred, so the workflow ran end-to-end without a halt.</p>
+
+</body>
+</html>
