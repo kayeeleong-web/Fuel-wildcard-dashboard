@@ -59,4 +59,10 @@ export class QBODataSource implements DataSource {
     // QBO's TransactionList report maps onto this when the source is built.
     throw new Error("QBODataSource.getGLTransactions() not implemented yet.");
   }
+
+  async getWeeklyCashFlow(): Promise<FinancialStatementData> {
+    // Weekly CF is a Google-Sheets-only tab today (2026-08-24) — no QBO report is
+    // wired up to it yet. Stub added only to satisfy the DataSource interface.
+    throw new Error("QBODataSource.getWeeklyCashFlow() not implemented yet.");
+  }
 }
