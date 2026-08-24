@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
-import { CustomerPanel } from './CustomerPanel';
+import { CustomerPanel, usePlannedCustomers, useCustomerDrivers } from './CustomerPanel';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
+import { usePayrollState } from '../../lib/payroll/usePayrollState';
+import { useCashTimingState } from '../../lib/cashflow/useCashTimingState';
 
 const SUB_TABS = [
   { id: 'pl', label: 'P&L' },
@@ -56,6 +58,35 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
   // Reports view elsewhere in the app is unaffected.
   const assumptions = useAssumptionsState();
 
+  // Same lift-with-fallback pattern, extended to every OTHER sub-tab with its own
+  // persisted entries (2026-08-24, Kayee: "it should also show up in each tab that
+  // needs to have entries so that everything can be saved") — Cash Flow's per-account
+  // timing config, Payroll's roster/bonus/hiring-plan state, and Customer's two stores
+  // (planned-customer rows + campaign/meeting driver grids). Each sub-tab's own
+  // component (ReportsPanel/PayrollPanel/CustomerPanel) still owns all the actual
+  // editing UI — this level only needs read access to lastSavedAt/saveNow so the one
+  // Save button in the toolbar below can act on whichever tab is currently open.
+  const cashTiming = useCashTimingState();
+  const payroll = usePayrollState();
+  const plannedCustomers = usePlannedCustomers();
+  const customerDrivers = useCustomerDrivers();
+
+  // Which (lastSavedAt, saveNow) pair the toolbar's Save button uses, per sub-tab.
+  // Customer has TWO independent stores, so its Save flushes both with one click and
+  // shows whichever save happened most recently.
+  const saveHandleForSubTab = {
+    pl: { lastSavedAt: assumptions.lastSavedAt, saveNow: assumptions.saveNow },
+    cf: { lastSavedAt: cashTiming.lastSavedAt, saveNow: cashTiming.saveNow },
+    payroll: { lastSavedAt: payroll.lastSavedAt, saveNow: payroll.saveNow },
+    customer: {
+      lastSavedAt: Math.max(plannedCustomers.lastSavedAt || 0, customerDrivers.lastSavedAt || 0) || null,
+      saveNow: () => {
+        plannedCustomers.saveNow();
+        customerDrivers.saveNow();
+      },
+    },
+  }[projectionSubTab];
+
   function changeSubTab(tab) {
     setProjectionSubTab(tab);
   }
@@ -77,60 +108,63 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
             </button>
           ))}
         </div>
-        {/* Cash Flow's Monthly/Weekly toggle (2026-08-24) — same slot/pattern as
-            Payroll's Export PDF button below, just for the 'cf' sub-tab instead.
-            Weekly shares the exact same Cash Timing Assumptions sidebar/state as
-            Monthly (Kayee: "I still want it to sync... if I add a new assumption in
-            cash flow monthly it should show up in weekly and vice versa") — flipping
-            this toggle only changes which `fixedType` ReportsPanel is fed, not which
-            timingByAccount it reads. Weekly's own addition on top of that shared
-            config is a per-week manual override (manualByWeek) so a Manual-mode
-            account can also be steered to land in one SPECIFIC week, not just spread
-            evenly across a month's weeks (the default). See
-            lib/cashflow/weeklyCashProjection.js for the full mechanism. */}
-        {projectionSubTab === 'cf' && (
-          <div className="seg" style={{ marginLeft: 'auto' }}>
-            <button
-              className={cfGranularity === 'monthly' ? 'active' : undefined}
-              onClick={() => setCfGranularity('monthly')}
-            >
-              Monthly
+        {/* Single right-hand group (2026-08-24) — one marginLeft:auto on the OUTER
+            wrapper pushes the whole group to the true right edge of the page (this
+            toolbar spans full width, unlike ReportsPanel's own narrower column); every
+            control inside just flows left-to-right with a normal gap, so there's never
+            a fight over which element claims the auto-margin. */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Cash Flow's Monthly/Weekly toggle (2026-08-24) — Weekly shares the exact
+              same Cash Timing Assumptions sidebar/state as Monthly (Kayee: "I still
+              want it to sync... if I add a new assumption in cash flow monthly it
+              should show up in weekly and vice versa") — flipping this toggle only
+              changes which `fixedType` ReportsPanel is fed, not which timingByAccount
+              it reads. Weekly's own addition on top of that shared config is a
+              per-account week-placement override, plus a per-week manual override
+              (manualByWeek) so a Manual-mode account can be steered to land in one
+              SPECIFIC week. See lib/cashflow/weeklyCashProjection.js. */}
+          {projectionSubTab === 'cf' && (
+            <div className="seg">
+              <button
+                className={cfGranularity === 'monthly' ? 'active' : undefined}
+                onClick={() => setCfGranularity('monthly')}
+              >
+                Monthly
+              </button>
+              <button
+                className={cfGranularity === 'weekly' ? 'active' : undefined}
+                onClick={() => setCfGranularity('weekly')}
+              >
+                Weekly
+              </button>
+            </div>
+          )}
+          {/* Payroll's Export PDF lives up here on the sub-tab row now (2026-08-20,
+              Kayee: "waste of space, remove payroll text and move export pdf to the
+              very top right... at the same line as the toggle") — the PayrollPanel's
+              own PageHead row (title + button) is gone entirely; this was its only
+              surviving control. Payroll-sub-tab only: it prints the Payroll view. */}
+          {projectionSubTab === 'payroll' && (
+            <button type="button" className="btn" onClick={() => window.print()}>
+              Export PDF
             </button>
-            <button
-              className={cfGranularity === 'weekly' ? 'active' : undefined}
-              onClick={() => setCfGranularity('weekly')}
-            >
-              Weekly
-            </button>
-          </div>
-        )}
-        {/* Save button (2026-08-24, relocated per Kayee: "right align all the way to
-            the right") — same neutral .btn theme as Export PDF below, not a special
-            color, at the true right edge of the page since this toolbar row spans the
-            full page width. Only on the P&L sub-tab, since that's the only place
-            Assumptions (revenue rates + cost items) are actually edited; Cash Flow's
-            own timing config is a separate localStorage key with no save affordance
-            needed here. */}
-        {projectionSubTab === 'pl' && (
-          <div className="report-save-block" style={{ marginLeft: 'auto' }}>
-            {assumptions.lastSavedAt != null && (
-              <span className="report-saved-note">Saved {new Date(assumptions.lastSavedAt).toLocaleTimeString()}</span>
+          )}
+          {/* Save button (2026-08-24, Kayee: first "right align all the way to the
+              right", then "it should also show up in each tab that needs to have
+              entries so that everything can be saved") — same neutral .btn theme as
+              every other button here, present on every sub-tab now, each acting on
+              THAT tab's own persisted state via saveHandleForSubTab above. Customer's
+              handle flushes both of its stores (planned customers + driver grids) in
+              one click. */}
+          <div className="report-save-block">
+            {saveHandleForSubTab.lastSavedAt != null && (
+              <span className="report-saved-note">Saved {new Date(saveHandleForSubTab.lastSavedAt).toLocaleTimeString()}</span>
             )}
-            <button type="button" className="btn" onClick={assumptions.saveNow} title="Force-save Assumptions to this browser now">
+            <button type="button" className="btn" onClick={saveHandleForSubTab.saveNow} title="Force-save this tab's entries to this browser now">
               Save
             </button>
           </div>
-        )}
-        {/* Payroll's Export PDF lives up here on the sub-tab row now (2026-08-20,
-            Kayee: "waste of space, remove payroll text and move export pdf to the
-            very top right... at the same line as the toggle") — the PayrollPanel's
-            own PageHead row (title + button) is gone entirely; this was its only
-            surviving control. Payroll-sub-tab only: it prints the Payroll view. */}
-        {projectionSubTab === 'payroll' && (
-          <button type="button" className="btn" style={{ marginLeft: 'auto' }} onClick={() => window.print()}>
-            Export PDF
-          </button>
-        )}
+        </div>
       </div>
 
       {/* P&L and Cash Flow projections both use ReportsPanel with mode='projection',
@@ -161,15 +195,22 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
           mode="projection"
           fixedType={cfGranularity === 'weekly' ? 'WeeklyCF' : 'CF'}
           assumptions={assumptions}
+          cashTiming={cashTiming}
+          payroll={payroll}
         />
       )}
 
       {projectionSubTab === 'payroll' && (
-        <PayrollPanel />
+        <PayrollPanel payrollCtl={payroll} />
       )}
 
       {projectionSubTab === 'customer' && (
-        <CustomerPanel glCash={glCash} glAccrued={glAccrued} />
+        <CustomerPanel
+          glCash={glCash}
+          glAccrued={glAccrued}
+          plannedCtl={plannedCustomers}
+          driversCtl={customerDrivers}
+        />
       )}
     </>
   );

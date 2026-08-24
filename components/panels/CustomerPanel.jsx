@@ -89,9 +89,12 @@ const SUMMARY_FROZEN_COLUMNS = [{ key: 'name', label: '', width: 230 }];
 /** Planned-customer rows, persisted to THIS browser's localStorage — same
  *  hydrate-then-save pattern as usePayrollState (and the same reason: this is a
  *  what-if planning tool, not GL data, so it never writes to the sheet). */
-function usePlannedCustomers() {
+export function usePlannedCustomers() {
   const [rows, setRows] = useState(null); // null until the localStorage read resolves
   const [hydrated, setHydrated] = useState(false);
+  // Visible save confirmation (2026-08-24) — same lastSavedAt/saveNow pattern as
+  // useAssumptionsState, so the Customer sub-tab gets the same "Save" button.
+  const [lastSavedAt, setLastSavedAt] = useState(null);
 
   useEffect(() => {
     let loaded = null;
@@ -109,13 +112,24 @@ function usePlannedCustomers() {
     if (!hydrated || !rows) return;
     try {
       window.localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(rows));
+      setLastSavedAt(Date.now());
     } catch {
       // localStorage can throw in private-browsing/storage-full edge cases — the tab
       // still works for the session, it just won't survive a refresh in that case.
     }
   }, [rows, hydrated]);
 
-  return { rows, setRows, hydrated };
+  function saveNow() {
+    if (!hydrated || !rows) return;
+    try {
+      window.localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(rows));
+      setLastSavedAt(Date.now());
+    } catch {
+      // Surfaced by the toolbar's "Saved" timestamp simply not updating.
+    }
+  }
+
+  return { rows, setRows, hydrated, lastSavedAt, saveNow };
 }
 
 function seedDrivers() {
@@ -159,9 +173,11 @@ function isValidDrivers(loaded) {
 
 /** Campaign/meeting driver grids + prices, one versioned localStorage key,
  *  hydrate-then-save — same pattern as usePlannedCustomers above. */
-function useCustomerDrivers() {
+export function useCustomerDrivers() {
   const [state, setState] = useState(null);
   const [hydrated, setHydrated] = useState(false);
+  // Visible save confirmation (2026-08-24) — see usePlannedCustomers above.
+  const [lastSavedAt, setLastSavedAt] = useState(null);
 
   useEffect(() => {
     let loaded = null;
@@ -179,12 +195,23 @@ function useCustomerDrivers() {
     if (!hydrated || !state) return;
     try {
       window.localStorage.setItem(DRIVERS_STORAGE_KEY, JSON.stringify(state));
+      setLastSavedAt(Date.now());
     } catch {
       // Same private-browsing/storage-full caveat as every other hook here.
     }
   }, [state, hydrated]);
 
-  return { state, setState, hydrated };
+  function saveNow() {
+    if (!hydrated || !state) return;
+    try {
+      window.localStorage.setItem(DRIVERS_STORAGE_KEY, JSON.stringify(state));
+      setLastSavedAt(Date.now());
+    } catch {
+      // Surfaced by the toolbar's "Saved" timestamp simply not updating.
+    }
+  }
+
+  return { state, setState, hydrated, lastSavedAt, saveNow };
 }
 
 /** The Dashboard tab's established misconfigured-data pattern (h3 + .cap) — a GL tab
@@ -407,7 +434,7 @@ function CombinedDriverGrid({ title, subtitle, currentRows, plannedRows, inactiv
   );
 }
 
-export function CustomerPanel({ glCash, glAccrued }) {
+export function CustomerPanel({ glCash, glAccrued, plannedCtl, driversCtl }) {
   const todayIso = currentIsoMonth();
   const [range, setRange] = useState('default');
   // Cash vs Accrued waterfall toggle (2026-08-19, Kayee: "instead of having two
@@ -431,8 +458,18 @@ export function CustomerPanel({ glCash, glAccrued }) {
     current: false,
     projection: false,
   });
-  const { rows: planned, setRows: setPlanned, hydrated } = usePlannedCustomers();
-  const { state: drivers, setState: setDrivers, hydrated: driversHydrated } = useCustomerDrivers();
+  // 2026-08-24 (Kayee: "Save button should also show up in each tab that needs to
+  // have entries so that everything can be saved") — ProjectionPanel now owns these
+  // two hooks so its toolbar's Save button acts on the SAME live state this panel
+  // edits, not a second stale copy (same reasoning as ReportsPanel's `assumptions`
+  // prop). Falls back to its own internal hook when no prop is passed, so this
+  // component still works standalone if it's ever mounted elsewhere.
+  const internalPlanned = usePlannedCustomers();
+  const internalDrivers = useCustomerDrivers();
+  const plannedCustomersCtl = plannedCtl || internalPlanned;
+  const customerDriversCtl = driversCtl || internalDrivers;
+  const { rows: planned, setRows: setPlanned, hydrated } = plannedCustomersCtl;
+  const { state: drivers, setState: setDrivers, hydrated: driversHydrated } = customerDriversCtl;
   const [justAddedId, setJustAddedId] = useState(null);
 
   function toggleSection(key) {

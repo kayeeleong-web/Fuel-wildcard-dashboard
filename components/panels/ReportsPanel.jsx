@@ -244,7 +244,7 @@ function extendMonthsThrough(months, throughIso) {
 // the statement type, so a second selector here would be redundant. Custom is gone
 // entirely (both as a main-bar tab and as a 4th button here) — Kayee: "remove the
 // custom tab in the main bar and inside of reports."
-export function ReportsPanel({ statements, customReports, mode = 'actual', fixedType, assumptions }) {
+export function ReportsPanel({ statements, customReports, mode = 'actual', fixedType, assumptions, cashTiming, payroll }) {
   // If fixedType is set (Projection sub-tabs), lock the type to that value;
   // otherwise, allow the user to toggle via buttons (Reports tab)
   const [reportType, setReportType] = useState(fixedType || 'PL');
@@ -294,12 +294,25 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // Inflow" fields (currentCustomers/upfrontPerCustomer/...) are GONE — customer cash-in
   // inputs live on the Customer Cash Flow tab now, which writes its computed monthly
   // totals to localStorage (CUSTOMER_INFLOW_STORAGE_KEY) for this panel to read below.
-  const { state: cashTimingState, setState: setCashTimingState, hydrated: cashTimingHydrated } = useCashTimingState();
+  // 2026-08-24 (Kayee: "Save button should also show up in each tab that needs to
+  // have entries so that everything can be saved") — ProjectionPanel now owns this
+  // hook (passed as the `cashTiming` prop) so its toolbar's Save button on the Cash
+  // Flow sub-tab acts on this exact live state. Falls back to an internal instance
+  // when no prop is passed (unchanged behavior anywhere else ReportsPanel is used).
+  const internalCashTiming = useCashTimingState();
+  const cashTimingCtl = cashTiming || internalCashTiming;
+  const { state: cashTimingState, setState: setCashTimingState, hydrated: cashTimingHydrated } = cashTimingCtl;
 
   // Payroll state is needed at THIS level (not just inside StatementDoc) because the
   // CF sidebar's per-account accrual reference and the CF projection's outflow math
-  // both fold in Payroll's headcount costs, same as the P&L projection does.
-  const { state: cfPayrollState, hydrated: cfPayrollHydrated } = usePayrollState();
+  // both fold in Payroll's headcount costs, same as the P&L projection does. Same
+  // `payroll` prop the Payroll sub-tab itself now edits (2026-08-24) — previously
+  // this was its OWN separate hook instance, disconnected from live edits made on the
+  // actual Payroll tab; sharing the one instance means CF's accrual math sees changes
+  // the moment they're typed, not just after a remount.
+  const internalCfPayroll = usePayrollState();
+  const cfPayrollCtl = payroll || internalCfPayroll;
+  const { state: cfPayrollState, hydrated: cfPayrollHydrated } = cfPayrollCtl;
 
   // 2026-08-20 (reverted back, same day — Kayee: "this is not coming from p&l
   // projection it's coming from customer tab... I put some dummy numbers in July 2026

@@ -28,8 +28,15 @@ const SECTION_IDS = {
  * Sheet — Kayee's explicit call, so no service-account/write-access changes were made to
  * the shared data layer for this.
  */
-export function PayrollPanel() {
-  const { state, setState, hydrated } = usePayrollState();
+export function PayrollPanel({ payrollCtl }) {
+  // 2026-08-24 (Kayee: "Save button should also show up in each tab that needs to
+  // have entries so that everything can be saved") — ProjectionPanel now owns this
+  // hook when it renders this panel, so its toolbar's Save button acts on the SAME
+  // live state, not a second stale copy. Falls back to its own internal hook if ever
+  // mounted without the prop.
+  const internalPayroll = usePayrollState();
+  const payrollStateCtl = payrollCtl || internalPayroll;
+  const { state, setState, hydrated } = payrollStateCtl;
   const todayIso = currentIsoMonth();
 
   // Sidebar mirrors the Reports/P&L merged-Assumptions pattern (2026-08-10, Kayee: "in
