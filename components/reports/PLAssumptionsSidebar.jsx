@@ -77,25 +77,15 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           </svg>
           Hide
         </button>
-        {/* Save button + confirmation (2026-08-24, Kayee: "why did you remove my input
-            in blue cell. dont do that again" / "if a add save button would that solve
-            the issue?") — every edit already auto-saves to this browser's storage the
-            instant it's made (useAssumptionsState's own persist effect); nothing here
-            saves anything MORE than that already happens. This exists purely so
-            there's visible proof it happened, instead of asking Kayee to just trust
-            it — clicking re-flushes to storage and stamps a real "Saved HH:MM:SS"
-            here, not a fake confirmation. */}
-        {onSaveNow && (
-          <button type="button" className="reports-sidebar-save-btn" onClick={onSaveNow} title="Force-save Assumptions to this browser now">
-            Save
-          </button>
-        )}
       </div>
-      {lastSavedAt != null && (
-        <div className="reports-sidebar-saved-note">
-          Saved {new Date(lastSavedAt).toLocaleTimeString()} (this browser)
-        </div>
-      )}
+      {/* Save button moved OUT of this sidebar (2026-08-24, Kayee, circling the empty
+          top-right corner of the page: "move save button here so that the user can see
+          and make it like a color so user wont miss") — tucked in here next to Hide, it
+          read as a minor sidebar control easy to overlook. It's now a prominent colored
+          button in ReportsPanel's legend row up top instead (see report-save-btn in
+          ReportsPanel.jsx), which is where Kayee actually pointed. lastSavedAt/onSaveNow
+          props kept on this component's signature harmlessly unused for now rather than
+          ripped out, in case a second save affordance down here is ever wanted again. */}
 
       <div className="payroll-card">
         <div className="payroll-card-head">

@@ -19,7 +19,7 @@ import {
   extendWeeksThrough,
   primaryMonthForWeek,
   weeksInSameMonth,
-  evenSplitAcrossWeeks,
+  isLastWeekOfMonth,
   cashOutflowForWeek,
   weekRangeLabel,
 } from '../../lib/cashflow/weeklyCashProjection';
@@ -1703,11 +1703,13 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
 }
 
 /** Weekly analog of withCFRevenueInflowRows above — same Customer-tab-first,
- *  P&L-Assumptions-fallback source per CF_REVENUE_ROW_FORMULAS, but the monthly $ is
- *  split evenly across however many forecast weeks share that calendar month (see
- *  weeklyCashProjection.js). No separate weekly config for revenue rows — matches
- *  Monthly CF's own behavior, which has no manual per-account override for revenue
- *  either. */
+ *  P&L-Assumptions-fallback source per CF_REVENUE_ROW_FORMULAS. The whole month's $
+ *  lands in the single week containing that month's actual last calendar day, same
+ *  "cash clears once, it doesn't smear across the month" rule cashOutflowForWeek
+ *  applies on the expense side (2026-08-24, Kayee: "that's not accrual accounting...
+ *  put them all in the last week of the month") — every other week in that month gets
+ *  $0. No separate weekly config for revenue rows — matches Monthly CF's own
+ *  behavior, which has no manual per-account override for revenue either. */
 function withWeeklyCFRevenueInflowRows(rows, weeks, lastActualIndex, cfProjection) {
   const { accrualCtx, customerInflow } = cfProjection;
   const forecastWeeks = weeks.slice(lastActualIndex + 1);
@@ -1720,11 +1722,10 @@ function withWeeklyCFRevenueInflowRows(rows, weeks, lastActualIndex, cfProjectio
     const values = { ...row.values };
     for (const weekIso of forecastWeeks) {
       const month = primaryMonthForWeek(weekIso);
-      const n = weeksInSameMonth(forecastWeeks, weekIso);
       const fromCustomer = customerInflow?.[formula.customerField]?.[month];
       const monthlyTotal =
         fromCustomer != null ? fromCustomer : accrualCtx?.revenue ? formula.fallback(accrualCtx.revenue, month) || 0 : 0;
-      values[weekIso] = evenSplitAcrossWeeks(monthlyTotal, n);
+      values[weekIso] = isLastWeekOfMonth(weekIso, month) ? monthlyTotal : 0;
     }
     return { ...row, values };
   });
@@ -1913,7 +1914,12 @@ function withWeeklyCashFlowRollforward(rows, weeks, lastActualIndex, cfProjectio
         : accrualCtx?.revenue
         ? meetingRevenueForMonth(accrualCtx.revenue, month) + upfrontRevenueForMonth(accrualCtx.revenue, month)
         : null;
-    const inflow = evenSplitAcrossWeeks(monthlyInflow, n);
+    // Lands the whole month's inflow in its last-calendar-day week, same rule as
+    // withWeeklyCFRevenueInflowRows/cashOutflowForWeek (2026-08-24) — this rollforward
+    // computes Net Change independently rather than reading the already-rendered
+    // Revenue/COGS/OpEx rows, so it has to apply the exact same placement rule itself
+    // or Beginning/Ending Cash would silently disagree with what's shown above them.
+    const inflow = isLastWeekOfMonth(weekIso, month) ? monthlyInflow : 0;
     let outflow = 0;
     for (const account of [...expenseAccounts.cogsAccounts, ...expenseAccounts.opexAccounts]) {
       outflow += cashOutflowForWeek(account, timingByAccount[account.id], weekIso, n, forecastMonthSet, accrualCtx);
@@ -1998,14 +2004,22 @@ function withSectionTotalRollups(statementType, rows, months, lastActualIndex) {
       statementType === 'CF' && /INVEST|FINANC/i.test(String(row.section ?? '')) ? 0 : lastActualIndex + 1;
     for (let i = fillFrom; i < months.length; i++) {
       const iso = months[i];
-      if (patchedValues[iso] != null) continue;
-      // Always write the sum — even when every sibling is blank/zero, defaulting to
-      // 0 (2026-08-20, Kayee: "if the other total is zero need to show zero. only
-      // the total line needs to show zero the collapsed rows no need") — a genuine
-      // Total row for a section that legitimately has no forecast activity should
-      // read "$0", not disappear into the same blank the individual (collapsed,
-      // hidden) line items show. Guarded above by `siblings.length === 0` — this
-      // never fires for a row that isn't a real section subtotal in the first place.
+      // Deliberately NO "skip if already non-null" guard here (2026-08-24, Kayee,
+      // on Weekly CF: "the total didnt add it up so it looks like there's no
+      // amount... please check for all totals") — this loop only ever runs across
+      // the FORECAST range to begin with (fillFrom is lastActualIndex+1, or 0 only
+      // for the Investing/Financing exception below), so there's no real actual-
+      // month number this could ever clobber. The bug: a forecast cell isn't always
+      // genuinely blank going in — the Weekly CF sheet's own SUMIFS formulas
+      // evaluate to a literal 0 (not an empty cell) for a future week with no GL
+      // data yet, and `0 != null` is true, so the old guard read that sheet-supplied
+      // 0 as "already has a real number" and skipped ever summing the real,
+      // now-correctly-computed line items sitting right above it — Total COGS sat
+      // at the sheet's placeholder 0 forever, even once every account under it had
+      // real projected numbers. Always recomputing here is safe either way: when a
+      // Total was already correctly patched by a dedicated formula (P&L's Total
+      // COGS/OpEx), the sibling sum equals that same number by construction, so
+      // overwriting it changes nothing.
       let sum = 0;
       for (const sib of siblings) sum += Number(sib.values[iso]) || 0;
       patchedValues[iso] = sum;
