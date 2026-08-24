@@ -934,7 +934,13 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    "why don't you use this space here... make the box for travel, team lunch and
    other longer"). The plain <td> always stretches its block-level <div> child to the
    cell's full width with zero special-casing needed. */
-.assump-cost-name-td { width: 100%; }
+/* vertical-align: top added 2026-08-24 (Kayee: "vetric is slightly lower than
+   5250") — same bug class as the Cadence column below: a plain <td> defaults to
+   vertical-align:middle, and this was the one cell in the row still missing the
+   explicit top override, so the Name input drifted down relative to the $ and
+   Cadence inputs beside it whenever the row's height was dictated by something
+   else (e.g. the badge/placeholder line). */
+.assump-cost-name-td { width: 100%; vertical-align: top; }
 .assump-cost-name-cell { display: flex; flex-direction: column; gap: 4px; width: 100%; min-width: 0; }
 .assump-cost-name-cell .pr-input { width: 100%; box-sizing: border-box; }
 .reports-sidebar .assump-cost-table .assump-cost-name-cell .pr-input { font-size: 11.5px; }

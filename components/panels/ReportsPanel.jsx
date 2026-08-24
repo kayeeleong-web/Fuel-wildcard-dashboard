@@ -97,22 +97,42 @@ const PL_REVENUE_PROJECTIONS = {
   total_revenue: (rev, iso) => netCollectedRevenueForMonth(rev, iso),
 };
 
-/** Total COGS = Cost Per Campaign + every Assumptions Cost Item tagged CoGS +
+/** Total COGS = Cost Per Campaign + every LINKED Assumptions Cost Item tagged CoGS +
  *  Payroll headcount (base+bonus) tagged costType=CoGS — this is Kayee's own stated
  *  definition (see lib/assumptions/assumptionsData.js header, 2026-08-05) and the
  *  exact same formula the Assumptions tab's Projection Preview already computes
- *  (components/assumptions/ProjectionSummaryCard.jsx), just reused here. */
+ *  (components/assumptions/ProjectionSummaryCard.jsx), just reused here.
+ *
+ *  linked-only filter added 2026-08-24 (Kayee: "i unlinked it in p&l and in p&l is
+ *  not showing the amount. in cash flow either. the amount is not showing up. how
+ *  could it get added to the total?") — costItemsTotalForMonth sums a whole category
+ *  unconditionally, which was fine back when every CoGS/OpEx item always rendered
+ *  somewhere on the P&L (either matched to a real row, or auto-inserted as its own
+ *  row). The 2026-08-10 fix made an unlinked item render NOWHERE (see
+ *  matchedCostItemsForRowLabel's own header comment: "the amount should be removed
+ *  if i remove the link"), but this Total formula was never updated to match, so an
+ *  unlinked item like Vetric could pad Total COGS while its own row read blank —
+ *  a real number silently including a cost the visible rows didn't. Filtering to
+ *  `linkedRowLabel` here makes the Total match exactly what's rendered, the same
+ *  rule every other row-level function already follows. Deliberately NOT applied to
+ *  the shared costItemsTotalForMonth itself — ProjectionSummaryCard on the
+ *  Assumptions tab intentionally shows ALL planned cost items (linked or not) as
+ *  "what you've told us you're going to spend", which is a different question than
+ *  "what's actually landed on the P&L". */
 function cogsTotalForMonth(revenue, costItems, payrollState, iso) {
+  const linkedCostItems = (costItems || []).filter((i) => i.linkedRowLabel);
   return (
     costPerCampaignForMonth(revenue, iso) +
-    costItemsTotalForMonth(costItems, 'CoGS', iso) +
+    costItemsTotalForMonth(linkedCostItems, 'CoGS', iso) +
     (payrollState ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'CoGS', iso) : 0)
   );
 }
 
-/** Total OpEx = every Assumptions Cost Item tagged OpEx + Payroll headcount tagged
- *  costType=OpEx — same definition/source as ProjectionSummaryCard's OPEX line. */
+/** Total OpEx = every LINKED Assumptions Cost Item tagged OpEx + Payroll headcount
+ *  tagged costType=OpEx — same definition/source as ProjectionSummaryCard's OPEX
+ *  line, same linked-only filter and reasoning as cogsTotalForMonth above. */
 function opexTotalForMonth(costItems, payrollState, iso) {
+  costItems = (costItems || []).filter((i) => i.linkedRowLabel);
   return (
     costItemsTotalForMonth(costItems, 'OpEx', iso) +
     (payrollState ? headcountCostByCostType(payrollState.roster, payrollState.bonuses, payrollState.assumptions, 'OpEx', iso) : 0)
@@ -2243,6 +2263,44 @@ function withEbitdaRollup(rows, months) {
   return next;
 }
 
+/** "Total Non OPEX" never got a forecast rollup of its own (2026-08-24, Kayee: "no
+ *  net income non opx and net income margin... i thought we fixed this") — it LOOKS
+ *  like an ordinary section Total (sitting right under the "NON-OPERATING INCOME &
+ *  EXPENSES" band), so it seems like withSectionTotalRollups above should already
+ *  handle it. It doesn't: that row is actually a cross-section grand total (per
+ *  withNetIncomeRollup's own comment below, it nets together Non-Operating Income &
+ *  Expenses AND Uncategorized Expenses), the same shape as CF's "Total Cash In"/
+ *  "Total Cash Out" a bit further down this file — and withSectionTotalRollups's
+ *  `siblings.length === 0` guard (this row has no line-item siblings sharing its
+ *  OWN exact `.section`) skips it for exactly the same reason it skips those. CF's
+ *  grand totals got a dedicated rollup function; this one never did, so it stayed
+ *  genuinely blank for every forecast month, which cascaded straight into Net Income
+ *  (needs this row's value to compute EBITDA − Total Non OPEX) and Net Income Margin
+ *  % reading blank right along with it. Sums every OTHER Total row belonging to a
+ *  non-operating/uncategorized section (same `/NON[ -]?OP|UNCATEGORIZED/` test
+ *  FragmentRows already uses to classify these sections) — fill-blanks-only, same
+ *  rule as every other rollup here. */
+function withTotalNonOpexRollup(rows, months, lastActualIndex) {
+  const totalIdx = rows.findIndex((r) => /^total\s*non[\s-]?opex$/i.test(String(r.label ?? '').trim()));
+  if (totalIdx === -1) return rows;
+  const totalRow = rows[totalIdx];
+  const siblingTotals = rows.filter(
+    (r, i) => i !== totalIdx && r.isTotal && /NON[ -]?OP|UNCATEGORIZED/.test(String(r.section ?? '').toUpperCase())
+  );
+  if (siblingTotals.length === 0) return rows;
+  const patchedValues = { ...totalRow.values };
+  for (let i = lastActualIndex + 1; i < months.length; i++) {
+    const iso = months[i];
+    if (patchedValues[iso] != null) continue;
+    let sum = 0;
+    for (const sib of siblingTotals) sum += Number(sib.values[iso]) || 0;
+    patchedValues[iso] = sum;
+  }
+  const next = [...rows];
+  next[totalIdx] = { ...totalRow, values: patchedValues };
+  return next;
+}
+
 /** Net Income has the exact same "sheet never populates this row" gap EBITDA had
  *  (2026-08-20, Kayee, right after the EBITDA fix went live: "there's no net
  *  income") — blank for every month, actual and forecast alike, for the same reason:
@@ -2460,6 +2518,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withEbitdaRollup(rows, months);
     } catch (err) {
       console.warn('EBITDA rollup failed:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
+      rows = withTotalNonOpexRollup(rows, months, lastActualIndex);
+    } catch (err) {
+      console.warn('Total Non OPEX rollup failed:', err);
     }
   }
   if (statement.type === 'PL') {
@@ -2837,7 +2902,12 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
           reliably stick in table layout (a well-known cross-browser limitation), which
           was letting the section band's label scroll away with the rest of the row. A
           real single-column first cell sticks the same way a normal data row's does. */}
-      {hasLineItems && !mergeHeaderIntoTotal && (
+      {/* PROFITABILITY's own header band removed entirely (2026-08-24, Kayee: "remove
+          profitability row") — Gross Profit and Gross Profit Margin % already read as
+          self-labeling hero rows right under COGS's Total, so the "▸ PROFITABILITY"
+          band above them was a redundant extra line, not a real collapsible section
+          (it never collapses — see isProfitabilitySection above). */}
+      {hasLineItems && !mergeHeaderIntoTotal && !isProfitabilitySection && (
       <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
         <td>
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
