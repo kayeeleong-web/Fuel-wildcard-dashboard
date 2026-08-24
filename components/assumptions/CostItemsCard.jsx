@@ -289,14 +289,25 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
                           quirk. */}
                       <div className="assump-cost-name-cell">
                         <TextInput value={item.name} onCommit={(v) => updateItem(item.id, { name: v })} placeholder="Cost name" />
-                        {item.linkedRowLabel && (
-                          <span className="assump-cost-link-badge" title={`Forecasts feed the "${item.linkedRowLabel}" P&L row directly`}>
-                            ↳ {item.linkedRowLabel}
-                            <button type="button" onClick={() => unlinkItem(item.id)} title="Unlink from this P&L row">
-                              ×
-                            </button>
-                          </span>
-                        )}
+                        {/* Always rendered now, not conditionally (2026-08-24, Kayee:
+                            "I don't like that these are misaligned... before I match
+                            them it should still be the same row as the blue box") — an
+                            item with no link was a full line SHORTER than one with a
+                            badge, so unlinked rows sat visibly more compact than their
+                            neighbors and the whole list lost its rhythm. `visibility:
+                            hidden` (not conditional rendering) reserves the exact same
+                            height either way while staying fully non-interactive and
+                            invisible when there's nothing to show. */}
+                        <span
+                          className="assump-cost-link-badge"
+                          style={item.linkedRowLabel ? undefined : { visibility: 'hidden' }}
+                          title={item.linkedRowLabel ? `Forecasts feed the "${item.linkedRowLabel}" P&L row directly` : undefined}
+                        >
+                          ↳ {item.linkedRowLabel || ' '}
+                          <button type="button" onClick={() => unlinkItem(item.id)} title="Unlink from this P&L row">
+                            ×
+                          </button>
+                        </span>
                       </div>
                     </td>
                     <td style={{ textAlign: 'right' }} className="assump-cost-amount-td">
