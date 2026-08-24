@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, Fragment } from 'react';
-import { TextInput, DateInput, MonthInput } from '../payroll/PayrollTable';
+import { TextInput, MonthInput } from '../payroll/PayrollTable';
 import {
   COST_CADENCES,
   generateId,
@@ -86,12 +86,15 @@ function CostItemScheduleRow({ item, onChange, onCollapse }) {
       <td colSpan={4}>
         <div className="pr-schedule-inline-form pr-schedule-inline-form-table">
           <CostItemScheduleSummary item={item} onRemoveEntry={removeEntry} />
-          <div className="pr-schedule-row">
-            <label className="pr-schedule-field">
-              <span>Start On (optional)</span>
-              <DateInput value={item.startOn} onCommit={(v) => onChange({ startOn: v })} />
-            </label>
-          </div>
+          {/* "Start On" input REMOVED (2026-08-20, Kayee: "what's the difference
+              between start on and from? aren't they the same? like the start date of
+              this expense? if yes can you remove start on") — it was a one-shot
+              "cost begins on this date," fully expressible with the From/New Value
+              schedule below (From = the month it starts). The underlying `startOn`
+              field still exists in the data model and costItemAppliesInMonth still
+              honors it, so any item saved with a start date before today keeps
+              behaving exactly the same — there's just no second, redundant way to
+              set one going forward. */}
           <div className="pr-schedule-row">
             <label className="pr-schedule-field">
               <span>From</span>
