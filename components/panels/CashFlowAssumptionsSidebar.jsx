@@ -425,10 +425,7 @@ function PaymentSplitEditor({ account, timing, onSetTiming }) {
         + Split into another payment{!multi ? ' (e.g. twice a month)' : ''}
       </button>
       <div className="sidebar-section-note">
-        {multi
-          ? 'Each payment takes its own day of the month and its own share of the total — 1 = the 1st, 0 = the last day of the PRIOR month, 28–31 = month-end.'
-          : 'Day of the payment month this clears — 1 = the 1st, 0 = the last day of the PRIOR month, negative = earlier than that, 28–31 = month-end.'}{' '}
-        Only which week(s) it lands in changes; the month it's paid in still follows the cadence above.
+        Day of month: 1 = the 1st, 0 = last day of the prior month, 28–31 = month-end.
       </div>
     </div>
   );

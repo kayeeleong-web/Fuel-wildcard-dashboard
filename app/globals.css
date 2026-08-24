@@ -1917,7 +1917,7 @@ tr.pr-dragging { opacity: .4; }
   gap: 3px;
   flex: none;
 }
-.sidebar-pct-input { width: 44px !important; text-align: right; }
+.sidebar-pct-input { width: 56px !important; padding-right: 4px !important; text-align: right; }
 .sidebar-pct-suffix { font-size: 11px; color: var(--muted-2); }
 .sidebar-split-warning { color: var(--pink, #ec4862); }
 
