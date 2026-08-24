@@ -737,7 +737,16 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    header bar to its own slim toolbar row at the very top of the sidebar, since it
    hides the WHOLE sidebar, not that one card. flex-shrink:0 for the same reason as
    the cards below it (capped scrolling flex parent must not squeeze it). */
-.reports-sidebar-toolbar { display: flex; justify-content: flex-end; flex: 0 0 auto; margin-bottom: -8px; }
+.reports-sidebar-toolbar { display: flex; justify-content: flex-end; gap: 8px; flex: 0 0 auto; margin-bottom: -8px; }
+/* Save button + confirmation note (2026-08-24) — same visual weight as the existing
+   Hide button so neither reads as more/less important than the other. */
+.reports-sidebar-save-btn {
+  display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 7px;
+  background: #fff; color: var(--text); font-size: 11.5px; font-weight: 700;
+  padding: 6px 10px; cursor: pointer; transition: background .12s ease;
+}
+.reports-sidebar-save-btn:hover { background: var(--panel-2); }
+.reports-sidebar-saved-note { text-align: right; font-size: 10.5px; color: var(--muted); margin-top: 4px; margin-bottom: 4px; }
 .reports-sidebar-toggle-open {
   display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 7px;
   background: #fff; color: var(--text); font-size: 11.5px; font-weight: 700;

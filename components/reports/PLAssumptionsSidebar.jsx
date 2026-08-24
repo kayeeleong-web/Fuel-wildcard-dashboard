@@ -20,7 +20,7 @@ import { ScheduledRateField } from './RateScheduleControl';
  * table can reclaim the full page width when the sidebar isn't needed (Kayee: "like a
  * lot of major websites... if I click a button you can hide it into a hamburger").
  */
-export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange, costItemOrder }) {
+export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, costItems, onRevenueChange, onCostItemsChange, costItemOrder, lastSavedAt, onSaveNow }) {
   // 2026-08-20 (Kayee: "make it collapsable so that it's not just fit into one page...
   // keep it default collapse for each section, that way you can keep each and stay
   // when scroll") — collapsed by default so Revenue Assumptions + the CoGS/OpEx cost
@@ -77,7 +77,25 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
           </svg>
           Hide
         </button>
+        {/* Save button + confirmation (2026-08-24, Kayee: "why did you remove my input
+            in blue cell. dont do that again" / "if a add save button would that solve
+            the issue?") — every edit already auto-saves to this browser's storage the
+            instant it's made (useAssumptionsState's own persist effect); nothing here
+            saves anything MORE than that already happens. This exists purely so
+            there's visible proof it happened, instead of asking Kayee to just trust
+            it — clicking re-flushes to storage and stamps a real "Saved HH:MM:SS"
+            here, not a fake confirmation. */}
+        {onSaveNow && (
+          <button type="button" className="reports-sidebar-save-btn" onClick={onSaveNow} title="Force-save Assumptions to this browser now">
+            Save
+          </button>
+        )}
       </div>
+      {lastSavedAt != null && (
+        <div className="reports-sidebar-saved-note">
+          Saved {new Date(lastSavedAt).toLocaleTimeString()} (this browser)
+        </div>
+      )}
 
       <div className="payroll-card">
         <div className="payroll-card-head">

@@ -269,7 +269,13 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // collapse") — sidebar defaults open so the merge is visible immediately; collapses
   // to a slim rail when not needed, per Kayee's "like a lot of major websites... hide
   // it into a hamburger."
-  const { state: assumptionsState, setState: setAssumptionsState, hydrated: assumptionsHydrated } = useAssumptionsState();
+  const {
+    state: assumptionsState,
+    setState: setAssumptionsState,
+    hydrated: assumptionsHydrated,
+    lastSavedAt: assumptionsLastSavedAt,
+    saveNow: saveAssumptionsNow,
+  } = useAssumptionsState();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Cash Flow timing state (2026-08-18 rebuild) — per-P&L-account cash-timing config
@@ -440,6 +446,8 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
                 onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
                 onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
                 costItemOrder={costItemOrder}
+                lastSavedAt={assumptionsLastSavedAt}
+                onSaveNow={saveAssumptionsNow}
               />
             ) : reportType === 'CF' || reportType === 'WeeklyCF' ? (
               // WeeklyCF (2026-08-24) reuses this EXACT sidebar, unchanged — it reads/
