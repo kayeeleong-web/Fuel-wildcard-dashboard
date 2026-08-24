@@ -124,6 +124,25 @@ function toIsoMonth(raw: string | undefined): string | null {
   return null;
 }
 
+/** Parse a header cell that's a full DATE (not just a month) to ISO "YYYY-MM-DD" —
+ *  2026-08-24, found via the Weekly CF tab rendering completely empty: the Sheets
+ *  values API returns a date-formatted cell as whatever DISPLAY format the sheet uses
+ *  (this client's Weekly CF tab shows "4/1/2024", not ISO), not a raw ISO string. The
+ *  app's week-math (weeklyCashProjection.js) and its "is this weekly data" check in
+ *  ReportsPanel (`month.length === 10`) both require the real ISO shape — without this,
+ *  headers silently failed that check, fell through to the MONTHLY code path, and every
+ *  column/value quietly disappeared instead of erroring loudly. Returns the raw string
+ *  unchanged if it doesn't match a recognized shape, so a genuinely malformed header
+ *  still fails visibly downstream instead of being silently coerced into a wrong date. */
+function toIsoDate(raw: string | undefined): string {
+  const s = (raw ?? "").trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); // already ISO
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})$/); // US "M/D/YYYY"
+  if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+  return s;
+}
+
 function toUnit(v: string | undefined): Unit {
   const u = (v ?? "number").toLowerCase();
   if (u === "currency" || u === "percent" || u === "ratio") return u;
@@ -317,7 +336,9 @@ export class GoogleSheetsDataSource implements DataSource {
   async getWeeklyCashFlow(): Promise<FinancialStatementData> {
     const tab = "Weekly CF";
     const header = await getValues(this.sheetId, `'${tab}'!1:1`);
-    const periodCols = (header[0] ?? []).slice(4); // after Section|Key|Label|IsTotal
+    // Normalized to ISO "YYYY-MM-DD" here — see toIsoDate's comment for why this is
+    // required, not cosmetic (the sheet's own display format is "4/1/2024", not ISO).
+    const periodCols = (header[0] ?? []).slice(4).map((p) => toIsoDate(String(p ?? ""))); // after Section|Key|Label|IsTotal
     if (periodCols.length === 0) return { type: "CF", months: [], rows: [] };
 
     const body = await getValues(this.sheetId, `'${tab}'!A2:${colLetter(3 + periodCols.length)}`);

@@ -38,7 +38,10 @@ const TABS = [
         <path d="M14 2v6h6" />
       </svg>
     ),
-    countKey: 'reportsCount',
+    // countKey removed (2026-08-24, Kayee: "what does the 4 means. remove the 4") —
+    // was showing customReportsList.length + 3 (the 3 fixed statement types + any
+    // Custom reports) as a badge next to "Reports". Not useful info at a glance, so
+    // dropped rather than relabeled.
   },
   // 2026-08-17: Moved Payroll and Assumptions into Projection sub-tabs (Kayee:
   // "you can now remove these two since you've already move to the projection tab")
