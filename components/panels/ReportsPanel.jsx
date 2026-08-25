@@ -2576,6 +2576,54 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
         console.warn('Net Change in Cash backfill failed, showing sheet values:', err);
       }
     }
+    // 2026-08-25 (Kayee: "in report you dont have the margins. like gross profit
+    // margin, net income margin and other margin also you didnt fix it properly") —
+    // same story as the Cash Flow fixes just above: these six steps were only ever
+    // called from the projection pipeline further down, but every one of them is
+    // fill-blanks-only arithmetic off whatever's ALREADY on screen for a given month
+    // (real booked $ in actual mode, formula-projected $ in projection mode) — see
+    // each function's own header comment. None of them touch Assumptions/Payroll
+    // state, so none of them needed the forecast pipeline to run at all; Reports was
+    // just never given the chance to call them. Order matters: EBITDA and Total Non
+    // OPEX must land before Net Income (which subtracts them), and all three margins
+    // must run last, after their target rows have their real/derived values.
+    if (statement.type === 'PL') {
+      try {
+        rows = withReorderedRevenueRows(rows);
+      } catch (err) {
+        console.warn('Revenue row reorder failed, showing sheet order:', err);
+      }
+      try {
+        rows = withEbitdaRollup(rows, months);
+      } catch (err) {
+        console.warn('EBITDA rollup failed:', err);
+      }
+      try {
+        rows = withTotalNonOpexRollup(rows, months, lastActualIndex);
+      } catch (err) {
+        console.warn('Total Non OPEX rollup failed:', err);
+      }
+      try {
+        rows = withNetIncomeRollup(rows, months);
+      } catch (err) {
+        console.warn('Net Income rollup failed:', err);
+      }
+      try {
+        rows = withGrossProfitMarginRow(rows, months);
+      } catch (err) {
+        console.warn('Gross Profit Margin % row injection failed:', err);
+      }
+      try {
+        rows = withMarginRowBelow(rows, months, ['EBITDA'], 'ebitda_margin_pct', 'EBITDA Margin %');
+      } catch (err) {
+        console.warn('EBITDA Margin % row injection failed:', err);
+      }
+      try {
+        rows = withMarginRowBelow(rows, months, ['Net Income'], 'net_income_margin_pct', 'Net Income Margin %');
+      } catch (err) {
+        console.warn('Net Income Margin % row injection failed:', err);
+      }
+    }
     return (
       <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
         <table>
@@ -3271,9 +3319,15 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
               isEndingCashRow
                 ? 'total cf-summary-ending'
                 : row.isTotal
-                ? !isProjection
-                  ? 'total'
-                  : isHeroTotalRow(row.label, statementType)
+                ? // 2026-08-25 (Kayee, pointing at Reports' Total rows sitting plain
+                  // black next to Projection's soft-green-collapsed/grey-expanded
+                  // treatment: "why don't you go into the projection and look at all
+                  // the design and make sure you apply in report pl cf and bs") — this
+                  // whole soft/hero Total split used to be Projection-only (the
+                  // isProjection check that lived right here); dropped it so Reports
+                  // renders every Total row exactly the same way Projection does,
+                  // hero rows included.
+                  isHeroTotalRow(row.label, statementType)
                   ? 'total'
                   : // Total OPEX / Total Non OPEX are cross-section grand totals (they
                     // sum OTHER sections' own Total rows, not a single section's line

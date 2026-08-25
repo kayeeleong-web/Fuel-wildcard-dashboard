@@ -636,8 +636,16 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    WITH the frozen column, so the edge line holds its place no matter how far the
    month grid is scrolled, same mechanism as .pr-frozen-last on the Payroll tables,
    same --grid-line color as every other structural divider. */
+/* 2026-08-25 (Kayee, comparing this divider on Reports vs Projection: "it has
+   different thickness from top to bottom... make it slightly thinner") — the line
+   itself was always a flat 2px inset shadow, but var(--grid-line) is a solid opaque
+   grey, so it read as bold/heavy against a black Total row's background and nearly
+   invisible against a white/light line-item row right below it — the same 2px line
+   LOOKING like it changes thickness as Total and non-Total rows alternate down the
+   column. Narrowed to 1px and given a semi-transparent version of the same grey so
+   its visual weight stays close to constant against either background. */
 .report-doc table th:first-child,
-.report-doc table td:first-child { box-shadow: inset -2px 0 0 var(--grid-line), 2px 0 4px rgba(17,17,17,.04); }
+.report-doc table td:first-child { box-shadow: inset -1px 0 0 rgba(131, 138, 150, .55), 2px 0 4px rgba(17,17,17,.04); }
 /* The header's first cell is sticky on BOTH axes at once (top from the rule above, left
    from here) — it's the "frozen corner" and needs the highest z-index so it stays above
    both a plain sticky-top header cell and a plain sticky-left body cell as they scroll under it. */
