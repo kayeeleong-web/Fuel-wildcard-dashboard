@@ -203,6 +203,17 @@ const PROJECTION_HORIZON = '2030-12';
 // nobody's shown looking at yet. Revisit this constant if that changes.
 const WEEKLY_HORIZON = '2028-12-31';
 
+// Manual pin on the actual/forecast boundary (2026-08-25, Kayee: "how do you currently
+// cut off the actual and projection? can you set it to end of June 2026 for now?").
+// Normally this whole dashboard is fully data-driven — "actual" is just whatever the
+// last real column in each Google Sheet tab happens to be, no hardcoded date anywhere.
+// This constant is a TEMPORARY override on top of that: when set, the boundary never
+// sits LATER than this month, even if a sheet's real data already reaches further
+// (it can still sit earlier, if a particular statement's real data doesn't reach this
+// far yet — see the cutoff logic in StatementDoc below). Set to null to go back to
+// fully data-driven behavior.
+const ACTUAL_CUTOFF_OVERRIDE = '2026-06';
+
 /** Appends blank placeholder months after the last real month, through `throughIso` —
  *  pure column padding, never fabricated data. */
 function extendMonthsThrough(months, throughIso) {
@@ -2455,10 +2466,23 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   // before that cutoff month; the raw sheet's own column count is only a fallback
   // for when that prop isn't available yet.
   const lastActualIndex = (() => {
-    if (!isWeekly || !monthlyActualCutoff) return statement.months.length - 1;
+    // Real data's own last month: the monthly sibling's cutoff for Weekly CF (see
+    // comment above), or this statement's own last real column otherwise.
+    const realLastMonth = isWeekly ? monthlyActualCutoff : statement.months[statement.months.length - 1];
+    // ACTUAL_CUTOFF_OVERRIDE (2026-08-25, Kayee: "set it to end of June 2026 for
+    // now") only ever pulls the boundary EARLIER than the real data, never later —
+    // so a statement whose real data doesn't reach the override month yet still cuts
+    // off at its own real last month, same as before this override existed.
+    const cutoff =
+      ACTUAL_CUTOFF_OVERRIDE && (!realLastMonth || ACTUAL_CUTOFF_OVERRIDE < realLastMonth)
+        ? ACTUAL_CUTOFF_OVERRIDE
+        : realLastMonth;
+    if (!isWeekly && !ACTUAL_CUTOFF_OVERRIDE) return statement.months.length - 1;
+    if (!cutoff) return statement.months.length - 1;
     let idx = -1;
     for (let i = 0; i < statement.months.length; i++) {
-      if (primaryMonthForWeek(statement.months[i]) <= monthlyActualCutoff) idx = i;
+      const owner = isWeekly ? primaryMonthForWeek(statement.months[i]) : statement.months[i];
+      if (owner <= cutoff) idx = i;
       else break;
     }
     return idx;
@@ -2966,18 +2990,17 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // alone tell the story. P&L and CF on this same actuals tab are untouched (still
   // only Non-Operating/Other-Income starts collapsed there), matching how they've
   // always looked — this is a BS-only exception to that tab's original default.
+  // 2026-08-25 (Kayee, pointing at Reports > P&L showing every section fully expanded
+  // next to Projection > P&L's collapsed-by-default view: "you didn't auto collapse
+  // some sections") — the actual-mode-only default below (only BS forced closed, only
+  // Non-Operating/Other-Income collapsed on P&L/CF) predates this table-style-parity
+  // request; it's now dropped in favor of the exact same rule Projection already uses,
+  // for every statement type and both modes: everything starts collapsed except the CF
+  // cash-summary box and P&L's Profitability/EBITDA hero rows, which stay open since
+  // they're single derived metrics meant to be visible at a glance, not detail worth
+  // hiding behind a click.
   const [collapsed, setCollapsed] = useState(
-    // Cash summary block stays open regardless of mode (2026-08-25 — Reports > Cash
-    // Flow now groups Beginning/Net Change/Ending into this same section too, see the
-    // actual-mode withReorderedCashFlowRows call above; collapsing it away to just
-    // "= Ending Cash" would hide the formula same as it would on Projection).
-    isCashSummarySection
-      ? false
-      : isProjection
-      ? !(isProfitabilitySection || isEbitdaSection)
-      : statementType === 'BS'
-      ? true
-      : /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section)
+    isCashSummarySection ? false : !(isProfitabilitySection || isEbitdaSection)
   );
 
   // Category boundary for drag-and-drop linking (2026-08-10, Kayee: "divide non
