@@ -1401,6 +1401,43 @@ function withReorderedCashFlowRows(rows) {
   return [...orderedTopRows, ...rest];
 }
 
+/** Net Change in Cash = Ending − Beginning, for whichever months don't already have a
+ *  real sheet-provided value. Pure arithmetic off the sheet's own real Beginning/Ending
+ *  Cash balances — no assumptions, no forecast pipeline, so it's safe to run in BOTH
+ *  actual and projection mode. Only fills a genuinely blank cell, never overwrites a
+ *  real sheet-provided Net Change.
+ *
+ *  Split out 2026-08-25 (Kayee, pointing at Reports > Cash Flow's Net Change in Cash
+ *  row sitting completely blank next to real Beginning/Ending Cash figures: "why i
+ *  dont have net change in cash amount... did the calculation do it correctly") — this
+ *  backfill previously only ran inside withCashFlowProjectionRows, which bails out
+ *  immediately (`if (forecastMonths.length === 0) return rows`) whenever there's no
+ *  forecast range — exactly the case in actual mode, where months is never extended
+ *  past the sheet's real data. That early-out meant Reports never got this fill at
+ *  all, even though the underlying formula needs nothing forecast-related to compute. */
+function withActualNetChangeInCash(rows, months) {
+  const beginningIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.beginning.test(r.label));
+  const netChangeIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.netChange.test(r.label));
+  const endingIdx = rows.findIndex((r) => CASH_ROW_PATTERNS.ending.test(r.label));
+  if (beginningIdx === -1 || netChangeIdx === -1 || endingIdx === -1) return rows;
+
+  const netChangeValues = { ...rows[netChangeIdx].values };
+  let changed = false;
+  for (const iso of months) {
+    if (netChangeValues[iso] != null) continue;
+    const beginning = rows[beginningIdx].values?.[iso];
+    const ending = rows[endingIdx].values?.[iso];
+    if (beginning != null && ending != null) {
+      netChangeValues[iso] = Number(ending) - Number(beginning);
+      changed = true;
+    }
+  }
+  if (!changed) return rows;
+  const next = [...rows];
+  next[netChangeIdx] = { ...rows[netChangeIdx], values: netChangeValues };
+  return next;
+}
+
 /** CF expense rows follow the P&L by default (2026-08-19, Kayee: "I want the
  *  projection to fill in the numbers from p&l projection. by default. but only cash
  *  out... all of the cogs and opex. by default follow the same pattern. and only if i
@@ -2529,6 +2566,15 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       } catch (err) {
         console.warn('Cash Flow row reorder failed, showing sheet order:', err);
       }
+      // 2026-08-25 (Kayee: "why i dont have net change in cash amount... did the
+      // calculation do it correctly") — same pure arithmetic backfill Projection's
+      // Cash Flow already gets, see withActualNetChangeInCash's header comment for
+      // why this was missing here specifically.
+      try {
+        rows = withActualNetChangeInCash(rows, months);
+      } catch (err) {
+        console.warn('Net Change in Cash backfill failed, showing sheet values:', err);
+      }
     }
     return (
       <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
@@ -3389,7 +3435,18 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
                 const rounded = row.values[m] != null ? Math.round(row.values[m]) : 0;
                 cellText = rounded ? `$${rounded.toLocaleString('en-US')}` : '';
               }
-              const isForecast = i > lastActualIndex;
+              // isProjection-gated (2026-08-25, Kayee, pointing at Reports > P&L
+              // showing blue FCST tint on later columns: "in report everything is
+              // actual so there shouldn't be any blues") — this cell renderer is
+              // shared by both actual and projection mode, and lastActualIndex alone
+              // isn't a safe signal for "is this cell a forecast" on the actuals-only
+              // Reports tab: ACTUAL_CUTOFF_OVERRIDE (see StatementDoc) can now sit
+              // earlier than a statement's real last column even in actual mode
+              // (e.g. a sheet that already has blank $0 columns provisioned through
+              // December while the cutoff is pinned to June), and Reports has no
+              // forecast concept at all regardless — every visible column there is
+              // real sheet data, never a projected number.
+              const isForecast = isProjection && i > lastActualIndex;
               // Beginning/Ending Cash balances color by sign (2026-08-20, Kayee: "if
               // cash balance is negative is red and if it's positive is green") — a
               // real cash shortfall or surplus jumping out at a glance, same red/green

@@ -1031,18 +1031,21 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    column, max-height cap, shrinkable card children), identical latent clipping bug. */
 .payroll-sidebar .payroll-card { flex: 0 0 auto; }
 
-/* P&L line items, tightened the same notch as the sidebar's tables while this merged
-   view is open (2026-08-07) — scoped to .reports-with-sidebar so the plain CF/BS
-   StatementDoc (no sidebar) keeps its normal, slightly roomier row height. */
-.reports-with-sidebar .reports-main thead th { padding: 9px 12px; font-size: 9.5px; }
-.reports-with-sidebar .reports-main .report-year-row th { padding: 0 12px; height: 22px; }
-.reports-with-sidebar .reports-main tbody td { padding: 7px 12px; font-size: 11.5px; }
+/* P&L line items, tightened the same notch as the sidebar's tables (2026-08-07).
+   Originally scoped to .reports-with-sidebar only, so the plain actuals-only Reports
+   tab (no sidebar) kept a roomier row height — dropped that scoping 2026-08-25 (Kayee:
+   "the height of each rows is much bigger in report compare to... projection. i want
+   it to be narrower in report the same as projection") so EVERY .report-doc table uses
+   this same compact row height, Reports included, matching Projection exactly. */
+.report-doc thead th { padding: 9px 12px; font-size: 9.5px; }
+.report-doc .report-year-row th { padding: 0 12px; height: 22px; }
+.report-doc tbody td { padding: 7px 12px; font-size: 11.5px; }
 
 /* A "driver" row embedded directly in the P&L (the # of Campaigns / # of Meetings
    inputs under Subscription/Transaction Revenue, 2026-08-06) — indented + muted +
    italic so it reads as a supporting input for the row above it, not another GL line. */
 tr.report-driver-row td:first-child { padding-left: 34px; font-style: italic; color: var(--muted); font-size: 11.5px; }
-.reports-with-sidebar .reports-main tr.report-driver-row td:first-child { font-size: 10.5px; }
+.report-doc tr.report-driver-row td:first-child { font-size: 10.5px; }
 
 /* Actual-month driver cells (2026-08-07, updated same day) — first shipped as plain
    read-only text showing the Assumptions seed data's count; corrected to a plain "—"
