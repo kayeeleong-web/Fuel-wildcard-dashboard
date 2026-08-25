@@ -2491,8 +2491,21 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   let rows = statement.rows;
   const yearLabels = yearLabelIndices(months);
   if (mode !== 'projection') {
-    // Actual mode — skip all projection logic, return just the real rows.
-    // No forecast columns to render, no sidebar, no Assumptions-driven values.
+    // Actual mode — skip all projection logic (no Assumptions/Payroll-driven values,
+    // no forecast columns, no sidebar). But withReorderedCashFlowRows is a PURE
+    // display reorder — Beginning/Net Change/Ending Cash straight off the real sheet
+    // rows, no forecast pipeline involved — so it's safe (and was missing) here too.
+    // Without it, Reports > Cash Flow skipped the "SUMMARY" callout box Projection's
+    // Cash Flow always shows up top, which is exactly the layout mismatch Kayee
+    // flagged (2026-08-25: "I want the table style to be the same between report and
+    // projection... please adjust reporting to match projection").
+    if (statement.type === 'CF') {
+      try {
+        rows = withReorderedCashFlowRows(rows);
+      } catch (err) {
+        console.warn('Cash Flow row reorder failed, showing sheet order:', err);
+      }
+    }
     return (
       <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
         <table>
@@ -2954,8 +2967,14 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // only Non-Operating/Other-Income starts collapsed there), matching how they've
   // always looked — this is a BS-only exception to that tab's original default.
   const [collapsed, setCollapsed] = useState(
-    isProjection
-      ? !(isCashSummarySection || isProfitabilitySection || isEbitdaSection)
+    // Cash summary block stays open regardless of mode (2026-08-25 — Reports > Cash
+    // Flow now groups Beginning/Net Change/Ending into this same section too, see the
+    // actual-mode withReorderedCashFlowRows call above; collapsing it away to just
+    // "= Ending Cash" would hide the formula same as it would on Projection).
+    isCashSummarySection
+      ? false
+      : isProjection
+      ? !(isProfitabilitySection || isEbitdaSection)
       : statementType === 'BS'
       ? true
       : /NON[ -]?OPERATING|OTHER OPERATING|OTHER INCOME/i.test(section)
@@ -3150,15 +3169,20 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
         // bordered-card look; it keeps its bold weight and red/green balance color,
         // it just no longer needs its own background to read as "the answer" — the
         // box and the bottom border do that job now.
-        // All of this — the boxed card, the soft/hero Total split — is Projection-tab
-        // only (2026-08-20, Kayee: "this is only for cash flow projection by the
-        // way"). The plain actuals-only Reports tab never reorders Beginning/Net
-        // Change/Ending into one shared section in the first place, so these three
-        // would only ever coincidentally label-match there; gating by isProjection
-        // keeps that tab's classic all-black Total styling exactly as it's always been.
-        const isBeginningCashRow = isProjection && CASH_ROW_PATTERNS.beginning.test(row.label);
-        const isNetChangeRow = isProjection && CASH_ROW_PATTERNS.netChange.test(row.label);
-        const isEndingCashRow = isProjection && CASH_ROW_PATTERNS.ending.test(row.label);
+        // Originally gated to Projection-tab only (2026-08-20, Kayee: "this is only
+        // for cash flow projection by the way") — at that time the actuals-only
+        // Reports tab never reordered Beginning/Net Change/Ending into one shared
+        // section, so these three would only ever coincidentally label-match there.
+        // 2026-08-25 (Kayee: "I want the table style to be the same between report
+        // and projection... adjust reporting to match projection") — Reports > Cash
+        // Flow now runs the exact same withReorderedCashFlowRows grouping (see the
+        // actual-mode branch above), so this box styling should render there too;
+        // dropped the isProjection gate in favor of just checking section === the
+        // reordered rows' shared section, which is the real signal for "these three
+        // rows were actually grouped into the summary block" regardless of mode.
+        const isBeginningCashRow = CASH_ROW_PATTERNS.beginning.test(row.label);
+        const isNetChangeRow = CASH_ROW_PATTERNS.netChange.test(row.label);
+        const isEndingCashRow = CASH_ROW_PATTERNS.ending.test(row.label);
         return (
           <tr
             // Composite key, not just row.key (2026-08-20, Kayee, pointing at garbled/
