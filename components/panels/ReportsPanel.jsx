@@ -1677,15 +1677,36 @@ function withCFExpenseCashOutflowRows(rows, months, lastActualIndex, cfProjectio
  *  Actual months are never touched — real GL cash history stays exactly as the sheet
  *  reported it. */
 function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection) {
-  const { expenseAccounts, timingByAccount, accrualCtx, customerInflow } = cfProjection;
   const forecastMonths = months.slice(lastActualIndex + 1);
   if (forecastMonths.length === 0) return rows;
   const forecastSet = new Set(forecastMonths);
 
+  // Net Change in Cash for a forecast month is read directly off the SAME "Total Cash
+  // In" / "Total Cash Out" rows the grid already shows for that month — both are
+  // computed by withCashFlowGrandTotals earlier in the pipeline (Total Cash Out
+  // already folds in Investing + Financing, per Kayee's own "total cash out is the
+  // total of all operating, investing and financing" rule), so this can never drift
+  // from what's on screen (2026-08-25, Kayee: "the net change in cash doesn't always
+  // equal total cash in - total cash out" — a real bug: this function used to
+  // recompute its own separate outflow total from plExpenseAccounts, which always
+  // added an extra synthetic "Headcount (Payroll)" account not reconciled against
+  // what the visible Total Cash Out row actually sums, so the two numbers could
+  // silently disagree by whatever that extra account contributed). Falls back to the
+  // old direct inflow/outflow calc only for a month/sheet where Total Cash In or
+  // Total Cash Out genuinely isn't available.
+  const cashInRow = rows.find((r) => r.isTotal && CF_GRAND_TOTAL_LABELS.cashIn.test(String(r.label ?? '').trim()));
+  const cashOutRow = rows.find((r) => r.isTotal && CF_GRAND_TOTAL_LABELS.cashOut.test(String(r.label ?? '').trim()));
+
   const netValues = {};
   for (const iso of forecastMonths) {
-    // Same source/fallback as withCFRevenueInflowRows above — Customer tab's live
-    // saved total first, P&L Assumptions calc only for a month Customer hasn't saved.
+    const totalIn = cashInRow?.values[iso];
+    const totalOut = cashOutRow?.values[iso];
+    if (totalIn != null && totalOut != null) {
+      netValues[iso] = Number(totalIn) - Number(totalOut);
+      continue;
+    }
+    // Fallback path — same source/fallback as withCFRevenueInflowRows above.
+    const { expenseAccounts, timingByAccount, accrualCtx, customerInflow } = cfProjection;
     const fromCustomer = customerInflow?.totalsByMonth?.[iso];
     const inflow =
       fromCustomer != null
@@ -1970,22 +1991,31 @@ function withWeeklyCFExpenseCashOutflowRows(rows, weeks, lastActualIndex, cfProj
  *  always agrees with what's actually shown in the Transaction/Subscription Revenue
  *  and COGS/OpEx rows for that same week. */
 function withWeeklyCashFlowRollforward(rows, weeks, lastActualIndex, cfProjection) {
-  const { expenseAccounts, timingByAccount, accrualCtx, customerInflow } = cfProjection;
   const forecastWeeks = weeks.slice(lastActualIndex + 1);
   if (forecastWeeks.length === 0) return rows;
   const forecastMonthSet = new Set(forecastWeeks.map((w) => primaryMonthForWeek(w)));
 
+  // Same fix as withCashFlowProjectionRows (monthly) above, 2026-08-25: Net Change
+  // per week is read straight off the already-rendered "Total Cash In" / "Total Cash
+  // Out" rows for that week (computed earlier in the pipeline by
+  // withCashFlowGrandTotals, Investing/Financing already folded into Total Cash Out)
+  // instead of a second independent inflow/outflow calc that could silently disagree
+  // with what's on screen. Falls back to the direct calc only if those rows aren't
+  // found for a given week.
+  const cashInRow = rows.find((r) => r.isTotal && CF_GRAND_TOTAL_LABELS.cashIn.test(String(r.label ?? '').trim()));
+  const cashOutRow = rows.find((r) => r.isTotal && CF_GRAND_TOTAL_LABELS.cashOut.test(String(r.label ?? '').trim()));
+
   const netValues = {};
   for (const weekIso of forecastWeeks) {
-    // Lands the whole month's inflow in its last-calendar-day week, same rule as
-    // withWeeklyCFRevenueInflowRows/cashOutflowForWeek (2026-08-24) — this rollforward
-    // computes Net Change independently rather than reading the already-rendered
-    // Revenue/COGS/OpEx rows, so it has to apply the exact same placement rule itself
-    // or Beginning/Ending Cash would silently disagree with what's shown above them.
-    // 2026-08-24 bug fix: previously looked up `month = primaryMonthForWeek(weekIso)`
-    // and asked "is this THAT month's last week" — wrong for boundary weeks (see
-    // placementMonthForWeek's comment), which silently dropped Beginning/Ending Cash's
-    // Net Change for entire months. Uses placementMonthForWeek directly instead.
+    const totalIn = cashInRow?.values[weekIso];
+    const totalOut = cashOutRow?.values[weekIso];
+    if (totalIn != null && totalOut != null) {
+      netValues[weekIso] = Number(totalIn) - Number(totalOut);
+      continue;
+    }
+    // Fallback path — lands the whole month's inflow in its last-calendar-day week,
+    // same rule as withWeeklyCFRevenueInflowRows/cashOutflowForWeek (2026-08-24).
+    const { expenseAccounts, timingByAccount, accrualCtx, customerInflow } = cfProjection;
     const month = placementMonthForWeek(weekIso, null);
     let inflow = 0;
     if (month != null) {
@@ -2620,7 +2650,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
         console.warn('Revenue row reorder failed, showing sheet order:', err);
       }
       try {
-        rows = withEbitdaRollup(rows, months);
+        rows = withEbitdaRollup(rows, months, lastActualIndex);
       } catch (err) {
         console.warn('EBITDA rollup failed:', err);
       }
@@ -2790,7 +2820,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   }
   if (statement.type === 'PL') {
     try {
-      rows = withEbitdaRollup(rows, months);
+      rows = withEbitdaRollup(rows, months, lastActualIndex);
     } catch (err) {
       console.warn('EBITDA rollup failed:', err);
     }
