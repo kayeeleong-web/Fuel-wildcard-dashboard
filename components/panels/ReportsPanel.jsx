@@ -3150,7 +3150,13 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
   // the same line as the black font") — same merge, just widening which sections
   // qualify on the P&L side (was OpEx-only there; CF already gets every section
   // regardless of category, per the comment above).
-  const mergeHeaderIntoTotal = isProjection && (sectionCategory === 'OpEx' || sectionCategory === 'Other' || statementType === 'CF') && hasLineItems && collapsed;
+  // isProjection gate dropped 2026-08-25 (Kayee, comparing Reports vs Projection
+  // side by side: "the total why do you have two lines for each lines. you need to
+  // refer to projection style and get report to look like that") — Reports was
+  // rendering every collapsed OpEx section as TWO rows (an empty green section band
+  // + a separate Total row below it) where Projection merges them into one, because
+  // this merge was Projection-only. Same rule both modes now.
+  const mergeHeaderIntoTotal = (sectionCategory === 'OpEx' || sectionCategory === 'Other' || statementType === 'CF') && hasLineItems && collapsed;
 
   return (
     <>
@@ -3172,7 +3178,9 @@ function FragmentRows({ section, statementType, isProjection = true, rows, month
       <tr className="section report-section-toggle" onClick={() => setCollapsed((c) => !c)}>
         <td>
           <span className={`report-section-chevron${collapsed ? '' : ' open'}`}>▸</span>
-          {isProjection ? sectionDisplayLabel(section, statementType) : section}
+          {/* Same display label both modes (2026-08-25, part of the Reports/Projection
+              style-parity pass) — was Projection-only. */}
+          {sectionDisplayLabel(section, statementType)}
         </td>
         {/* Per-month empty cells instead of one colSpan cell (2026-08-20, Kayee,
             circling the year divider vanishing across the REVENUE and COGS bands:
