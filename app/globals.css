@@ -1048,6 +1048,14 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .report-doc thead th { padding: 9px 12px; font-size: 9.5px; }
 .report-doc .report-year-row th { padding: 0 12px; height: 22px; }
 .report-doc tbody td { padding: 7px 12px; font-size: 11.5px; }
+/* Sticky-offset must match the compact year row's ACTUAL height (2026-08-25, Kayee,
+   red box around a body row bleeding through the header while scrolling: "the
+   information show through the header... just block it with black") — the generic
+   rule further down pins the month header row at top:26px to sit under a 26px year
+   band, but the compact rule above shrinks that band to 22px, leaving a 4px
+   transparent slot between the two sticky rows that scrolling body rows showed
+   through. Same height, same offset — no slot. */
+.report-doc .report-year-row + tr th { top: 22px; }
 
 /* A "driver" row embedded directly in the P&L (the # of Campaigns / # of Meetings
    inputs under Subscription/Transaction Revenue, 2026-08-06) — indented + muted +
