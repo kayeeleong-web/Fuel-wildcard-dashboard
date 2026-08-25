@@ -2625,6 +2625,14 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       }
     }
     return (
+      // .report-clip (2026-08-25, Kayee: "where is the curve at the edge top right and
+      // bottom right") — the scrolling .table-wrap's own vertical scrollbar isn't
+      // clipped by its border-radius (browsers paint scrollbars square over rounded
+      // corners), so the card's right edge read as squared off next to the last month
+      // column. This outer wrapper owns the border/radius/shadow and clips everything
+      // inside it (scrollbar included) to the rounded shape; the inner .table-wrap
+      // keeps the scrolling behavior but drops its own chrome (see globals.css).
+      <div className="report-clip">
       <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
         <table>
           <thead>
@@ -2667,6 +2675,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     );
   }
@@ -2954,6 +2963,9 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
     // "report-doc" (not just "table-wrap") is what the range-toggle CSS below actually
     // targets (`#reports[data-range] .report-doc:not([data-doc="custom"])`) — without it
     // the 2026-2028/Historical buttons change `data-range` but nothing was ever selected by it.
+    // .report-clip — same rounded-corner scrollbar clip as the actual-mode branch
+    // above (2026-08-25); see that branch's comment.
+    <div className="report-clip">
     <div id="reports" data-range={range} className="table-wrap report-doc" data-doc={statement.type}>
       <table>
         <thead>
@@ -3028,6 +3040,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
           ))}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }

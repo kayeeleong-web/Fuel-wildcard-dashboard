@@ -432,17 +432,35 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
    authoritative and independent of how many columns happen to be visible; the table
    itself just gets narrower with fewer columns instead of stretching them. */
 .report-doc table { table-layout: fixed; width: auto; }
-/* The wrap hugs the table instead of always spanning the full page (2026-08-25,
+/* The card hugs the table instead of always spanning the full page (2026-08-25,
    Kayee, red circle around the dead white area right of Dec-2026: "I don't like this
    white, it's so awkward... make the curve edge go closer to December 2026") — with
    the fixed-width columns above, a filtered view's table is narrower than the page,
-   which left the wrap's rounded corner floating far to the right of the last real
-   column with a plain white void between them. fit-content shrinks the wrap (and its
+   which left the card's rounded corner floating far to the right of the last real
+   column with a plain white void between them. fit-content shrinks the card (and its
    rounded corner) to the table's own edge; max-width keeps the exact same behavior
    as before whenever the table is WIDER than the page (e.g. the All/Historical
    toggle's 30+ columns) — it caps at full width and scrolls horizontally, so
-   switching to Historical "bounces back" to full width automatically, no JS. */
-.table-wrap.report-doc { width: fit-content; max-width: 100%; }
+   switching to Historical "bounces back" to full width automatically, no JS.
+
+   Split into an OUTER .report-clip + inner scrolling .table-wrap (2026-08-25
+   follow-up, Kayee: "where is the curve at the edge top right and bottom right") —
+   browsers paint an element's own scrollbars square, ignoring its border-radius, so
+   the inner scroller's vertical scrollbar was covering the card's rounded corners.
+   The outer wrapper owns the border/radius/shadow and overflow:hidden-clips
+   everything (scrollbar included) to the rounded shape; the inner keeps scrolling
+   but drops its own chrome. scrollbar-gutter:stable makes the inner's reserved
+   scrollbar width part of its intrinsic width, so the outer's fit-content sizing
+   already includes it and no phantom horizontal scrollbar appears. */
+.report-clip {
+  width: fit-content; max-width: 100%;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden; box-shadow: 0 1px 2px rgba(17,17,17,.03);
+}
+.report-clip > .table-wrap.report-doc {
+  width: 100%; border: none; border-radius: 0; box-shadow: none;
+  scrollbar-gutter: stable;
+}
 .report-doc th:first-child, .report-doc td:first-child { width: 240px; }
 .report-doc th:not(:first-child), .report-doc td:not(:first-child) { width: 92px; }
 thead th { position: sticky; top: 0; z-index: 3; text-align: right; font-size: 10.5px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: .5px; padding: 13px 18px; white-space: nowrap; background: var(--black); border-bottom: 2px solid var(--green); }
