@@ -2143,7 +2143,20 @@ const CF_GRAND_TOTAL_LABELS = {
   netBurn: /net burn.*cash generated|cash generated.*net burn|net (burn|cash generated)/i,
 };
 
-function withCashFlowGrandTotals(rows, months) {
+function withCashFlowGrandTotals(rows, months, lastActualIndex) {
+  // Forecast months ALWAYS recompute; only an ACTUAL month's non-null value is
+  // preserved (2026-08-25, Kayee, pointing at Total Cash In / Total Cash Out from
+  // Operations / Total Cash Out all $0 across Jul–Dec 26 while every line item above
+  // them had real numbers: "THIS IS NOT CORRECT") — exact same bug
+  // withSectionTotalRollups already fixed on 2026-08-24: the client's sheet has
+  // columns provisioned through Dec-26 whose SUMIFS evaluate to a literal 0 (not an
+  // empty cell) for months with no GL data yet, and now that ACTUAL_CUTOFF_OVERRIDE
+  // pins the boundary to June, those placeholder-0 columns fall in the FORECAST
+  // range — the old blanket `!= null` skip read each placeholder 0 as "real data,
+  // don't touch" and left the grand totals at $0 forever. Jan-27+ (columns the sheet
+  // genuinely doesn't have → null) always filled fine, which is why the bug was
+  // scoped to exactly Jul–Dec 26.
+  const skipMonth = (values, m, i) => i <= (lastActualIndex ?? months.length - 1) && values[m] != null;
   const findRow = (pattern) => rows.find((r) => r.isTotal && pattern.test(String(r.label ?? '').trim()));
   const cashIn = findRow(CF_GRAND_TOTAL_LABELS.cashIn);
   const cashInFromOps = findRow(CF_GRAND_TOTAL_LABELS.cashInFromOps);
@@ -2174,8 +2187,9 @@ function withCashFlowGrandTotals(rows, months) {
 
   if (cashInFromOps || otherCashIn) {
     const values = { ...(cashIn ? cashIn.values : {}) };
-    for (const m of months) {
-      if (values[m] != null) continue;
+    for (let i = 0; i < months.length; i++) {
+      const m = months[i];
+      if (skipMonth(values, m, i)) continue;
       const a = cashInFromOps?.values[m];
       const b = otherCashIn?.values[m];
       if (a != null || b != null) values[m] = (Number(a) || 0) + (Number(b) || 0);
@@ -2185,8 +2199,9 @@ function withCashFlowGrandTotals(rows, months) {
 
   const cashOutFromOpsValues = cashOutFromOps ? { ...cashOutFromOps.values } : null;
   if (cashOutFromOpsValues) {
-    for (const m of months) {
-      if (cashOutFromOpsValues[m] != null) continue;
+    for (let i = 0; i < months.length; i++) {
+      const m = months[i];
+      if (skipMonth(cashOutFromOpsValues, m, i)) continue;
       if (opExpenseTotals.length === 0) continue;
       let sum = 0;
       for (const r of opExpenseTotals) sum += Number(r.values[m]) || 0;
@@ -2204,8 +2219,9 @@ function withCashFlowGrandTotals(rows, months) {
   );
   if (cashOut && (cashOutFromOpsValues || otherCashOut || invFinTotals.length > 0)) {
     const values = { ...cashOut.values };
-    for (const m of months) {
-      if (values[m] != null) continue;
+    for (let i = 0; i < months.length; i++) {
+      const m = months[i];
+      if (skipMonth(values, m, i)) continue;
       const a = cashOutFromOpsValues ? cashOutFromOpsValues[m] : cashOutFromOps?.values[m];
       const b = otherCashOut?.values[m];
       const hasInvFin = invFinTotals.some((r) => r.values[m] != null);
@@ -2223,8 +2239,9 @@ function withCashFlowGrandTotals(rows, months) {
     const finalCashOut = patched.get(cashOut?.key)?.values ?? cashOut?.values;
     if (finalCashIn && finalCashOut) {
       const values = { ...netBurn.values };
-      for (const m of months) {
-        if (values[m] != null) continue;
+      for (let i = 0; i < months.length; i++) {
+        const m = months[i];
+        if (skipMonth(values, m, i)) continue;
         const a = finalCashIn[m];
         const b = finalCashOut[m];
         if (a != null || b != null) values[m] = (Number(a) || 0) - (Number(b) || 0);
@@ -2375,7 +2392,7 @@ function withMarginRowBelow(rows, months, targetLabels, key, label) {
  *  forecast logic of its own. Only fills blanks — never overwrites a real value if
  *  this client's sheet ever does start providing one. Safe no-op if either input row
  *  isn't found. */
-function withEbitdaRollup(rows, months) {
+function withEbitdaRollup(rows, months, lastActualIndex) {
   const ebitdaIdx = rows.findIndex((r) => String(r.label ?? '').trim().toLowerCase() === 'ebitda');
   if (ebitdaIdx === -1) return rows;
   const gpRow = rows.find((r) => GROSS_PROFIT_ROW_LABELS.includes(r.label));
@@ -2383,8 +2400,15 @@ function withEbitdaRollup(rows, months) {
   if (!gpRow || !opexRow) return rows;
   const ebitdaRow = rows[ebitdaIdx];
   const patchedValues = { ...ebitdaRow.values };
-  for (const iso of months) {
-    if (patchedValues[iso] != null) continue;
+  // Fill-blanks-only for ACTUAL months, always-recompute for FORECAST months
+  // (2026-08-25) — same sheet-placeholder-zero bug as withCashFlowGrandTotals /
+  // withSectionTotalRollups: the sheet's provisioned-but-empty future columns
+  // evaluate to a literal 0, and with ACTUAL_CUTOFF_OVERRIDE pinning the boundary
+  // earlier than those columns, the old blanket `!= null` skip froze EBITDA at $0
+  // across exactly Jul–Dec 26 while Jan-27+ (genuinely null) computed fine.
+  for (let i = 0; i < months.length; i++) {
+    const iso = months[i];
+    if (i <= (lastActualIndex ?? months.length - 1) && patchedValues[iso] != null) continue;
     const gpVal = gpRow.values[iso];
     const opexVal = opexRow.values[iso];
     if (gpVal != null && opexVal != null) {
@@ -2424,7 +2448,9 @@ function withTotalNonOpexRollup(rows, months, lastActualIndex) {
   const patchedValues = { ...totalRow.values };
   for (let i = lastActualIndex + 1; i < months.length; i++) {
     const iso = months[i];
-    if (patchedValues[iso] != null) continue;
+    // No `!= null` skip (2026-08-25) — this loop only ever covers FORECAST months,
+    // and a sheet-placeholder 0 in a provisioned future column must not block the
+    // recompute (same fix as withSectionTotalRollups / withCashFlowGrandTotals).
     let sum = 0;
     for (const sib of siblingTotals) sum += Number(sib.values[iso]) || 0;
     patchedValues[iso] = sum;
@@ -2836,7 +2862,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       console.warn('Weekly Cash Flow section Total rollup failed:', err);
     }
     try {
-      rows = withCashFlowGrandTotals(rows, months);
+      rows = withCashFlowGrandTotals(rows, months, lastActualIndex);
     } catch (err) {
       console.warn('Weekly Cash Flow grand-total (Total Cash In/Out, Net Burn) rollup failed:', err);
     }
@@ -2871,7 +2897,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       console.warn('Cash Flow section Total rollup failed:', err);
     }
     try {
-      rows = withCashFlowGrandTotals(rows, months);
+      rows = withCashFlowGrandTotals(rows, months, lastActualIndex);
     } catch (err) {
       console.warn('Cash Flow grand-total (Total Cash In/Out, Net Burn) rollup failed:', err);
     }

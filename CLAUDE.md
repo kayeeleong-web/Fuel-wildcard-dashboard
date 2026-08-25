@@ -85,13 +85,20 @@ that day comes; it requires a dedicated domain per app and is not set up by defa
 - Scope is explicitly storage only, NOT auth — do not wire Supabase Auth, a login page,
   or an email allow-list into this repo; that would duplicate/conflict with the working
   Clerk gate above.
-- Supabase project/env vars aren't wired into this repo yet as of 2026-08-19 — once the
-  project exists and its keys are added to this Vercel project's env vars (via the
-  official Supabase-Vercel integration), the plan is a small abstraction (parallel to
-  `lib/data/index.ts`'s `getDataSource()`) that each existing localStorage hook
-  (`useCustomerDrivers`, `usePlannedCustomers`, `usePayrollState`, `useAssumptionsState`,
-  etc.) reads/writes through instead of `window.localStorage` directly — not a rewrite of
-  those hooks' shape, just swapping their storage backend.
+- WIRED as of 2026-08-25: the abstraction lives in `lib/planning/planningStorage.js`
+  (+ the shared `usePlanningState` hook in the same folder), and all five planning
+  hooks (`useAssumptionsState`, `usePayrollState`, `useCashTimingState`,
+  `usePlannedCustomers`, `useCustomerDrivers`) read/write through it — hook shapes
+  unchanged. The browser talks only to this app's own Clerk-gated `/api/planning`
+  route, which upserts into the Supabase project's `planning_state` KV table using the
+  service-role key (RLS is enabled with no policies, so the public key can't touch it).
+  localStorage remains the fast cache and the complete fallback: with the env vars
+  missing (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — server-only, never
+  NEXT_PUBLIC), the route returns 503 and everything behaves exactly as the old
+  localStorage-only world, including local dev. On first load with Supabase live, any
+  existing local data migrates UP automatically (remote wins thereafter; last write
+  wins on save). The derived `CUSTOMER_INFLOW_STORAGE_KEY` handoff deliberately stays
+  localStorage-only — it's a recomputed cache, not source data.
 
 ## Deployment & domain
 

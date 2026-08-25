@@ -6,6 +6,7 @@ import { MonthInput, PayrollTable, TextInput } from '../payroll/PayrollTable';
 import { AssumptionField } from '../payroll/AssumptionsBar';
 import { CollapsibleSection } from '../payroll/CollapsibleSection';
 import { CUSTOMER_INFLOW_STORAGE_KEY } from '../../lib/cashflow/cashProjection';
+import { usePlanningState } from '../../lib/planning/usePlanningState';
 import {
   currentIsoMonth,
   formatMonthLabel,
@@ -86,50 +87,16 @@ const DRIVER_FROZEN_COLUMNS = [
 const SUMMARY_FROZEN_COLUMNS = [{ key: 'name', label: '', width: 230 }];
 
 
-/** Planned-customer rows, persisted to THIS browser's localStorage — same
- *  hydrate-then-save pattern as usePayrollState (and the same reason: this is a
- *  what-if planning tool, not GL data, so it never writes to the sheet). */
+/** Planned-customer rows — persisted through the shared planning storage layer
+ *  (2026-08-25: Supabase durable copy + localStorage cache/fallback, see
+ *  lib/planning/planningStorage.js; previously localStorage-only). Same public
+ *  shape as always: { rows, setRows, hydrated, lastSavedAt, saveNow }. */
 export function usePlannedCustomers() {
-  const [rows, setRows] = useState(null); // null until the localStorage read resolves
-  const [hydrated, setHydrated] = useState(false);
-  // Visible save confirmation (2026-08-24) — same lastSavedAt/saveNow pattern as
-  // useAssumptionsState, so the Customer sub-tab gets the same "Save" button.
-  const [lastSavedAt, setLastSavedAt] = useState(null);
-
-  useEffect(() => {
-    let loaded = null;
-    try {
-      const raw = window.localStorage.getItem(PLAN_STORAGE_KEY);
-      if (raw) loaded = JSON.parse(raw);
-    } catch {
-      loaded = null;
-    }
-    setRows(Array.isArray(loaded) ? loaded : []);
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated || !rows) return;
-    try {
-      window.localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(rows));
-      setLastSavedAt(Date.now());
-    } catch {
-      // localStorage can throw in private-browsing/storage-full edge cases — the tab
-      // still works for the session, it just won't survive a refresh in that case.
-    }
-  }, [rows, hydrated]);
-
-  function saveNow() {
-    if (!hydrated || !rows) return;
-    try {
-      window.localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(rows));
-      setLastSavedAt(Date.now());
-    } catch {
-      // Surfaced by the toolbar's "Saved" timestamp simply not updating.
-    }
-  }
-
-  return { rows, setRows, hydrated, lastSavedAt, saveNow };
+  const { state, setState, hydrated, lastSavedAt, saveNow } = usePlanningState(PLAN_STORAGE_KEY, {
+    seed: () => [],
+    isValid: (loaded) => Array.isArray(loaded),
+  });
+  return { rows: state, setRows: setState, hydrated, lastSavedAt, saveNow };
 }
 
 function seedDrivers() {
@@ -171,47 +138,15 @@ function isValidDrivers(loaded) {
   );
 }
 
-/** Campaign/meeting driver grids + prices, one versioned localStorage key,
- *  hydrate-then-save — same pattern as usePlannedCustomers above. */
+/** Campaign/meeting driver grids + prices, one versioned key — persisted through the
+ *  shared planning storage layer (2026-08-25: Supabase durable copy + localStorage
+ *  cache/fallback, see lib/planning/planningStorage.js; previously localStorage-only,
+ *  which is exactly how a full data-entry session got lost to a URL switch). */
 export function useCustomerDrivers() {
-  const [state, setState] = useState(null);
-  const [hydrated, setHydrated] = useState(false);
-  // Visible save confirmation (2026-08-24) — see usePlannedCustomers above.
-  const [lastSavedAt, setLastSavedAt] = useState(null);
-
-  useEffect(() => {
-    let loaded = null;
-    try {
-      const raw = window.localStorage.getItem(DRIVERS_STORAGE_KEY);
-      if (raw) loaded = JSON.parse(raw);
-    } catch {
-      loaded = null;
-    }
-    setState(isValidDrivers(loaded) ? loaded : seedDrivers());
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated || !state) return;
-    try {
-      window.localStorage.setItem(DRIVERS_STORAGE_KEY, JSON.stringify(state));
-      setLastSavedAt(Date.now());
-    } catch {
-      // Same private-browsing/storage-full caveat as every other hook here.
-    }
-  }, [state, hydrated]);
-
-  function saveNow() {
-    if (!hydrated || !state) return;
-    try {
-      window.localStorage.setItem(DRIVERS_STORAGE_KEY, JSON.stringify(state));
-      setLastSavedAt(Date.now());
-    } catch {
-      // Surfaced by the toolbar's "Saved" timestamp simply not updating.
-    }
-  }
-
-  return { state, setState, hydrated, lastSavedAt, saveNow };
+  return usePlanningState(DRIVERS_STORAGE_KEY, {
+    seed: seedDrivers,
+    isValid: isValidDrivers,
+  });
 }
 
 /** The Dashboard tab's established misconfigured-data pattern (h3 + .cap) — a GL tab
