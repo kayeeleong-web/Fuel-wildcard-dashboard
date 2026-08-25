@@ -432,6 +432,17 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
    authoritative and independent of how many columns happen to be visible; the table
    itself just gets narrower with fewer columns instead of stretching them. */
 .report-doc table { table-layout: fixed; width: auto; }
+/* The wrap hugs the table instead of always spanning the full page (2026-08-25,
+   Kayee, red circle around the dead white area right of Dec-2026: "I don't like this
+   white, it's so awkward... make the curve edge go closer to December 2026") — with
+   the fixed-width columns above, a filtered view's table is narrower than the page,
+   which left the wrap's rounded corner floating far to the right of the last real
+   column with a plain white void between them. fit-content shrinks the wrap (and its
+   rounded corner) to the table's own edge; max-width keeps the exact same behavior
+   as before whenever the table is WIDER than the page (e.g. the All/Historical
+   toggle's 30+ columns) — it caps at full width and scrolls horizontally, so
+   switching to Historical "bounces back" to full width automatically, no JS. */
+.table-wrap.report-doc { width: fit-content; max-width: 100%; }
 .report-doc th:first-child, .report-doc td:first-child { width: 240px; }
 .report-doc th:not(:first-child), .report-doc td:not(:first-child) { width: 92px; }
 thead th { position: sticky; top: 0; z-index: 3; text-align: right; font-size: 10.5px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: .5px; padding: 13px 18px; white-space: nowrap; background: var(--black); border-bottom: 2px solid var(--green); }
