@@ -2504,7 +2504,7 @@ function withTotalNonOpexRollup(rows, months, lastActualIndex) {
  *  Uncategorized Expenses, which is exactly where May/June's real Net Income
  *  diverged from a naive EBITDA-minus-non-operating guess. Same fill-blanks-only
  *  rule as every other derived row here. */
-function withNetIncomeRollup(rows, months) {
+function withNetIncomeRollup(rows, months, lastActualIndex) {
   const netIncomeIdx = rows.findIndex((r) => String(r.label ?? '').trim().toLowerCase() === 'net income');
   if (netIncomeIdx === -1) return rows;
   const ebitdaRow = rows.find((r) => String(r.label ?? '').trim().toLowerCase() === 'ebitda');
@@ -2512,8 +2512,18 @@ function withNetIncomeRollup(rows, months) {
   if (!ebitdaRow || !totalNonOpexRow) return rows;
   const netIncomeRow = rows[netIncomeIdx];
   const patchedValues = { ...netIncomeRow.values };
-  for (const iso of months) {
-    if (patchedValues[iso] != null) continue;
+  // Same placeholder-zero bug as withEbitdaRollup/withCashFlowGrandTotals
+  // (2026-08-25): this row's guard used to be a blanket `!= null` skip with no
+  // actual/forecast boundary at all, so the sheet's SUMIFS-evaluates-to-literal-0
+  // placeholder for a not-yet-real forecast month (Jul-Dec 26, once
+  // ACTUAL_CUTOFF_OVERRIDE pinned the boundary to June) was misread as "real Net
+  // Income, don't touch" and never recomputed from EBITDA - Total Non OPEX — exactly
+  // what showed as a flat $0 Net Income row for those months. Only protects a cell
+  // that's genuinely inside the actual range now; every forecast month always
+  // recomputes.
+  for (let i = 0; i < months.length; i++) {
+    const iso = months[i];
+    if (i <= (lastActualIndex ?? months.length - 1) && patchedValues[iso] != null) continue;
     const ebitdaVal = ebitdaRow.values[iso];
     const nonOpexVal = totalNonOpexRow.values[iso];
     if (ebitdaVal != null && nonOpexVal != null) {
@@ -2660,7 +2670,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
         console.warn('Total Non OPEX rollup failed:', err);
       }
       try {
-        rows = withNetIncomeRollup(rows, months);
+        rows = withNetIncomeRollup(rows, months, lastActualIndex);
       } catch (err) {
         console.warn('Net Income rollup failed:', err);
       }
@@ -2834,7 +2844,7 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
   }
   if (statement.type === 'PL') {
     try {
-      rows = withNetIncomeRollup(rows, months);
+      rows = withNetIncomeRollup(rows, months, lastActualIndex);
     } catch (err) {
       console.warn('Net Income rollup failed:', err);
     }
