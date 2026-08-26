@@ -2490,6 +2490,23 @@ function withTotalNonOpexRollup(rows, months, lastActualIndex) {
   return next;
 }
 
+/** Hides the "Total Non OPEX" row itself once Net Income has already read its value
+ *  (2026-08-25, Kayee, pointing at it sitting directly under "Non-Operating Income &
+ *  Expenses" showing the identical $250: "remove total non opex is it redundant when
+ *  i have the 250 at the non opex") — for this client the Non-Operating/Uncategorized
+ *  group currently has exactly one line, so the "Total" of that group is always the
+ *  same number as the one line above it, making the row visually redundant. This does
+ *  NOT touch the calculation Net Income depends on: withTotalNonOpexRollup still runs
+ *  and withNetIncomeRollup still reads its value first — this only removes the row
+ *  from what actually renders, same "compute it, then filter the row out" pattern CF's
+ *  removed "Net Burn" row already uses a few hundred lines down. If a second
+ *  Non-Operating/Uncategorized line item is ever added later, Total Non OPEX would
+ *  stop being redundant again — nothing here prevents bringing this row back by
+ *  deleting this one filter. */
+function withoutTotalNonOpexRow(rows) {
+  return rows.filter((r) => !(r.isTotal && /^total\s*non[\s-]?opex$/i.test(String(r.label ?? '').trim())));
+}
+
 /** Net Income has the exact same "sheet never populates this row" gap EBITDA had
  *  (2026-08-20, Kayee, right after the EBITDA fix went live: "there's no net
  *  income") — blank for every month, actual and forecast alike, for the same reason:
@@ -2675,6 +2692,11 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
         console.warn('Net Income rollup failed:', err);
       }
       try {
+        rows = withoutTotalNonOpexRow(rows);
+      } catch (err) {
+        console.warn('Total Non OPEX row hide failed:', err);
+      }
+      try {
         rows = withGrossProfitMarginRow(rows, months);
       } catch (err) {
         console.warn('Gross Profit Margin % row injection failed:', err);
@@ -2847,6 +2869,13 @@ function StatementDoc({ statement, range, assumptionsState, setAssumptionsState,
       rows = withNetIncomeRollup(rows, months, lastActualIndex);
     } catch (err) {
       console.warn('Net Income rollup failed:', err);
+    }
+  }
+  if (statement.type === 'PL') {
+    try {
+      rows = withoutTotalNonOpexRow(rows);
+    } catch (err) {
+      console.warn('Total Non OPEX row hide failed:', err);
     }
   }
   if (statement.type === 'PL') {
