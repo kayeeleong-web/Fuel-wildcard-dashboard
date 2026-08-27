@@ -1740,6 +1740,22 @@ tr.pr-dragging { opacity: .4; }
   border: none; background: none; color: inherit; cursor: pointer; padding: 0; line-height: 1; font-size: 12px;
 }
 
+/* Software tab — Planning table (2026-08-27). Reuses the assump-cost-table/
+   assump-cost-draggable-row/assump-cost-name-cell/assump-cost-link-badge chrome above
+   (same drag-to-P&L-row mechanic as Non-Headcount Costs) — only the driver-specific
+   "Details" cell and the inactive-row dimming are new. */
+.software-vendor-table th, .software-vendor-table td { padding: 8px 10px; vertical-align: middle; }
+.software-vendor-table th:nth-child(2), .software-vendor-table td:nth-child(2) { width: 90px; text-align: center; }
+.software-vendor-table th:nth-child(3), .software-vendor-table td:nth-child(3) { width: 64px; text-align: center; }
+.software-vendor-table th:nth-child(4), .software-vendor-table td:nth-child(4) { width: 180px; }
+.software-vendor-table th:nth-child(6), .software-vendor-table td:nth-child(6) { width: 40px; text-align: center; }
+.software-details-td { min-width: 260px; }
+.software-details-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.software-details-row .pr-input, .software-details-row .pr-select { width: auto; min-width: 64px; flex: 0 1 auto; }
+.software-details-label { font-size: 11px; color: var(--muted-2); white-space: nowrap; }
+.software-inactive-row { opacity: .45; }
+.software-inactive-row:hover { opacity: .7; }
+
 /* The matching drop target on the P&L side (FragmentRows in ReportsPanel.jsx) — every
    real GL row's label cell accepts a drop; highlighted only while a drag is actually
    hovering over that specific row, so the whole table doesn't light up at once. */

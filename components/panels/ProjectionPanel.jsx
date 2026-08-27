@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel, usePlannedCustomers, useCustomerDrivers } from './CustomerPanel';
+import { SoftwarePanel } from './SoftwarePanel';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
 import { useCashTimingState } from '../../lib/cashflow/useCashTimingState';
@@ -13,6 +14,7 @@ const SUB_TABS = [
   { id: 'cf', label: 'Cash Flow' },
   { id: 'payroll', label: 'Payroll' },
   { id: 'customer', label: 'Customer' },
+  { id: 'software', label: 'Software' },
 ];
 const SUB_TAB_IDS = SUB_TABS.map((t) => t.id);
 
@@ -85,6 +87,9 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
         customerDrivers.saveNow();
       },
     },
+    // Software vendors live inside assumptions.costItems (see lib/software/softwareData.js),
+    // so Software shares the exact same save handle as P&L.
+    software: { lastSavedAt: assumptions.lastSavedAt, saveNow: assumptions.saveNow },
   }[projectionSubTab];
 
   function changeSubTab(tab) {
@@ -210,6 +215,15 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
           glAccrued={glAccrued}
           plannedCtl={plannedCustomers}
           driversCtl={customerDrivers}
+        />
+      )}
+
+      {projectionSubTab === 'software' && (
+        <SoftwarePanel
+          glCash={glCash}
+          glAccrued={glAccrued}
+          assumptionsCtl={assumptions}
+          payrollCtl={payroll}
         />
       )}
     </>

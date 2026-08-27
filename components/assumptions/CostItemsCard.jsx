@@ -169,7 +169,11 @@ export function CostItemsCard({ costItems, onChange, itemOrder, category, title,
   // clipping the OpEx card's rows).
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
-  const items = costItems.filter((i) => i.category === category);
+  // Software vendors (isSoftware, 2026-08-27) are managed from the dedicated Software
+  // tab now, not here — they still live in this same costItems array (so they keep
+  // getting the exact same P&L linking/CF timing engine for free), just filtered out
+  // of this card's own list so a vendor doesn't show up in two places at once.
+  const items = costItems.filter((i) => i.category === category && !i.isSoftware);
 
   function updateItem(id, patch) {
     onChange(costItems.map((i) => (i.id === id ? { ...i, ...patch } : i)));
