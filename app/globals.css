@@ -68,7 +68,12 @@ body {
 body {
   min-height: 100vh;
   position: relative;
-  overflow-x: hidden;
+  /* `clip`, not `hidden` (2026-08-27, matching Sasha's new-template fix) — `hidden` makes body
+     itself a scroll container once anything overflows it, and a `position: sticky` descendant
+     (the topbar, the sidenav below) sticks to whatever box actually scrolls — once body became
+     that box, sticky quietly stopped engaging. `clip` contains the same overflow without turning
+     body into a scroll container, so sticky positioning keeps working. */
+  overflow-x: clip;
 }
 
 /* Fixed ambient background glows — decorative, but part of the base page canvas
@@ -126,7 +131,11 @@ a {
   cursor: pointer; border: none;
 }
 
-/* ==================== Segmented pill tab nav (black, floating) ==================== */
+/* ==================== Segmented pill tab nav (black, floating) — SUPERSEDED 2026-08-27 ====================
+   Replaced by the left sidebar rail below (`.sidenav`), matching the new-template style Sasha
+   showed at the 2026-08-27 product workshop. Left in place, unused, rather than deleted — nothing
+   in the app renders a `.tabnav-wrap`/`.tabnav` element anymore (TabNav.jsx now renders `.sidenav`),
+   so these rules are inert. */
 .tabnav-wrap {
   position: sticky; top: 65px; z-index: 15; display: flex; justify-content: flex-start; padding: 18px 32px 0;
   background: linear-gradient(180deg, var(--bg) 60%, rgba(250,250,250,0));
@@ -149,21 +158,66 @@ a {
 .tabnav button .count { font-size: 10px; font-weight: 700; color: #fff; background: var(--black); border-radius: 20px; padding: 1px 6px; font-family: var(--font-num); }
 .tabnav button.active .count { background: var(--green); color: #06210F; }
 
+/* ==================== Left sidebar nav (2026-08-27) ====================
+   Ported from Sasha's new dashboard template (fuel-data-platform-template), shown at the
+   2026-08-27 product workshop — KPI Report / Dashboard / Reports / Projection stacked down the
+   left side instead of a floating pill strip across the top. Same CSS as the template
+   (`.shell`/`.sidenav`/`.sidenav-label`), reusing Wildcard's own existing color tokens rather than
+   the template's slightly different :root set. Scope of this change is visual/navigational ONLY —
+   auth (Clerk), the Google Sheets data layer, and every Wildcard-specific tab (Payroll, Customer,
+   Software, Projection) are untouched; the template's Supabase-Auth/Members system and its
+   Supabase-metrics data layer were NOT ported (see CLAUDE.md — Clerk is still the standard here). */
+.shell { display: flex; align-items: flex-start; }
+.sidenav {
+  position: sticky; top: 65px; flex: 0 0 206px; align-self: flex-start;
+  display: flex; flex-direction: column; gap: 2px; padding: 26px 8px 26px 24px;
+}
+.sidenav button {
+  appearance: none; border: none; background: none; color: var(--muted);
+  font-family: inherit; font-size: 13px; font-weight: 600; letter-spacing: .1px; text-align: left;
+  padding: 10px 12px; border-radius: 10px; cursor: pointer; width: 100%;
+  display: flex; align-items: center; gap: 10px; transition: color .15s ease, background .2s ease;
+}
+.sidenav button svg { width: 15px; height: 15px; opacity: .65; flex: none; }
+.sidenav-label { flex: 1 1 auto; }
+.sidenav button:hover { color: var(--text); background: var(--panel-2); }
+.sidenav button.active { color: #fff; background: var(--black); box-shadow: 0 6px 16px rgba(10,10,10,.20); }
+.sidenav button.active svg { opacity: 1; }
+.sidenav button .count { font-size: 10px; font-weight: 700; color: #fff; background: var(--black); border-radius: 20px; padding: 1px 6px; font-family: var(--font-num); }
+.sidenav button.active .count { background: var(--green); color: #06210F; }
+
+@media (max-width: 900px) {
+  .shell { display: block; }
+  .sidenav {
+    position: static; flex-direction: row; overflow-x: auto; gap: 6px;
+    padding: 14px 20px 0; scrollbar-width: none;
+  }
+  .sidenav::-webkit-scrollbar { display: none; }
+  .sidenav button { width: auto; flex: none; }
+}
+
 /* ==================== Page shell ==================== */
-/* Top padding keeps the page title clear of the sticky tab nav above it (design-rules.md §2) —
-   without it, h1 sits flush against the black pill nav on every tab. */
+/* Top padding keeps the page title clear of the sticky sidebar nav beside it (design-rules.md §2) —
+   without it, h1 sits flush against the top of the page. */
 /* Kayee, 2026-08-19: with the Customer tab's sections collapsed by default, there's
    little content on the page, and without this the black footer band sat right below
    the collapsed cards — visually "rising up" toward the middle of the screen instead
    of staying anchored to the bottom. .app-shell is a full-viewport-height flex column
-   (Topbar/TabNav/.page/.Footer stacked) with .page as the only flexible child, so on a
-   short page .page's flex:1 stretches to fill the remaining space and the footer stays
-   pinned to the bottom of the viewport; on a tall page .page just grows past 100vh and
-   the footer scrolls down with it as before — no change to that existing behavior. */
+   (Topbar/.shell/.Footer stacked) with .shell as the only flexible child, so on a
+   short page .shell's flex:1 stretches to fill the remaining space and the footer stays
+   pinned to the bottom of the viewport; on a tall page .shell just grows past 100vh and
+   the footer scrolls down with it as before — no change to that existing behavior.
+   Moved from `.app-shell .page` to `.app-shell .shell` 2026-08-27 when the sidenav and the page
+   became side-by-side flex siblings inside `.shell` instead of `.page` being the direct child. */
 .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
-.app-shell .page { flex: 1 1 auto; }
+.app-shell .shell { flex: 1 1 auto; }
 
-.page { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 28px 32px 40px; width: 100%; }
+/* No more max-width/margin:auto centering (was: max-width: 1320px; margin: 0 auto) — .page is now
+   a flex child of `.shell` sitting beside the sidenav, so it fills whatever width remains rather
+   than centering itself independently. min-width: 0 is load-bearing, not tidying: without it a
+   flex child refuses to shrink below the intrinsic width of its widest table, and the whole page
+   scrolls sideways instead of the table doing so inside its own .table-wrap. */
+.page { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; margin: 0; padding: 28px 32px 40px; }
 .panel-view { display: none; animation: fade .35s ease; }
 .panel-view.active { display: block; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -743,7 +797,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    from anywhere in the table, not just the very top. The card list inside can still
    exceed viewport height on its own (long cost-item lists), so it gets its own
    max-height + scroll rather than pushing the sticky box taller than the viewport. */
-.reports-sidebar { flex: 0 0 calc(34% - 113px); max-width: calc(34% - 113px); min-width: 300px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 140px; align-self: flex-start; max-height: calc(100vh - 156px); overflow-y: auto; }
+.reports-sidebar { flex: 0 0 calc(34% - 113px); max-width: calc(34% - 113px); min-width: 300px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 80px; align-self: flex-start; max-height: calc(100vh - 96px); overflow-y: auto; }
 /* Cash Flow Assumptions only (2026-08-19, Kayee: "make the cash flow assumption
    narrowing it's a little too wide") — narrower than the shared .reports-sidebar width
    the P&L Assumptions sidebar still uses, since CF's controls now need far less room
@@ -754,7 +808,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .reports-sidebar-rail { display: flex; align-self: stretch; }
 /* Collapsed rail follows the same sticky rule as the expanded sidebar above — same
    fix, same reason (2026-08-20). */
-.reports-sidebar-toggle-rail { position: sticky; top: 140px; }
+.reports-sidebar-toggle-rail { position: sticky; top: 80px; }
 
 /* Collapsed rail toggle (2026-08-07, Kayee: "make hamburger more obvious because user
    might miss it") — full height of the row (align-self:stretch above) so it reads as
@@ -858,11 +912,11 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    holds the 4 short rate fields (no wide cost-item table like Reports has), so the
    same wide column just left a big gap between each label and its small input box. */
 /* Sticky, same fix/reason as .reports-sidebar above (2026-08-20). */
-.payroll-sidebar { flex: 0 0 260px; max-width: 260px; min-width: 220px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 140px; align-self: flex-start; max-height: calc(100vh - 156px); overflow-y: auto; }
+.payroll-sidebar { flex: 0 0 260px; max-width: 260px; min-width: 220px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 80px; align-self: flex-start; max-height: calc(100vh - 96px); overflow-y: auto; }
 .payroll-main { flex: 1 1 0%; min-width: 0; display: flex; flex-direction: column; }
 .payroll-with-sidebar.is-collapsed .payroll-sidebar-rail { flex: 0 0 auto; }
 .payroll-sidebar-rail { display: flex; align-self: stretch; }
-.payroll-sidebar-toggle-rail { position: sticky; top: 140px; }
+.payroll-sidebar-toggle-rail { position: sticky; top: 80px; }
 
 .payroll-sidebar-toggle-rail {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px;
@@ -1239,13 +1293,17 @@ tbody tr.total td.pr-fcst { background: var(--black); border-top-color: var(--bl
    room for the scrollable month grid on anything but an ultra-wide monitor. Padding
    trimmed 32 -> 24px too, so less of the extra width is immediately given back as
    side gutter. */
+/* 2026-08-27: the true-viewport-edge breakout (`100vw` + `calc(50% - 50vw)` margins) only works
+   when `.page` sits centered in the viewport on its own — that stopped being true the moment the
+   sidenav became a fixed-width flex sibling to its left (see `.shell` above). The old formula
+   measured from the VIEWPORT's own center, which is now to the right of where `.page` actually
+   starts, so it pulled this element left underneath the sidebar instead of to the true edge.
+   Simplified to fill whatever width `.page`'s own flex-basis already gives it, capped at the same
+   2200px as before so it still doesn't stretch unbounded on a huge monitor — just left-aligned
+   under the sidebar rather than re-centered in the leftover space past it. */
 .page-wide {
-  width: 100vw; max-width: 2200px;
-  margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw);
+  width: 100%; max-width: 2200px;
   padding-left: 24px; padding-right: 24px; box-sizing: border-box;
-}
-@media (min-width: 2248px) {
-  .page-wide { margin-left: calc(50% - 1100px); margin-right: calc(50% - 1100px); }
 }
 
 .payroll-assumptions {
@@ -1740,21 +1798,61 @@ tr.pr-dragging { opacity: .4; }
   border: none; background: none; color: inherit; cursor: pointer; padding: 0; line-height: 1; font-size: 12px;
 }
 
-/* Software tab — Planning table (2026-08-27). Reuses the assump-cost-table/
-   assump-cost-draggable-row/assump-cost-name-cell/assump-cost-link-badge chrome above
-   (same drag-to-P&L-row mechanic as Non-Headcount Costs) — only the driver-specific
-   "Details" cell and the inactive-row dimming are new. */
-.software-vendor-table th, .software-vendor-table td { padding: 8px 10px; vertical-align: middle; }
-.software-vendor-table th:nth-child(2), .software-vendor-table td:nth-child(2) { width: 90px; text-align: center; }
-.software-vendor-table th:nth-child(3), .software-vendor-table td:nth-child(3) { width: 64px; text-align: center; }
-.software-vendor-table th:nth-child(4), .software-vendor-table td:nth-child(4) { width: 180px; }
-.software-vendor-table th:nth-child(6), .software-vendor-table td:nth-child(6) { width: 40px; text-align: center; }
-.software-details-td { min-width: 260px; }
-.software-details-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.software-details-row .pr-input, .software-details-row .pr-select { width: auto; min-width: 64px; flex: 0 1 auto; }
-.software-details-label { font-size: 11px; color: var(--muted-2); white-space: nowrap; }
+/* Software tab — Planning table (2026-08-27, rewritten same day once Kayee saw the
+   skeleton live: "I want it more like it has a month over month on the right... it
+   needs to have period like ok monthly but 1000 from which month to ongoing or an end
+   date... I want the user to be very very comfortable doing this planning"). Vendor
+   rows now render through the shared PayrollTable (frozen Vendor/Cat./On/Driver/Terms/
+   actions columns + an always-visible, always-scrollable month grid — no more hidden
+   behind a "Details" table cell), reusing assump-cost-draggable-row/
+   assump-cost-name-cell/assump-cost-link-badge for the same drag-to-P&L-row mechanic as
+   Non-Headcount Costs. Editing a row's price/period/rate opens PayrollTable's new
+   `pr-row-expanded` full-width panel (below) instead. */
 .software-inactive-row { opacity: .45; }
 .software-inactive-row:hover { opacity: .7; }
+
+.software-terms-cell {
+  font-size: 11.5px; color: var(--muted); font-family: var(--font-num);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.software-row-actions { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.software-row-actions .btn-xs.active { background: var(--black); border-color: var(--black); color: #fff; }
+
+/* PayrollTable's generic expand-row panel (component-side change 2026-08-27) — a full-
+   width band directly under the row it belongs to, visually distinct from the data rows
+   above/below it so it reads as "this popped open," not as another table row. */
+tr.pr-row-expanded td {
+  padding: 0; border-top: none;
+  background: var(--panel-2);
+  box-shadow: inset 0 1px 0 var(--border), inset 0 -1px 0 var(--border);
+}
+.pr-row-expanded-panel { padding: 16px 18px; }
+
+/* Fixed driver's period-list editor, inside the expand panel. */
+.software-period-list { display: flex; flex-direction: column; gap: 10px; }
+.software-period-row {
+  background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+}
+.software-period-fields { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.software-period-field { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; color: var(--muted-2); font-weight: 600; }
+.software-period-field .pr-input { min-width: 108px; }
+.software-period-field .pr-input-month { text-align: right; }
+.software-period-row .icon-btn { margin-left: auto; align-self: center; }
+.software-period-summary {
+  margin-top: 8px; font-size: 11px; color: var(--green-dark); font-weight: 600;
+  font-family: var(--font-num);
+}
+
+/* Usage / % Revenue / Per Seat drivers' rate editors — same expand panel, one flat
+   rate each (see softwareData.js file header for why these don't get periods too). */
+.software-rate-editor { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.software-rate-field { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; color: var(--muted-2); font-weight: 600; }
+.software-rate-field .pr-input { min-width: 120px; }
+
+.software-editor-hint {
+  font-size: 11px; color: var(--muted-2); line-height: 1.5; margin: 10px 0 0; flex-basis: 100%;
+}
+.software-period-list .software-editor-hint { margin-top: 2px; }
 
 /* The matching drop target on the P&L side (FragmentRows in ReportsPanel.jsx) — every
    real GL row's label cell accepts a drop; highlighted only while a drag is actually
@@ -2092,7 +2190,7 @@ tr.pr-dragging { opacity: .4; }
 }
 
 @media print {
-  .topbar, .tabnav-wrap, .head-actions, .footer, .chart-head .mini-dropdown, .ref-toggle { display: none !important; }
+  .topbar, .sidenav, .head-actions, .footer, .chart-head .mini-dropdown, .ref-toggle { display: none !important; }
   body::before, body::after { display: none !important; }
   .page { padding-top: 0 !important; }
   .table-wrap { max-height: none !important; overflow: visible !important; box-shadow: none !important; }

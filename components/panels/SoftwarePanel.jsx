@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react';
 import { PayrollTable, MonthInput, TextInput, PickerInput } from '../payroll/PayrollTable';
 import { CollapsibleSection } from '../payroll/CollapsibleSection';
-import { formatPayrollAmount, monthsForRange, currentIsoMonth, DEPARTMENT_OPTIONS } from '../../lib/payroll/payrollData';
-import { generateId } from '../../lib/assumptions/assumptionsData';
+import { formatPayrollAmount, formatMonthLabel, monthsForRange, currentIsoMonth, DEPARTMENT_OPTIONS } from '../../lib/payroll/payrollData';
+import { generateId, nextMonth } from '../../lib/assumptions/assumptionsData';
 import { buildSoftwareSpendHistory } from '../../lib/data/softwareSpendData';
 import {
   SOFTWARE_DRIVER_TYPES,
@@ -13,20 +13,23 @@ import {
   softwareAmountForMonth,
   recomputeSoftwareSchedules,
   makeSoftwareItem,
+  makePeriod,
 } from '../../lib/software/softwareData';
 
 /**
- * Software tab — SKELETON (2026-08-27, Kayee: "you can build out a skeleton and then
- * we will make changes"). Same page shell as Payroll/Customer (page-wide,
- * CollapsibleSection "outer folder" boxes, payroll-card black-headed tables), three
- * divisions per Kayee's spec:
+ * Software tab — three divisions per Kayee's spec (2026-08-27), extended the same day
+ * once she saw the skeleton live:
  *   1. Actual Spend to Date — real GL spend, monthly x by vendor, from inception
  *      through the last closed month (the GL export just IS whatever's closed).
  *   2. Projection Summary — CoGS vs OpEx software cost, computed live from Division 3.
- *   3. Planning — every vendor row, with a driver type deciding how its monthly $ is
- *      computed (Fixed / Variable-Usage / Variable-%-Revenue / Per Seat), add/inactive
- *      exactly like the Customer tab's rows, dragged onto a P&L line to link it exactly
- *      like the Assumptions sidebar's Non-Headcount Costs.
+ *   3. Planning — every vendor row, ALWAYS showing a month-by-month grid of exactly what
+ *      lands on the P&L (Kayee: "I want it more like it has a month over month on the
+ *      right so i can scroll and see how each 1000 apply to each month") — driver type
+ *      decides how that $ is computed, add/inactive exactly like the Customer tab's
+ *      rows, dragged onto a P&L line to link it exactly like the Assumptions sidebar's
+ *      Non-Headcount Costs. Editing a vendor's price/period/rate happens in an
+ *      expandable panel under its row (click Edit) — the row itself stays reserved for
+ *      the thing Kayee actually asked to see by default: the numbers, month over month.
  *
  * Vendor rows live INSIDE assumptions.costItems (isSoftware: true) rather than a
  * separate store — see lib/software/softwareData.js's file header for why: it means
@@ -43,6 +46,27 @@ const SPEND_FROZEN_COLUMNS = [
   { key: 'category', label: 'Cat.', width: 70 },
   { key: 'total', label: 'Total', width: 104, align: 'right' },
 ];
+
+// Planning's frozen columns (2026-08-27 rewrite) — deliberately more of them than the
+// Spend/Summary tables above, because this is the one editable table: Vendor, Category,
+// Active, Driver type, a glanceable Terms summary (so the current price/period reads
+// without opening anything — "very very comfortable" means not having to click Edit
+// just to check what a vendor is already set to), then Edit/Delete actions. Everything
+// past that is the scrollable, always-visible month grid.
+const PLANNING_FROZEN_COLUMNS = [
+  { key: 'vendor', label: 'Vendor', width: 210 },
+  { key: 'category', label: 'Cat.', width: 66 },
+  { key: 'active', label: 'On', width: 44, align: 'center' },
+  { key: 'driver', label: 'Driver', width: 150 },
+  { key: 'terms', label: 'Terms', width: 175 },
+  { key: 'actions', label: '', width: 96, align: 'center' },
+];
+
+const TRASH_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
+  </svg>
+);
 
 /** Driver-type picker with human labels — same convention as CostItemsCard's own local
  *  Picker, just mapping the stored code (e.g. 'percentRevenue') to a readable label. */
@@ -67,6 +91,198 @@ function CadencePicker({ value, onCommit }) {
         </option>
       ))}
     </select>
+  );
+}
+
+/** Native month picker (`<input type="month">`) — a real calendar control, not to be
+ *  confused with PayrollTable's own `MonthInput`, which despite the name is a $ number
+ *  cell. Commits immediately on change, same convention as DateInput. */
+function MonthPicker({ value, onCommit, placeholder }) {
+  return (
+    <input
+      type="month"
+      className="pr-input pr-input-date"
+      value={value || ''}
+      placeholder={placeholder}
+      onChange={(e) => onCommit(e.target.value)}
+    />
+  );
+}
+
+/** One-line, always-visible plain-English readout of a Fixed period — same "→ $X from
+ *  [month]" voice as CostItemScheduleSummary elsewhere in this app, so a period never
+ *  requires mental math to understand once it's set. */
+function periodSummaryText(period) {
+  const amt = formatPayrollAmount(period.amount) || '$0';
+  const cadenceLabel = period.cadence === 'Quarterly' ? '/quarter' : period.cadence === 'Annual' ? '/year' : '/month';
+  const fromLabel = period.fromMonth ? formatMonthLabel(period.fromMonth) : 'the start';
+  if (!period.toMonth) return `→ ${amt}${cadenceLabel}, from ${fromLabel}, ongoing`;
+  return `→ ${amt}${cadenceLabel}, from ${fromLabel} through ${formatMonthLabel(period.toMonth)}`;
+}
+
+/** Compact "what is this vendor set to right now" readout for the Terms column —
+ *  Kayee's "very very comfortable" bar means the current price/period/rate should be
+ *  readable WITHOUT opening the row first. */
+function driverTermsSummary(item) {
+  switch (item.driverType) {
+    case 'fixed': {
+      const periods = item.periods || [];
+      if (!periods.length) return '—';
+      if (periods.length === 1) {
+        const p = periods[0];
+        const cadenceLabel = p.cadence === 'Quarterly' ? '/qtr' : p.cadence === 'Annual' ? '/yr' : '/mo';
+        return `${formatPayrollAmount(p.amount) || '$0'}${cadenceLabel}`;
+      }
+      return `${periods.length} periods`;
+    }
+    case 'usage':
+      return item.unitRate ? `$${item.unitRate}/${item.unitLabel || 'unit'}` : 'Not set';
+    case 'percentRevenue':
+      return item.revenuePercent ? `${item.revenuePercent}% of revenue` : 'Not set';
+    case 'perSeat':
+      return item.seatRate ? `$${item.seatRate}/seat${item.seatDepartment ? ` · ${item.seatDepartment}` : ''}` : 'Not set';
+    default:
+      return '—';
+  }
+}
+
+/** One editable period row inside the Fixed-driver expand panel. */
+function PeriodRow({ period, isOnly, onUpdate, onRemove }) {
+  return (
+    <div className="software-period-row">
+      <div className="software-period-fields">
+        <label className="software-period-field">
+          <span>From</span>
+          <MonthPicker value={period.fromMonth} onCommit={(v) => onUpdate({ fromMonth: v })} />
+        </label>
+        <label className="software-period-field">
+          <span>To</span>
+          <MonthPicker value={period.toMonth} onCommit={(v) => onUpdate({ toMonth: v })} placeholder="Ongoing" />
+        </label>
+        <label className="software-period-field">
+          <span>Amount</span>
+          <MonthInput value={period.amount} onCommit={(n) => onUpdate({ amount: n })} />
+        </label>
+        <label className="software-period-field">
+          <span>Cadence</span>
+          <CadencePicker value={period.cadence} onCommit={(v) => onUpdate({ cadence: v })} />
+        </label>
+        <button
+          type="button"
+          className="icon-btn"
+          title={isOnly ? 'A vendor needs at least one period' : 'Remove this period'}
+          onClick={onRemove}
+          disabled={isOnly}
+        >
+          {TRASH_ICON}
+        </button>
+      </div>
+      <div className="software-period-summary">{periodSummaryText(period)}</div>
+    </div>
+  );
+}
+
+/** Fixed driver's expand panel — the multi-period editor itself (2026-08-27, Kayee:
+ *  "it needs to have period like ok monthly but 1000 from which month to ongoing or an
+ *  end date and if i need to add a second row for another amount"). Adding a period
+ *  defaults its From month to right after the previous period's To month, so a price
+ *  change reads as "pick up where the last one left off" rather than a blank slate the
+ *  user has to date correctly by hand every time. */
+function PeriodsEditor({ item, onChange }) {
+  const periods = item.periods || [];
+
+  function updatePeriod(id, patch) {
+    onChange(periods.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+  function removePeriod(id) {
+    onChange(periods.filter((p) => p.id !== id));
+  }
+  function addPeriod() {
+    const last = periods[periods.length - 1];
+    const fromMonth = last?.toMonth ? nextMonth(last.toMonth, 1) : '';
+    onChange([...periods, makePeriod({ fromMonth, amount: last?.amount || 0, cadence: last?.cadence || 'Monthly' })]);
+  }
+
+  return (
+    <div className="software-period-list">
+      {periods.map((period) => (
+        <PeriodRow
+          key={period.id}
+          period={period}
+          isOnly={periods.length === 1}
+          onUpdate={(patch) => updatePeriod(period.id, patch)}
+          onRemove={() => removePeriod(period.id)}
+        />
+      ))}
+      <button type="button" className="btn btn-xs" onClick={addPeriod}>
+        + Add Period
+      </button>
+      <p className="software-editor-hint">
+        Add a period whenever the price changes or the vendor is only contracted for part of the
+        year — e.g. $800/mo through Dec 2026, then $1,200/mo starting Jan 2027. Leave "To" blank
+        for a period that's still ongoing. The month grid above updates as you type.
+      </p>
+    </div>
+  );
+}
+
+function UsageEditor({ item, onChange }) {
+  const monthlyPreview = (Number(item.unitRate) || 0) * (Number(item.unitsPerMonth) || 0);
+  return (
+    <div className="software-rate-editor">
+      <label className="software-rate-field">
+        <span>Unit label</span>
+        <TextInput value={item.unitLabel} placeholder="e.g. token" onCommit={(v) => onChange({ unitLabel: v })} />
+      </label>
+      <label className="software-rate-field">
+        <span>$ per unit</span>
+        <MonthInput value={item.unitRate} onCommit={(n) => onChange({ unitRate: n })} />
+      </label>
+      <label className="software-rate-field">
+        <span>Units per month</span>
+        <MonthInput value={item.unitsPerMonth} onCommit={(n) => onChange({ unitsPerMonth: n })} />
+      </label>
+      <p className="software-editor-hint">
+        {formatPayrollAmount(monthlyPreview) || '$0'} per month at this rate. The same flat unit
+        count applies to every month for now — a per-month-editable usage grid, or deriving units
+        from revenue, is a real follow-up, not built here.
+      </p>
+    </div>
+  );
+}
+
+function PercentRevenueEditor({ item, onChange }) {
+  return (
+    <div className="software-rate-editor">
+      <label className="software-rate-field">
+        <span>% of Total Revenue</span>
+        <MonthInput value={item.revenuePercent} onCommit={(n) => onChange({ revenuePercent: n })} />
+      </label>
+      <p className="software-editor-hint">
+        Moves with the P&L's own Total Revenue projection automatically, up or down — no separate
+        step to bring in a revenue projection. See the month grid above for the actual $ that
+        produces, month by month.
+      </p>
+    </div>
+  );
+}
+
+function PerSeatEditor({ item, onChange }) {
+  return (
+    <div className="software-rate-editor">
+      <label className="software-rate-field">
+        <span>$ per seat</span>
+        <MonthInput value={item.seatRate} onCommit={(n) => onChange({ seatRate: n })} />
+      </label>
+      <label className="software-rate-field">
+        <span>Department</span>
+        <PickerInput value={item.seatDepartment} options={DEPARTMENT_OPTIONS} placeholder="Department" onCommit={(v) => onChange({ seatDepartment: v })} />
+      </label>
+      <p className="software-editor-hint">
+        Counts active Payroll roster rows in this department each month — ramp hires count
+        fractionally as they ramp up, same as everywhere else headcount is used.
+      </p>
+    </div>
   );
 }
 
@@ -135,6 +351,19 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
   const [collapsedSections, setCollapsedSections] = useState({ spend: false, summary: false, planning: false });
   const toggleSection = (key) => setCollapsedSections((p) => ({ ...p, [key]: !p[key] }));
 
+  // Which vendor rows have their edit panel open (2026-08-27) — local UI state, not
+  // persisted; every row starts collapsed except one just added (see addVendor below),
+  // so the user isn't left hunting for where to type the price on a brand-new row.
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
+  function toggleExpanded(id) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const spendSource = spendView === 'cash' ? glCash : glAccrued;
   const spendHistory = useMemo(
     () => buildSoftwareSpendHistory(spendSource?.transactions, spendCategory),
@@ -158,7 +387,9 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
   }
 
   function addVendor(category) {
-    commitCostItems([...(assumptions.costItems || []), makeSoftwareItem({ id: generateId('software'), category })]);
+    const id = generateId('software');
+    commitCostItems([...(assumptions.costItems || []), makeSoftwareItem({ id, category })]);
+    setExpandedIds((prev) => new Set(prev).add(id));
   }
 
   function removeVendor(id) {
@@ -201,6 +432,109 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
         iso,
         <b key={iso}>
           {formatPayrollAmount(categoryTotalForMonth('CoGS', iso) + categoryTotalForMonth('OpEx', iso)) || '$0'}
+        </b>,
+      ])
+    ),
+  };
+
+  /* ------------------------------ Planning rows ------------------------------ */
+
+  const planningRows = softwareItems.map((item) => {
+    const isExpanded = expandedIds.has(item.id);
+    let expandedContent = null;
+    if (item.driverType === 'usage') {
+      expandedContent = <UsageEditor item={item} onChange={(patch) => updateVendor(item.id, patch)} />;
+    } else if (item.driverType === 'percentRevenue') {
+      expandedContent = <PercentRevenueEditor item={item} onChange={(patch) => updateVendor(item.id, patch)} />;
+    } else if (item.driverType === 'perSeat') {
+      expandedContent = <PerSeatEditor item={item} onChange={(patch) => updateVendor(item.id, patch)} />;
+    } else {
+      expandedContent = <PeriodsEditor item={item} onChange={(periods) => updateVendor(item.id, { periods })} />;
+    }
+
+    return {
+      id: item.id,
+      className: `assump-cost-draggable-row${item.active === false ? ' software-inactive-row' : ''}`,
+      draggable: true,
+      onDragStart: (e) => {
+        e.dataTransfer.setData('text/plain', item.id);
+        e.dataTransfer.setData(`application/x-cost-item-${item.category.toLowerCase()}`, item.id);
+      },
+      isExpanded,
+      expandedContent,
+      cells: {
+        vendor: (
+          <div className="assump-cost-name-cell">
+            <TextInput
+              value={item.name}
+              placeholder="Vendor name"
+              onCommit={(v) => updateVendor(item.id, { name: v })}
+            />
+            <span
+              className="assump-cost-link-badge"
+              style={item.linkedRowLabel ? undefined : { visibility: 'hidden' }}
+              title={
+                item.linkedRowLabel
+                  ? `Forecasts feed the "${item.linkedRowLabel}" P&L row directly`
+                  : undefined
+              }
+            >
+              ↳ {item.linkedRowLabel || ' '}
+              <button type="button" onClick={() => unlinkVendor(item.id)} title="Unlink from this P&L row">
+                ×
+              </button>
+            </span>
+          </div>
+        ),
+        category: (
+          <select
+            className="pr-input pr-select"
+            value={item.category}
+            onChange={(e) => updateVendor(item.id, { category: e.target.value })}
+          >
+            <option value="CoGS">CoGS</option>
+            <option value="OpEx">OpEx</option>
+          </select>
+        ),
+        active: (
+          <input
+            type="checkbox"
+            checked={item.active !== false}
+            onChange={(e) => updateVendor(item.id, { active: e.target.checked })}
+            title="Active — inactive vendors contribute $0 everywhere (P&L and Cash Flow both)"
+          />
+        ),
+        driver: <DriverTypePicker value={item.driverType} onCommit={(v) => updateVendor(item.id, { driverType: v })} />,
+        terms: <span className="software-terms-cell">{driverTermsSummary(item)}</span>,
+        actions: (
+          <div className="software-row-actions">
+            <button
+              type="button"
+              className={`btn btn-xs${isExpanded ? ' active' : ''}`}
+              onClick={() => toggleExpanded(item.id)}
+            >
+              {isExpanded ? 'Close' : 'Edit'}
+            </button>
+            <button type="button" className="icon-btn" title="Remove" onClick={() => removeVendor(item.id)}>
+              {TRASH_ICON}
+            </button>
+          </div>
+        ),
+      },
+      monthCells: Object.fromEntries(
+        planMonths.map((iso) => [iso, formatPayrollAmount(softwareAmountForMonth(item, iso, calcCtx))])
+      ),
+    };
+  });
+
+  const planningTotalRow = {
+    cells: { vendor: <b>TOTAL</b>, category: '', active: '', driver: '', terms: '', actions: '' },
+    monthCells: Object.fromEntries(
+      planMonths.map((iso) => [
+        iso,
+        <b key={iso}>
+          {formatPayrollAmount(softwareItems.reduce((sum, i) => sum + softwareAmountForMonth(i, iso, calcCtx), 0)) ||
+            '$0'}
         </b>,
       ])
     ),
@@ -274,7 +608,7 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
       {/* ------------------------------ 3. Planning ------------------------------ */}
       <CollapsibleSection
         title="Planning"
-        subtitle="Every software vendor — driver type decides how its monthly $ is computed · drag a row onto a P&L line to link it"
+        subtitle="Every software vendor, month over month — click Edit to set price, period, or driver details · drag a row onto a P&L line to link it"
         colorVar="--green"
         collapsed={collapsedSections.planning}
         onToggle={() => toggleSection('planning')}
@@ -291,143 +625,22 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
       >
         {!hydrated || !assumptions ? (
           <div className="cap">Loading saved software vendors…</div>
-        ) : (
-          <div className="payroll-card">
-            <div className="payroll-table-wrap">
-              <table className="payroll-table assump-cost-table software-vendor-table">
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left' }}>Vendor</th>
-                    <th>Category</th>
-                    <th>Active</th>
-                    <th style={{ textAlign: 'left' }}>Driver</th>
-                    <th style={{ textAlign: 'left' }}>Details</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {softwareItems.map((item) => (
-                    <tr
-                      key={item.id}
-                      className={`assump-cost-draggable-row${item.active === false ? ' software-inactive-row' : ''}`}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', item.id);
-                        e.dataTransfer.setData(`application/x-cost-item-${item.category.toLowerCase()}`, item.id);
-                      }}
-                    >
-                      <td className="assump-cost-name-td">
-                        <div className="assump-cost-name-cell">
-                          <TextInput
-                            value={item.name}
-                            placeholder="Vendor name"
-                            onCommit={(v) => updateVendor(item.id, { name: v })}
-                          />
-                          <span
-                            className="assump-cost-link-badge"
-                            style={item.linkedRowLabel ? undefined : { visibility: 'hidden' }}
-                            title={
-                              item.linkedRowLabel
-                                ? `Forecasts feed the "${item.linkedRowLabel}" P&L row directly`
-                                : undefined
-                            }
-                          >
-                            ↳ {item.linkedRowLabel || ' '}
-                            <button type="button" onClick={() => unlinkVendor(item.id)} title="Unlink from this P&L row">
-                              ×
-                            </button>
-                          </span>
-                        </div>
-                      </td>
-                      <td>
-                        <select
-                          className="pr-input pr-select"
-                          value={item.category}
-                          onChange={(e) => updateVendor(item.id, { category: e.target.value })}
-                        >
-                          <option value="CoGS">CoGS</option>
-                          <option value="OpEx">OpEx</option>
-                        </select>
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={item.active !== false}
-                          onChange={(e) => updateVendor(item.id, { active: e.target.checked })}
-                          title="Active — inactive vendors contribute $0 everywhere (P&L and Cash Flow both)"
-                        />
-                      </td>
-                      <td>
-                        <DriverTypePicker value={item.driverType} onCommit={(v) => updateVendor(item.id, { driverType: v })} />
-                      </td>
-                      <td className="software-details-td">
-                        {item.driverType === 'fixed' && (
-                          <div className="software-details-row">
-                            <MonthInput value={item.softwareAmount} onCommit={(n) => updateVendor(item.id, { softwareAmount: n })} />
-                            <CadencePicker
-                              value={item.softwareCadence}
-                              onCommit={(v) => updateVendor(item.id, { softwareCadence: v })}
-                            />
-                          </div>
-                        )}
-                        {item.driverType === 'usage' && (
-                          <div className="software-details-row">
-                            <TextInput
-                              value={item.unitLabel}
-                              placeholder="unit (e.g. token)"
-                              onCommit={(v) => updateVendor(item.id, { unitLabel: v })}
-                            />
-                            <span className="software-details-label">$</span>
-                            <MonthInput value={item.unitRate} onCommit={(n) => updateVendor(item.id, { unitRate: n })} />
-                            <span className="software-details-label">/ unit ×</span>
-                            <MonthInput
-                              value={item.unitsPerMonth}
-                              onCommit={(n) => updateVendor(item.id, { unitsPerMonth: n })}
-                            />
-                            <span className="software-details-label">units/mo</span>
-                          </div>
-                        )}
-                        {item.driverType === 'percentRevenue' && (
-                          <div className="software-details-row">
-                            <MonthInput
-                              value={item.revenuePercent}
-                              onCommit={(n) => updateVendor(item.id, { revenuePercent: n })}
-                            />
-                            <span className="software-details-label">% of Total Revenue</span>
-                          </div>
-                        )}
-                        {item.driverType === 'perSeat' && (
-                          <div className="software-details-row">
-                            <span className="software-details-label">$</span>
-                            <MonthInput value={item.seatRate} onCommit={(n) => updateVendor(item.id, { seatRate: n })} />
-                            <span className="software-details-label">/ seat ×</span>
-                            <PickerInput
-                              value={item.seatDepartment}
-                              options={DEPARTMENT_OPTIONS}
-                              placeholder="Department"
-                              onCommit={(v) => updateVendor(item.id, { seatDepartment: v })}
-                            />
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <button type="button" className="icon-btn" title="Remove" onClick={() => removeVendor(item.id)}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="payroll-card-footer assump-cost-note">
-              Drag a vendor row onto its P&L line to link it — same mechanic as Non-Headcount Costs. Fixed items
-              spread Quarterly ÷3 / Annual ÷12 across the P&L (paid in one lump in Cash Flow via that account's own
-              timing override); Usage / % Revenue / Per Seat recompute every month from their own drivers.
-            </div>
+        ) : softwareItems.length === 0 ? (
+          <div className="cap" style={{ padding: '10px 4px 4px' }}>
+            No software vendors yet — add one above to start planning.
           </div>
+        ) : (
+          <PayrollTable
+            title="Software Vendors"
+            subtitle={`${softwareItems.length} vendor${softwareItems.length === 1 ? '' : 's'} · scroll right for the full month-over-month projection`}
+            tintForecast
+            frozenColumns={PLANNING_FROZEN_COLUMNS}
+            months={planMonths}
+            todayIso={todayIso}
+            totalRow={planningTotalRow}
+            rowGroups={[{ key: 'vendors', label: null, rows: planningRows }]}
+            footer="Drag a vendor row onto its P&L line to link it — same mechanic as Non-Headcount Costs. Fixed items spread each period's amount across its months by cadence (Quarterly ÷3 / Annual ÷12) and pay in one lump in Cash Flow via that account's own timing override; Usage / % Revenue / Per Seat recompute every month from their own drivers."
+          />
         )}
       </CollapsibleSection>
     </div>
