@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { PayrollTable, MonthInput, TextInput, PickerInput } from '../payroll/PayrollTable';
 import { CollapsibleSection } from '../payroll/CollapsibleSection';
 import { formatPayrollAmount, formatMonthLabel, monthsForRange, currentIsoMonth, DEPARTMENT_OPTIONS } from '../../lib/payroll/payrollData';
-import { generateId, nextMonth } from '../../lib/assumptions/assumptionsData';
+import { generateId, nextMonth, netCollectedRevenueForMonth } from '../../lib/assumptions/assumptionsData';
 import { buildSoftwareSpendHistory } from '../../lib/data/softwareSpendData';
 import {
   SOFTWARE_DRIVER_TYPES,
@@ -53,12 +53,17 @@ const SPEND_FROZEN_COLUMNS = [
 // without opening anything — "very very comfortable" means not having to click Edit
 // just to check what a vendor is already set to), then Edit/Delete actions. Everything
 // past that is the scrollable, always-visible month grid.
+// Widened 2026-08-31 (Kayee: layout was "quite ugly and got cut off") — Category was
+// clipping "CoGS" down to "C", and the Driver select was clipping its own label
+// mid-word ("Variable — Usag…"). Category/Driver both grew a little and the driver
+// labels themselves got shortened (see DRIVER_TYPE_LABELS in softwareData.js) so the
+// closed <select> always shows its full text with room to spare, not just less-clipped.
 const PLANNING_FROZEN_COLUMNS = [
   { key: 'vendor', label: 'Vendor', width: 210 },
-  { key: 'category', label: 'Cat.', width: 66 },
+  { key: 'category', label: 'Cat.', width: 78 },
   { key: 'active', label: 'On', width: 44, align: 'center' },
-  { key: 'driver', label: 'Driver', width: 150 },
-  { key: 'terms', label: 'Terms', width: 175 },
+  { key: 'driver', label: 'Driver', width: 130 },
+  { key: 'terms', label: 'Terms', width: 190 },
   { key: 'actions', label: '', width: 96, align: 'center' },
 ];
 
@@ -260,8 +265,9 @@ function PercentRevenueEditor({ item, onChange }) {
       </label>
       <p className="software-editor-hint">
         Moves with the P&L's own Total Revenue projection automatically, up or down — no separate
-        step to bring in a revenue projection. See the month grid above for the actual $ that
-        produces, month by month.
+        step to bring in a revenue projection. Close this panel and look at the grey "↳ Total
+        Revenue (reference)" row right under this vendor in the month grid to see the $ basis for
+        the % above, month by month.
       </p>
     </div>
   );
@@ -348,7 +354,7 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
 
   const [spendView, setSpendView] = useState('accrued'); // 'cash' | 'accrued'
   const [spendCategory, setSpendCategory] = useState('all'); // 'all' | 'CoGS' | 'OpEx'
-  const [collapsedSections, setCollapsedSections] = useState({ spend: false, summary: false, planning: false });
+  const [collapsedSections, setCollapsedSections] = useState({ spend: true, summary: false, planning: false });
   const toggleSection = (key) => setCollapsedSections((p) => ({ ...p, [key]: !p[key] }));
 
   // Which vendor rows have their edit panel open (2026-08-27) — local UI state, not
@@ -397,10 +403,6 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
     commitCostItems((assumptions.costItems || []).filter((i) => i.id !== id));
   }
 
-  function unlinkVendor(id) {
-    updateVendor(id, { linkedRowLabel: null });
-  }
-
   /* --------------------------- Projection summary --------------------------- */
 
   function categoryTotalForMonth(category, iso) {
@@ -439,7 +441,37 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
 
   /* ------------------------------ Planning rows ------------------------------ */
 
-  const planningRows = softwareItems.map((item) => {
+  // 2026-08-31 (Kayee: "for variable % of revenue you need to bring in projected
+  // revenue so that we can visualize but its in grey font so that people know it's a
+  // reference thing") — every % of Revenue vendor gets a second, non-draggable, grey
+  // "↳ Total Revenue (reference)" row directly under its own row in the SAME
+  // month-by-month grid, so the $ basis the % is applied to is visible right there
+  // while scrolling, without opening the edit panel. Purely a readout — it's not a
+  // cost item and contributes nothing to any total.
+  function revenueReferenceRow(item) {
+    return {
+      id: `${item.id}-revenue-ref`,
+      className: 'software-reference-row',
+      cells: {
+        vendor: <span className="software-ref-label">↳ Total Revenue (reference)</span>,
+        category: '',
+        active: '',
+        driver: '',
+        terms: <span className="software-ref-label">Basis for the % above</span>,
+        actions: '',
+      },
+      monthCells: Object.fromEntries(
+        planMonths.map((iso) => [
+          iso,
+          <span key={iso} className="software-ref-figure">
+            {formatPayrollAmount(netCollectedRevenueForMonth(assumptions?.revenue, iso)) || '$0'}
+          </span>,
+        ])
+      ),
+    };
+  }
+
+  const planningRows = softwareItems.flatMap((item) => {
     const isExpanded = expandedIds.has(item.id);
     let expandedContent = null;
     if (item.driverType === 'usage') {
@@ -452,14 +484,9 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
       expandedContent = <PeriodsEditor item={item} onChange={(periods) => updateVendor(item.id, { periods })} />;
     }
 
-    return {
+    const mainRow = {
       id: item.id,
-      className: `assump-cost-draggable-row${item.active === false ? ' software-inactive-row' : ''}`,
-      draggable: true,
-      onDragStart: (e) => {
-        e.dataTransfer.setData('text/plain', item.id);
-        e.dataTransfer.setData(`application/x-cost-item-${item.category.toLowerCase()}`, item.id);
-      },
+      className: item.active === false ? 'software-inactive-row' : undefined,
       isExpanded,
       expandedContent,
       cells: {
@@ -472,17 +499,9 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
             />
             <span
               className="assump-cost-link-badge"
-              style={item.linkedRowLabel ? undefined : { visibility: 'hidden' }}
-              title={
-                item.linkedRowLabel
-                  ? `Forecasts feed the "${item.linkedRowLabel}" P&L row directly`
-                  : undefined
-              }
+              title={`Forecasts feed the "${item.linkedRowLabel}" P&L row directly — set automatically by Category`}
             >
-              ↳ {item.linkedRowLabel || ' '}
-              <button type="button" onClick={() => unlinkVendor(item.id)} title="Unlink from this P&L row">
-                ×
-              </button>
+              ↳ {item.linkedRowLabel}
             </span>
           </div>
         ),
@@ -525,6 +544,8 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
         planMonths.map((iso) => [iso, formatPayrollAmount(softwareAmountForMonth(item, iso, calcCtx))])
       ),
     };
+
+    return item.driverType === 'percentRevenue' ? [mainRow, revenueReferenceRow(item)] : [mainRow];
   });
 
   const planningTotalRow = {
@@ -608,7 +629,7 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
       {/* ------------------------------ 3. Planning ------------------------------ */}
       <CollapsibleSection
         title="Planning"
-        subtitle="Every software vendor, month over month — click Edit to set price, period, or driver details · drag a row onto a P&L line to link it"
+        subtitle="Every software vendor, month over month — click Edit to set price, period, or driver details. CoGS vendors feed the Cost of Revenue line, OpEx vendors feed Operating Expense, automatically."
         colorVar="--green"
         collapsed={collapsedSections.planning}
         onToggle={() => toggleSection('planning')}
@@ -639,7 +660,7 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
             todayIso={todayIso}
             totalRow={planningTotalRow}
             rowGroups={[{ key: 'vendors', label: null, rows: planningRows }]}
-            footer="Drag a vendor row onto its P&L line to link it — same mechanic as Non-Headcount Costs. Fixed items spread each period's amount across its months by cadence (Quarterly ÷3 / Annual ÷12) and pay in one lump in Cash Flow via that account's own timing override; Usage / % Revenue / Per Seat recompute every month from their own drivers."
+            footer="Every vendor's Category decides where it lands on the P&L — CoGS → Software - Cost of Revenue, OpEx → Software - Operating Expense — no dragging needed. Fixed items spread each period's amount across its months by cadence (Quarterly ÷3 / Annual ÷12) and pay in one lump in Cash Flow via that account's own timing override; Usage / % Revenue / Per Seat recompute every month from their own drivers."
           />
         )}
       </CollapsibleSection>
