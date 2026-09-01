@@ -14,6 +14,7 @@ import {
   recomputeSoftwareSchedules,
   makeSoftwareItem,
   makePeriod,
+  makePercentPeriod,
 } from '../../lib/software/softwareData';
 
 /**
@@ -147,8 +148,13 @@ function driverTermsSummary(item) {
     }
     case 'usage':
       return item.unitRate ? `$${item.unitRate}/${item.unitLabel || 'unit'}` : 'Not set';
-    case 'percentRevenue':
+    case 'percentRevenue': {
+      const periods = item.percentPeriods || [];
+      if (periods.length === 1) return `${periods[0].revenuePercent}% of revenue`;
+      if (periods.length > 1) return `${periods.length} periods`;
+      // Pre-rewrite items that haven't been opened (and so self-healed) yet.
       return item.revenuePercent ? `${item.revenuePercent}% of revenue` : 'Not set';
+    }
     case 'perSeat':
       return item.seatRate ? `$${item.seatRate}/seat${item.seatDepartment ? ` · ${item.seatDepartment}` : ''}` : 'Not set';
     default:
@@ -236,6 +242,48 @@ function PeriodsEditor({ item, onChange }) {
   );
 }
 
+/** Same "→ X, from [month]..." readout as periodSummaryText, for a % of Revenue
+ *  period — no cadence to name since a % is applied fresh every month. */
+function percentPeriodSummaryText(period) {
+  const pct = `${Number(period.revenuePercent) || 0}% of revenue`;
+  const fromLabel = period.fromMonth ? formatMonthLabel(period.fromMonth) : 'the start';
+  if (!period.toMonth) return `→ ${pct}, from ${fromLabel}, ongoing`;
+  return `→ ${pct}, from ${fromLabel} through ${formatMonthLabel(period.toMonth)}`;
+}
+
+/** One editable period row inside the % of Revenue expand panel — same shape as
+ *  PeriodRow, just From/To + a single % field instead of Amount + Cadence. */
+function PercentPeriodRow({ period, isOnly, onUpdate, onRemove }) {
+  return (
+    <div className="software-period-row">
+      <div className="software-period-fields">
+        <label className="software-period-field">
+          <span>From</span>
+          <MonthPicker value={period.fromMonth} onCommit={(v) => onUpdate({ fromMonth: v })} />
+        </label>
+        <label className="software-period-field">
+          <span>To</span>
+          <MonthPicker value={period.toMonth} onCommit={(v) => onUpdate({ toMonth: v })} placeholder="Ongoing" />
+        </label>
+        <label className="software-period-field">
+          <span>% of Total Revenue</span>
+          <MonthInput value={period.revenuePercent} onCommit={(n) => onUpdate({ revenuePercent: n })} />
+        </label>
+        <button
+          type="button"
+          className="icon-btn"
+          title={isOnly ? 'A vendor needs at least one period' : 'Remove this period'}
+          onClick={onRemove}
+          disabled={isOnly}
+        >
+          {TRASH_ICON}
+        </button>
+      </div>
+      <div className="software-period-summary">{percentPeriodSummaryText(period)}</div>
+    </div>
+  );
+}
+
 function UsageEditor({ item, onChange }) {
   const monthlyPreview = (Number(item.unitRate) || 0) * (Number(item.unitsPerMonth) || 0);
   return (
@@ -261,18 +309,47 @@ function UsageEditor({ item, onChange }) {
   );
 }
 
+/** % of Revenue's expand panel (2026-08-31, Kayee: "for percentage of revenue I also
+ *  want the ability to select period") — same multi-period editor shape as Fixed's
+ *  PeriodsEditor, just percentPeriods + PercentPeriodRow instead of periods + PeriodRow.
+ *  A take-rate that steps up or down partway through the year is a second period in
+ *  the list, visible alongside the first, exactly like a Fixed vendor's price change. */
 function PercentRevenueEditor({ item, onChange }) {
+  const periods = item.percentPeriods || [];
+
+  function updatePeriod(id, patch) {
+    onChange(periods.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+  function removePeriod(id) {
+    onChange(periods.filter((p) => p.id !== id));
+  }
+  function addPeriod() {
+    const last = periods[periods.length - 1];
+    const fromMonth = last?.toMonth ? nextMonth(last.toMonth, 1) : '';
+    onChange([...periods, makePercentPeriod({ fromMonth, revenuePercent: last?.revenuePercent || 0 })]);
+  }
+
   return (
-    <div className="software-rate-editor">
-      <label className="software-rate-field">
-        <span>% of Total Revenue</span>
-        <MonthInput value={item.revenuePercent} onCommit={(n) => onChange({ revenuePercent: n })} />
-      </label>
+    <div className="software-period-list">
+      {periods.map((period) => (
+        <PercentPeriodRow
+          key={period.id}
+          period={period}
+          isOnly={periods.length === 1}
+          onUpdate={(patch) => updatePeriod(period.id, patch)}
+          onRemove={() => removePeriod(period.id)}
+        />
+      ))}
+      <button type="button" className="btn btn-xs" onClick={addPeriod}>
+        + Add Period
+      </button>
       <p className="software-editor-hint">
-        Moves with the P&L's own Total Revenue projection automatically, up or down — no separate
-        step to bring in a revenue projection. Close this panel and look at the grey "↳ Total
-        Revenue (reference)" row right under this vendor in the month grid to see the $ basis for
-        the % above, month by month.
+        Add a period whenever the take-rate changes — e.g. 2% of revenue through Dec 2026, then 3%
+        starting Jan 2027. Leave "To" blank for a period that's still ongoing. Moves with the P&L's
+        own Total Revenue projection automatically, up or down — no separate step to bring in a
+        revenue projection. Close this panel and look at the grey "↳ Total Revenue (reference)" row
+        right under this vendor in the month grid to see the $ basis for each period's % above,
+        month by month.
       </p>
     </div>
   );
@@ -484,10 +561,16 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
     // the amount" — the Edit panel had nothing but a bare "+ Add Period" button because
     // of exactly this. Healing it right here, at render, means the box is there the
     // very first time anyone opens the panel, with no edit required to trigger it first.
-    const item =
-      rawItem.driverType === 'fixed' && (!rawItem.periods || !rawItem.periods.length)
-        ? { ...rawItem, periods: [makePeriod({ fromMonth: currentIsoMonth(), amount: 0 })] }
-        : rawItem;
+    let item = rawItem;
+    if (item.driverType === 'fixed' && (!item.periods || !item.periods.length)) {
+      item = { ...item, periods: [makePeriod({ fromMonth: currentIsoMonth(), amount: 0 })] };
+    }
+    if (item.driverType === 'percentRevenue' && (!item.percentPeriods || !item.percentPeriods.length)) {
+      item = {
+        ...item,
+        percentPeriods: [makePercentPeriod({ fromMonth: currentIsoMonth(), revenuePercent: Number(item.revenuePercent) || 0 })],
+      };
+    }
     const isExpanded = expandedIds.has(item.id);
     let expandedContent = null;
     if (item.driverType === 'usage') {
