@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatMonthLabel } from '../../lib/payroll/payrollData';
 
@@ -35,7 +35,10 @@ export function PayrollTable({
   // (Kayee, 2026-08-05: "everything in here is only projection and calculations").
   tintForecast = true,
   totalRow, // { cells: {[frozenKey]: node}, monthCells: { [iso]: node } } | null
-  rowGroups, // [{ key, label, rowModifier, rows: [{ id, cells: {...}, monthCells: {...}, className }] }]
+  rowGroups, // [{ key, label, rowModifier, rows: [{ id, cells, monthCells, className, isExpanded, expandedContent }] }]
+  // isExpanded + expandedContent (2026-08-27) are optional: a row that sets both gets an extra
+  // full-width <tr> right below it holding expandedContent, spanning every frozen + month column.
+  // Unset on every other existing caller — this is additive, not a behavior change for them.
   headActions,
   footer,
   // Skips the outer dark card chrome (background/border/collapse-toggle) and renders
@@ -226,30 +229,47 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso,
         // them (drag-to-reorder within a section), so Bonus/Total Comp/Summary rows
         // just render a plain, non-draggable <tr> as before (undefined props are a
         // no-op on a DOM element).
-        <tr
-          key={row.id}
-          className={row.className}
-          draggable={row.draggable}
-          onDragStart={row.onDragStart}
-          onDragOver={row.onDragOver}
-          onDrop={row.onDrop}
-          onDragEnd={row.onDragEnd}
-        >
-          {frozenColumns.map((col, i) => (
-            <td
-              key={col.key}
-              className={`pr-frozen pr-frozen-col-${col.key}${i === frozenColumns.length - 1 ? ' pr-frozen-last' : ''}`}
-              style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
-            >
-              {row.cells[col.key]}
-            </td>
-          ))}
-          {months.map((iso) => (
-            <td key={iso} className={`pr-month-cell ${monthTintClass(iso, todayIso, tintForecast)}`} style={{ width: monthWidth }}>
-              {row.monthCells[iso]}
-            </td>
-          ))}
-        </tr>
+        <Fragment key={row.id}>
+          <tr
+            className={row.className}
+            draggable={row.draggable}
+            onDragStart={row.onDragStart}
+            onDragOver={row.onDragOver}
+            onDrop={row.onDrop}
+            onDragEnd={row.onDragEnd}
+          >
+            {frozenColumns.map((col, i) => (
+              <td
+                key={col.key}
+                className={`pr-frozen pr-frozen-col-${col.key}${i === frozenColumns.length - 1 ? ' pr-frozen-last' : ''}`}
+                style={{ width: col.width, left: offsets.left[i], textAlign: col.align || 'left' }}
+              >
+                {row.cells[col.key]}
+              </td>
+            ))}
+            {months.map((iso) => (
+              <td key={iso} className={`pr-month-cell ${monthTintClass(iso, todayIso, tintForecast)}`} style={{ width: monthWidth }}>
+                {row.monthCells[iso]}
+              </td>
+            ))}
+          </tr>
+          {/* Optional full-width editor panel under this row (2026-08-27, Software tab's
+              Planning table — Kayee: "I want to visualize the amount land in each
+              month," meaning the month grid needed to be the row's DEFAULT view, not
+              something traded away for an inline editor cell). A row opts in by setting
+              `isExpanded` + `expandedContent`; every existing caller leaves both unset,
+              so this is a no-op for Roster/Bonus/Total Comp/every other PayrollTable use.
+              One <td colSpan> across the full frozen+month width, rather than trying to
+              fit a free-form form (a period list, an "Add Period" button) into the fixed
+              per-column widths the rest of the row is built around. */}
+          {row.isExpanded && row.expandedContent && (
+            <tr className="pr-row-expanded">
+              <td colSpan={frozenColumns.length + months.length}>
+                <div className="pr-row-expanded-panel">{row.expandedContent}</div>
+              </td>
+            </tr>
+          )}
+        </Fragment>
       ))}
     </>
   );
