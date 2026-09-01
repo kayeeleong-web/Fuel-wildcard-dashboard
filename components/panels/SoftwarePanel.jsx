@@ -476,7 +476,18 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
     };
   }
 
-  const planningRows = softwareItems.flatMap((item) => {
+  const planningRows = softwareItems.flatMap((rawItem) => {
+    // Read-time self-heal (2026-08-31) — recomputeSoftwareSchedules only seeds an empty
+    // Fixed item's periods on the next WRITE (any edit triggers commitCostItems), so a
+    // vendor that has never been touched since the multi-period rewrite still renders
+    // an empty periods array here on a plain page load. Kayee: "I still can't put in
+    // the amount" — the Edit panel had nothing but a bare "+ Add Period" button because
+    // of exactly this. Healing it right here, at render, means the box is there the
+    // very first time anyone opens the panel, with no edit required to trigger it first.
+    const item =
+      rawItem.driverType === 'fixed' && (!rawItem.periods || !rawItem.periods.length)
+        ? { ...rawItem, periods: [makePeriod({ fromMonth: currentIsoMonth(), amount: 0 })] }
+        : rawItem;
     const isExpanded = expandedIds.has(item.id);
     let expandedContent = null;
     if (item.driverType === 'usage') {
