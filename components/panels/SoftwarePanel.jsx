@@ -58,12 +58,17 @@ const SPEND_FROZEN_COLUMNS = [
 // mid-word ("Variable — Usag…"). Category/Driver both grew a little and the driver
 // labels themselves got shortened (see DRIVER_TYPE_LABELS in softwareData.js) so the
 // closed <select> always shows its full text with room to spare, not just less-clipped.
+// Category widened 2026-08-31 (Kayee: "the text cogs or opex the text got cut off,
+// make the box flexible like it will be bigger for the text") — 78px was too narrow
+// for "CoGS"/"OpEx" plus the select's own arrow once the browser's default select
+// padding is accounted for; 108px gives it real breathing room. Terms trimmed to match
+// since it no longer needs to fit as much (see driverTermsSummary).
 const PLANNING_FROZEN_COLUMNS = [
   { key: 'vendor', label: 'Vendor', width: 210 },
-  { key: 'category', label: 'Cat.', width: 78 },
+  { key: 'category', label: 'Cat.', width: 108 },
   { key: 'active', label: 'On', width: 44, align: 'center' },
   { key: 'driver', label: 'Driver', width: 130 },
-  { key: 'terms', label: 'Terms', width: 190 },
+  { key: 'terms', label: 'Terms', width: 160 },
   { key: 'actions', label: '', width: 96, align: 'center' },
 ];
 
