@@ -576,7 +576,17 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
     if (item.driverType === 'usage') {
       expandedContent = <UsageEditor item={item} onChange={(patch) => updateVendor(item.id, patch)} />;
     } else if (item.driverType === 'percentRevenue') {
-      expandedContent = <PercentRevenueEditor item={item} onChange={(patch) => updateVendor(item.id, patch)} />;
+      // Bug fix (2026-08-31, Kayee: "the add period box is not working too" / To date
+      // "wont populate") — PercentRevenueEditor's onChange hands back the whole
+      // percentPeriods ARRAY (same convention as PeriodsEditor below), but this was
+      // wired as `(patch) => updateVendor(item.id, patch)`, which spreads that array
+      // straight into the item ({...item, ...array} turns it into {0: ..., 1: ...} —
+      // never actually setting `percentPeriods`). Every add/edit/remove silently wrote
+      // nowhere, so the panel looked completely inert. Wrapping it in { percentPeriods }
+      // — exactly what PeriodsEditor already does for Fixed — is the fix.
+      expandedContent = (
+        <PercentRevenueEditor item={item} onChange={(periods) => updateVendor(item.id, { percentPeriods: periods })} />
+      );
     } else if (item.driverType === 'perSeat') {
       expandedContent = <PerSeatEditor item={item} onChange={(patch) => updateVendor(item.id, patch)} />;
     } else {
