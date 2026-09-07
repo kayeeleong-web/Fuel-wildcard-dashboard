@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
-import { CustomerPanel, usePlannedCustomers, useCustomerDrivers } from './CustomerPanel';
+import { CustomerPanel } from './CustomerPanel';
+import { useDealsState } from '../../lib/deals/useDealsState';
 import { SoftwarePanel } from './SoftwarePanel';
 import { useAssumptionsState } from '../../lib/assumptions/useAssumptionsState';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
@@ -70,8 +71,9 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
   // Save button in the toolbar below can act on whichever tab is currently open.
   const cashTiming = useCashTimingState();
   const payroll = usePayrollState();
-  const plannedCustomers = usePlannedCustomers();
-  const customerDrivers = useCustomerDrivers();
+  // Customer's store is now ONE deals list (2026-09-07, replacing the two
+  // planned-customer + driver-grid stores of the old campaigns/meetings model).
+  const customerDeals = useDealsState();
 
   // Which (lastSavedAt, saveNow) pair the toolbar's Save button uses, per sub-tab.
   // Customer has TWO independent stores, so its Save flushes both with one click and
@@ -80,13 +82,7 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
     pl: { lastSavedAt: assumptions.lastSavedAt, saveNow: assumptions.saveNow },
     cf: { lastSavedAt: cashTiming.lastSavedAt, saveNow: cashTiming.saveNow },
     payroll: { lastSavedAt: payroll.lastSavedAt, saveNow: payroll.saveNow },
-    customer: {
-      lastSavedAt: Math.max(plannedCustomers.lastSavedAt || 0, customerDrivers.lastSavedAt || 0) || null,
-      saveNow: () => {
-        plannedCustomers.saveNow();
-        customerDrivers.saveNow();
-      },
-    },
+    customer: { lastSavedAt: customerDeals.lastSavedAt, saveNow: customerDeals.saveNow },
     // Software vendors live inside assumptions.costItems (see lib/software/softwareData.js),
     // so Software shares the exact same save handle as P&L.
     software: { lastSavedAt: assumptions.lastSavedAt, saveNow: assumptions.saveNow },
@@ -213,8 +209,7 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
         <CustomerPanel
           glCash={glCash}
           glAccrued={glAccrued}
-          plannedCtl={plannedCustomers}
-          driversCtl={customerDrivers}
+          dealsCtl={customerDeals}
         />
       )}
 

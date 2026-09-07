@@ -1708,6 +1708,40 @@ tr.summary-subtotal-pinned td.pr-frozen { z-index: 3; }
 }
 .summary-row-toggle .payroll-chevron { color: inherit; }
 
+/* Customer tab — deal-based Customer Revenue Projection (2026-09-07, replaces the
+   campaigns/meetings driver grids; see components/customer/DealProjectionSection.jsx).
+   Each deal is a bold header row (its key terms live in the frozen columns, the rest in
+   PayrollTable's pr-row-expanded Edit panel) followed by seven muted computed lines. */
+.deal-grid tbody tr.deal-head-row td { background: #F3F4F6; font-weight: 600; height: 32px; }
+.deal-grid tbody tr.deal-head-row td.pr-frozen { background: #F3F4F6; }
+.deal-grid tbody tr.deal-inactive-row td { opacity: .6; }
+.deal-grid tbody tr.deal-line-row td { color: var(--muted); }
+.deal-grid tbody tr.deal-line-row td.pr-frozen { padding-left: 34px; }
+.deal-grid tbody tr.deal-cogs-row td { color: #7A2E2E; }
+.deal-name-cell { display: flex; align-items: center; gap: 6px; }
+.deal-name-cell .pr-input { flex: 1; min-width: 0; }
+.deal-line-label {
+  font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.deal-field-note { font-size: 10.5px; color: var(--muted-2); font-weight: 400; margin-left: 4px; }
+.deal-neg { color: #B42318; font-family: var(--font-num); }
+.deal-auto-value .pr-input::placeholder { color: var(--muted); font-style: italic; }
+.deal-below-threshold .pr-input { color: var(--muted-2); text-decoration: line-through; }
+.deal-stage-signed { color: var(--green-dark); font-weight: 600; }
+.deal-stage-pipeline { color: var(--blue); font-weight: 600; }
+.deal-stage-lost { color: var(--muted-2); }
+.deal-number-field { display: inline-flex; align-items: center; gap: 4px; }
+.deal-number-field .pr-input-month { width: 100%; min-width: 48px; text-align: right; }
+.deal-field-suffix { font-size: 10.5px; color: var(--muted-2); }
+.deal-editor .software-rate-field .pr-input { min-width: 150px; }
+.deal-csm-reset { font-size: 10.5px; padding: 0; margin: 0; }
+.deal-weights-table th, .deal-weights-table td { text-align: right; }
+.deal-weights-table td.pr-frozen, .deal-weights-table th.pr-frozen { text-align: left; }
+.deal-weight-input { width: 54px; text-align: right; }
+.deal-weight-na { background: var(--panel-2); }
+.deal-weight-bad { color: #B42318; }
+.customer-assumptions .pr-assumption-label { flex: 0 0 auto; max-width: 520px; }
+
 .customer-driver-group { display: flex; flex-direction: column; gap: 0; }
 .customer-driver-group > .payroll-card:first-child { margin-bottom: 0; border-radius: 14px 14px 0 0; }
 .customer-driver-group > .payroll-card:last-child { margin-top: -1px; border-radius: 0 0 14px 14px; }

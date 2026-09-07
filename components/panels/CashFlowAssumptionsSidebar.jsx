@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CF_INFLOW_ACCOUNT_LIST } from '../../lib/cashflow/cashflowData';
 
 // Manual input mode hidden from the UI for now (2026-08-24, Kayee: "you can remove
 // manual input option for now. but we might bring it back so you can just hide this
@@ -119,6 +120,26 @@ export function CashFlowAssumptionsSidebar({
         </div>
 
         <div className="pr-assumption-sidebar-list">
+          {/* Cash IN placement (2026-09-07, Kayee: weekly cash-in "default it to the
+              last day of the month, and then the user would have the ability to adjust
+              which week or which day of the month they will receive the payment").
+              Weekly-only: on the Monthly grid the month IS the placement. The two rows
+              are the CF sheet's own revenue lines, fed by the Customer tab's deals
+              (contract cash → Subscription, success-fee cash → Transaction). Cadence
+              radios are hidden for these — the deal's own payment terms already decide
+              WHICH month the cash arrives; this only picks the week within it. */}
+          {isWeekly && (
+            <TimingSection
+              label="Cash In — which week it lands"
+              accounts={CF_INFLOW_ACCOUNT_LIST}
+              timingByAccount={timingByAccount}
+              onSetTiming={onSetTiming}
+              manualMonths={manualMonths}
+              accrualFor={accrualFor}
+              isWeekly={isWeekly}
+              inflow
+            />
+          )}
           <TimingSection
             label="COGS Outflow"
             accounts={cogsAccounts}
@@ -150,7 +171,7 @@ export function CashFlowAssumptionsSidebar({
  * Any stored entry renders as a card regardless of its mode (even a legacy
  * mode:'followPL' entry from the old UI — never silently drop user data).
  */
-function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMonths, accrualFor, isWeekly }) {
+function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMonths, accrualFor, isWeekly, inflow = false }) {
   const [picking, setPicking] = useState(false);
   // The account just added via the picker starts expanded so the user lands
   // straight in its controls instead of on a collapsed card.
@@ -181,7 +202,9 @@ function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMo
       ) : (
         <>
           <div className="sidebar-section-note">
-            All accounts follow P&amp;L timing unless overridden below.
+            {inflow
+              ? 'Cash in lands on the last day of its month unless a row is overridden below.'
+              : 'All accounts follow P&L timing unless overridden below.'}
           </div>
 
           {configured.map((account) => (
@@ -194,13 +217,14 @@ function TimingSection({ label, accounts, timingByAccount, onSetTiming, manualMo
               accrualFor={accrualFor}
               defaultExpanded={account.id === justAddedId}
               isWeekly={isWeekly}
+              inflow={inflow}
             />
           ))}
 
           {unconfigured.length > 0 &&
             (!picking ? (
               <button type="button" className="pr-schedule-add-link" onClick={() => setPicking(true)}>
-                + Set custom timing…
+                {inflow ? '+ Choose which week…' : '+ Set custom timing…'}
               </button>
             ) : (
               <div className="sidebar-add-picker">
@@ -456,9 +480,39 @@ function timingTag(timing, isWeekly) {
  *  "×" remove), expanding to the Custom interval / Manual input controls. Removing
  *  deletes the account's timing entry entirely, reverting it to the implicit Follow
  *  P&L default. All classes are the existing .sidebar-* set from globals.css. */
-function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrualFor, defaultExpanded, isWeekly }) {
+function AccountTimingCard({ account, timing, onSetTiming, manualMonths, accrualFor, defaultExpanded, isWeekly, inflow = false }) {
   const [expanded, setExpanded] = useState(!!defaultExpanded);
   const mode = timing?.mode || 'followPL';
+
+  // Cash-in rows (2026-09-07): the only choice that applies is WHICH WEEK the month's
+  // cash lands in — the Customer tab's deal terms already fix the month — so the card is
+  // just the header + the week-placement editor, no cadence radios.
+  if (inflow) {
+    return (
+      <div className="sidebar-card">
+        <div className="sidebar-card-header" onClick={() => setExpanded((e) => !e)}>
+          <span className="sidebar-card-label">{account.label}</span>
+          <span className="sidebar-card-value">{weekPlacementSuffix(timing).replace(/^\s*·\s*/, '') || 'Last day of month'}</span>
+          <button
+            type="button"
+            className="sidebar-card-remove"
+            title="Remove — revert to last day of the month"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSetTiming(account.id, null);
+            }}
+          >
+            ×
+          </button>
+        </div>
+        {expanded && (
+          <div className="sidebar-card-body">
+            <PaymentSplitEditor account={account} timing={timing} onSetTiming={onSetTiming} />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   function setMode(nextMode) {
     if (nextMode === 'interval') {

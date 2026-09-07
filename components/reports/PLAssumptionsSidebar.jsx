@@ -28,6 +28,8 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
   // .reports-sidebar) instead of overflowing/clipping past viewport height. Local to
   // this component, not persisted — reopens fresh each time the tab mounts.
   const [revenueOpen, setRevenueOpen] = useState(false);
+  // See the "Deal-driven mode" note in the Revenue card below.
+  const dealDriven = !!revenue?.dealProjection;
   if (collapsed) {
     // Full-height, black/white rail (2026-08-07, Kayee: "make hamburger more obvious
     // because user might miss it") — a lone 28px icon square floating in an otherwise
@@ -120,6 +122,24 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
               needed to see it), and hides the actual add-a-change form behind a
               "+ Schedule a future change" link until it's wanted. See
               RateScheduleControl.jsx for the full reasoning. */}
+          {/* Deal-driven mode (2026-09-07): Subscription / Transaction Revenue and Cost
+              of campaigns now come from the Customer tab's per-deal projection (contract
+              accrual, success-fee accrual, campaign COGS), so the flat-rate fields below
+              would be dead controls — hidden, replaced by a pointer to where the inputs
+              actually live. Risk Buffer still applies on top of the deal total. */}
+          {dealDriven && (
+            <div className="pr-assumption-group">
+              <div className="pr-assumption-group-label">Revenue &amp; Cost of campaigns</div>
+              <div className="sidebar-section-note">
+                Driven by the Customer tab&apos;s deals (Projection → Customer → Customer Revenue Projection):
+                Subscription Revenue = contract accrual, Transaction Revenue = success-fee accrual, Cost of
+                campaigns = campaign COGS accrual. Edit the deals there — this sidebar only keeps the Risk
+                Buffer.
+              </div>
+            </div>
+          )}
+          {!dealDriven && (
+          <>
           <div className="pr-assumption-group">
             <div className="pr-assumption-group-label">Transaction Revenue</div>
             <ScheduledRateField
@@ -165,6 +185,8 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
               onChange={onRevenueChange}
             />
           </div>
+          </>
+          )}
 
           {/* Reinstated 2026-08-10 (Kayee, quoting her real sheet's actual formula:
               "=(Upfront$+Meeting$) - ((Upfront$+Meeting$)*RiskBuffer%)") — this WAS
@@ -190,6 +212,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
               campaign") — Campaign Cost Rate feeds the "Cost of campaigns" COGS line,
               not a revenue line, so it doesn't belong grouped with a revenue rate even
               though it's driven by the same campaign count. */}
+          {!dealDriven && (
           <div className="pr-assumption-group">
             <div className="pr-assumption-group-label">COGS</div>
             <ScheduledRateField
@@ -202,6 +225,7 @@ export function PLAssumptionsSidebar({ collapsed, onToggleCollapse, revenue, cos
               onChange={onRevenueChange}
             />
           </div>
+          )}
 
         </div>
         )}

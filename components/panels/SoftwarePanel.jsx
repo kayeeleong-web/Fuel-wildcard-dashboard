@@ -15,6 +15,8 @@ import {
   makeSoftwareItem,
   makePeriod,
   makePercentPeriod,
+  makeUsagePeriod,
+  makeSeatPeriod,
 } from '../../lib/software/softwareData';
 
 /**
@@ -146,8 +148,15 @@ function driverTermsSummary(item) {
       }
       return `${periods.length} periods`;
     }
-    case 'usage':
+    case 'usage': {
+      const periods = item.usagePeriods || [];
+      if (periods.length === 1) {
+        const p = periods[0];
+        return p.unitRate ? `$${p.unitRate}/${item.unitLabel || 'unit'} × ${Number(p.unitsPerMonth) || 0}/mo` : 'Not set';
+      }
+      if (periods.length > 1) return `${periods.length} periods`;
       return item.unitRate ? `$${item.unitRate}/${item.unitLabel || 'unit'}` : 'Not set';
+    }
     case 'percentRevenue': {
       const periods = item.percentPeriods || [];
       if (periods.length === 1) return `${periods[0].revenuePercent}% of revenue`;
@@ -155,8 +164,13 @@ function driverTermsSummary(item) {
       // Pre-rewrite items that haven't been opened (and so self-healed) yet.
       return item.revenuePercent ? `${item.revenuePercent}% of revenue` : 'Not set';
     }
-    case 'perSeat':
-      return item.seatRate ? `$${item.seatRate}/seat${item.seatDepartment ? ` · ${item.seatDepartment}` : ''}` : 'Not set';
+    case 'perSeat': {
+      const periods = item.seatPeriods || [];
+      const dept = item.seatDepartment ? ` · ${item.seatDepartment}` : '';
+      if (periods.length === 1) return periods[0].seatRate ? `$${periods[0].seatRate}/seat${dept}` : 'Not set';
+      if (periods.length > 1) return `${periods.length} periods${dept}`;
+      return item.seatRate ? `$${item.seatRate}/seat${dept}` : 'Not set';
+    }
     default:
       return '—';
   }
@@ -284,26 +298,97 @@ function PercentPeriodRow({ period, isOnly, onUpdate, onRemove }) {
   );
 }
 
-function UsageEditor({ item, onChange }) {
-  const monthlyPreview = (Number(item.unitRate) || 0) * (Number(item.unitsPerMonth) || 0);
+/** Usage driver's expand panel — period-dated since 2026-09-07 (Kayee: "you didn't do
+ *  that for usage and per seat... I want to have the ability to do that"): the unit label
+ *  is per vendor, but $/unit × units/month is a period list exactly like Fixed's — a
+ *  price or volume change is a second row, visible next to the first. `onChange`
+ *  receives a PATCH object ({ unitLabel } or { usagePeriods }), matching how the panel
+ *  is wired below. */
+function usagePeriodSummaryText(period, unitLabel) {
+  const rate = Number(period.unitRate) || 0;
+  const units = Number(period.unitsPerMonth) || 0;
+  const amt = formatPayrollAmount(rate * units) || '$0';
+  const fromLabel = period.fromMonth ? formatMonthLabel(period.fromMonth) : 'the start';
+  const basis = `$${rate}/${unitLabel || 'unit'} × ${units}/mo = ${amt}/month`;
+  if (!period.toMonth) return `→ ${basis}, from ${fromLabel}, ongoing`;
+  return `→ ${basis}, from ${fromLabel} through ${formatMonthLabel(period.toMonth)}`;
+}
+
+function UsagePeriodRow({ period, unitLabel, isOnly, onUpdate, onRemove }) {
   return (
-    <div className="software-rate-editor">
-      <label className="software-rate-field">
-        <span>Unit label</span>
-        <TextInput value={item.unitLabel} placeholder="e.g. token" onCommit={(v) => onChange({ unitLabel: v })} />
-      </label>
-      <label className="software-rate-field">
-        <span>$ per unit</span>
-        <MonthInput value={item.unitRate} onCommit={(n) => onChange({ unitRate: n })} />
-      </label>
-      <label className="software-rate-field">
-        <span>Units per month</span>
-        <MonthInput value={item.unitsPerMonth} onCommit={(n) => onChange({ unitsPerMonth: n })} />
-      </label>
+    <div className="software-period-row">
+      <div className="software-period-fields">
+        <label className="software-period-field">
+          <span>From</span>
+          <MonthPicker value={period.fromMonth} onCommit={(v) => onUpdate({ fromMonth: v })} />
+        </label>
+        <label className="software-period-field">
+          <span>To</span>
+          <MonthPicker value={period.toMonth} onCommit={(v) => onUpdate({ toMonth: v })} placeholder="Ongoing" />
+        </label>
+        <label className="software-period-field">
+          <span>$ per {unitLabel || 'unit'}</span>
+          <MonthInput value={period.unitRate} onCommit={(n) => onUpdate({ unitRate: n })} />
+        </label>
+        <label className="software-period-field">
+          <span>Units per month</span>
+          <MonthInput value={period.unitsPerMonth} onCommit={(n) => onUpdate({ unitsPerMonth: n })} />
+        </label>
+        <button
+          type="button"
+          className="icon-btn"
+          title={isOnly ? 'A vendor needs at least one period' : 'Remove this period'}
+          onClick={onRemove}
+          disabled={isOnly}
+        >
+          {TRASH_ICON}
+        </button>
+      </div>
+      <div className="software-period-summary">{usagePeriodSummaryText(period, unitLabel)}</div>
+    </div>
+  );
+}
+
+function UsageEditor({ item, onChange }) {
+  const periods = item.usagePeriods || [];
+
+  function updatePeriod(id, patch) {
+    onChange({ usagePeriods: periods.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
+  }
+  function removePeriod(id) {
+    onChange({ usagePeriods: periods.filter((p) => p.id !== id) });
+  }
+  function addPeriod() {
+    const last = periods[periods.length - 1];
+    const fromMonth = last?.toMonth ? nextMonth(last.toMonth, 1) : '';
+    onChange({ usagePeriods: [...periods, makeUsagePeriod({ fromMonth, unitRate: last?.unitRate || 0, unitsPerMonth: last?.unitsPerMonth || 0 })] });
+  }
+
+  return (
+    <div className="software-period-list">
+      <div className="software-rate-editor">
+        <label className="software-rate-field">
+          <span>Unit label</span>
+          <TextInput value={item.unitLabel} placeholder="e.g. token" onCommit={(v) => onChange({ unitLabel: v })} />
+        </label>
+      </div>
+      {periods.map((period) => (
+        <UsagePeriodRow
+          key={period.id}
+          period={period}
+          unitLabel={item.unitLabel}
+          isOnly={periods.length === 1}
+          onUpdate={(patch) => updatePeriod(period.id, patch)}
+          onRemove={() => removePeriod(period.id)}
+        />
+      ))}
+      <button type="button" className="btn btn-xs" onClick={addPeriod}>
+        + Add Period
+      </button>
       <p className="software-editor-hint">
-        {formatPayrollAmount(monthlyPreview) || '$0'} per month at this rate. The same flat unit
-        count applies to every month for now — a per-month-editable usage grid, or deriving units
-        from revenue, is a real follow-up, not built here.
+        Add a period whenever the unit price or the expected volume changes — e.g. $3/token × 500/mo
+        through Feb, then $2.50/token × 800/mo from Mar. Leave "To" blank for a period that&apos;s still
+        ongoing. The month grid above updates as you type.
       </p>
     </div>
   );
@@ -355,20 +440,87 @@ function PercentRevenueEditor({ item, onChange }) {
   );
 }
 
-function PerSeatEditor({ item, onChange }) {
+/** Per Seat driver's expand panel — period-dated $/seat since 2026-09-07 (same ask as
+ *  Usage: "per seat could be $200 from January to February, could be $250 for March to
+ *  April"). Department stays per vendor (it decides WHICH roster rows count as seats);
+ *  only the rate is a period list. */
+function seatPeriodSummaryText(period) {
+  const rate = formatPayrollAmount(period.seatRate) || '$0';
+  const fromLabel = period.fromMonth ? formatMonthLabel(period.fromMonth) : 'the start';
+  if (!period.toMonth) return `→ ${rate}/seat/month, from ${fromLabel}, ongoing`;
+  return `→ ${rate}/seat/month, from ${fromLabel} through ${formatMonthLabel(period.toMonth)}`;
+}
+
+function SeatPeriodRow({ period, isOnly, onUpdate, onRemove }) {
   return (
-    <div className="software-rate-editor">
-      <label className="software-rate-field">
-        <span>$ per seat</span>
-        <MonthInput value={item.seatRate} onCommit={(n) => onChange({ seatRate: n })} />
-      </label>
-      <label className="software-rate-field">
-        <span>Department</span>
-        <PickerInput value={item.seatDepartment} options={DEPARTMENT_OPTIONS} placeholder="Department" onCommit={(v) => onChange({ seatDepartment: v })} />
-      </label>
+    <div className="software-period-row">
+      <div className="software-period-fields">
+        <label className="software-period-field">
+          <span>From</span>
+          <MonthPicker value={period.fromMonth} onCommit={(v) => onUpdate({ fromMonth: v })} />
+        </label>
+        <label className="software-period-field">
+          <span>To</span>
+          <MonthPicker value={period.toMonth} onCommit={(v) => onUpdate({ toMonth: v })} placeholder="Ongoing" />
+        </label>
+        <label className="software-period-field">
+          <span>$ per seat / month</span>
+          <MonthInput value={period.seatRate} onCommit={(n) => onUpdate({ seatRate: n })} />
+        </label>
+        <button
+          type="button"
+          className="icon-btn"
+          title={isOnly ? 'A vendor needs at least one period' : 'Remove this period'}
+          onClick={onRemove}
+          disabled={isOnly}
+        >
+          {TRASH_ICON}
+        </button>
+      </div>
+      <div className="software-period-summary">{seatPeriodSummaryText(period)}</div>
+    </div>
+  );
+}
+
+function PerSeatEditor({ item, onChange }) {
+  const periods = item.seatPeriods || [];
+
+  function updatePeriod(id, patch) {
+    onChange({ seatPeriods: periods.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
+  }
+  function removePeriod(id) {
+    onChange({ seatPeriods: periods.filter((p) => p.id !== id) });
+  }
+  function addPeriod() {
+    const last = periods[periods.length - 1];
+    const fromMonth = last?.toMonth ? nextMonth(last.toMonth, 1) : '';
+    onChange({ seatPeriods: [...periods, makeSeatPeriod({ fromMonth, seatRate: last?.seatRate || 0 })] });
+  }
+
+  return (
+    <div className="software-period-list">
+      <div className="software-rate-editor">
+        <label className="software-rate-field">
+          <span>Department</span>
+          <PickerInput value={item.seatDepartment} options={DEPARTMENT_OPTIONS} placeholder="Department" onCommit={(v) => onChange({ seatDepartment: v })} />
+        </label>
+      </div>
+      {periods.map((period) => (
+        <SeatPeriodRow
+          key={period.id}
+          period={period}
+          isOnly={periods.length === 1}
+          onUpdate={(patch) => updatePeriod(period.id, patch)}
+          onRemove={() => removePeriod(period.id)}
+        />
+      ))}
+      <button type="button" className="btn btn-xs" onClick={addPeriod}>
+        + Add Period
+      </button>
       <p className="software-editor-hint">
-        Counts active Payroll roster rows in this department each month — ramp hires count
-        fractionally as they ramp up, same as everywhere else headcount is used.
+        Seats = active Payroll roster rows in this department each month (ramp hires count as they
+        ramp up). Add a period whenever the per-seat price changes — e.g. $200/seat through Feb, then
+        $250/seat from Mar. Leave "To" blank for a period that&apos;s still ongoing.
       </p>
     </div>
   );
@@ -570,6 +722,17 @@ export function SoftwarePanel({ glCash, glAccrued, assumptionsCtl, payrollCtl })
         ...item,
         percentPeriods: [makePercentPeriod({ fromMonth: currentIsoMonth(), revenuePercent: Number(item.revenuePercent) || 0 })],
       };
+    }
+    // Same render-time self-heal for Usage / Per Seat (2026-09-07 period rewrite) —
+    // seeded from the old flat fields so an existing vendor opens with its number intact.
+    if (item.driverType === 'usage' && (!item.usagePeriods || !item.usagePeriods.length)) {
+      item = {
+        ...item,
+        usagePeriods: [makeUsagePeriod({ fromMonth: item.unitRate || item.unitsPerMonth ? '' : currentIsoMonth(), unitRate: Number(item.unitRate) || 0, unitsPerMonth: Number(item.unitsPerMonth) || 0 })],
+      };
+    }
+    if (item.driverType === 'perSeat' && (!item.seatPeriods || !item.seatPeriods.length)) {
+      item = { ...item, seatPeriods: [makeSeatPeriod({ fromMonth: item.seatRate ? '' : currentIsoMonth(), seatRate: Number(item.seatRate) || 0 })] };
     }
     const isExpanded = expandedIds.has(item.id);
     let expandedContent = null;

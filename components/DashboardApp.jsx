@@ -62,36 +62,43 @@ export function DashboardApp({ clientName, initialActiveTab, kpiData, dashboardS
   return (
     <div className="app-shell">
       <Topbar clientName={clientName} onLogoClick={() => changeTab('kpi')} />
-      <TabNav activeTab={activeTab} onChange={changeTab} reportsCount={customReportsList.length + 3} />
 
-      <div className="page">
-        {/* Every panel below stays mounted regardless of activeTab (see file header) —
-            each one is wrapped in its own PanelErrorBoundary so a crash rendering ONE
-            tab (e.g. from stale/incompatible saved localStorage data on Payroll or
-            Assumptions) can never take down every other tab too (2026-08-06). */}
-        <section className={`panel-view${activeTab === 'kpi' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="KPI Report">
-            <KPIReportPanel kpiData={kpiData} />
-          </PanelErrorBoundary>
-        </section>
+      {/* The rail and the page are one row now (2026-08-27, matching Sasha's new-template
+          style) — they share `.shell` so the rail can be sticky against the topbar while
+          the page scrolls past it, and on a narrow screen the same container lays them
+          back out one above the other (see the 900px media query in globals.css). */}
+      <div className="shell">
+        <TabNav activeTab={activeTab} onChange={changeTab} reportsCount={customReportsList.length + 3} />
 
-        <section className={`panel-view${activeTab === 'dashboard' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="Dashboard">
-            <DashboardPanel summary={dashboardSummary} plStatement={statements.PL} kpiData={kpiData} />
-          </PanelErrorBoundary>
-        </section>
+        <div className="page">
+          {/* Every panel below stays mounted regardless of activeTab (see file header) —
+              each one is wrapped in its own PanelErrorBoundary so a crash rendering ONE
+              tab (e.g. from stale/incompatible saved localStorage data on Payroll or
+              Assumptions) can never take down every other tab too (2026-08-06). */}
+          <section className={`panel-view${activeTab === 'kpi' ? ' active' : ''}`}>
+            <PanelErrorBoundary name="KPI Report">
+              <KPIReportPanel kpiData={kpiData} />
+            </PanelErrorBoundary>
+          </section>
 
-        <section className={`panel-view${activeTab === 'reports' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="Reports">
-            <ReportsPanel statements={statements} customReports={customReportsList} mode="actual" />
-          </PanelErrorBoundary>
-        </section>
+          <section className={`panel-view${activeTab === 'dashboard' ? ' active' : ''}`}>
+            <PanelErrorBoundary name="Dashboard">
+              <DashboardPanel summary={dashboardSummary} plStatement={statements.PL} kpiData={kpiData} />
+            </PanelErrorBoundary>
+          </section>
 
-        <section className={`panel-view${activeTab === 'projection' ? ' active' : ''}`}>
-          <PanelErrorBoundary name="Projection">
-            <ProjectionPanel statements={statements} customReports={customReportsList} glCash={glCash} glAccrued={glAccrued} />
-          </PanelErrorBoundary>
-        </section>
+          <section className={`panel-view${activeTab === 'reports' ? ' active' : ''}`}>
+            <PanelErrorBoundary name="Reports">
+              <ReportsPanel statements={statements} customReports={customReportsList} mode="actual" />
+            </PanelErrorBoundary>
+          </section>
+
+          <section className={`panel-view${activeTab === 'projection' ? ' active' : ''}`}>
+            <PanelErrorBoundary name="Projection">
+              <ProjectionPanel statements={statements} customReports={customReportsList} glCash={glCash} glAccrued={glAccrued} />
+            </PanelErrorBoundary>
+          </section>
+        </div>
       </div>
 
       <Footer />

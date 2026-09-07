@@ -99,6 +99,17 @@ that day comes; it requires a dedicated domain per app and is not set up by defa
   existing local data migrates UP automatically (remote wins thereafter; last write
   wins on save). The derived `CUSTOMER_INFLOW_STORAGE_KEY` handoff deliberately stays
   localStorage-only — it's a recomputed cache, not source data.
+- 2026-09-07: the Customer tab's planning store is now ONE deal list
+  (`fuel_wildcard_customer_deals_v1`, `lib/deals/useDealsState.js`) — the deal-based
+  revenue projection ported from Kayee's Google Sheet model (per-deal Contract Accrual/
+  Cash, Success Fee Accrual/Cash, Campaign COGS Accrual/Cash; fields default from the
+  CSM/Slurp Bot record with in-tab overrides; "+2 months" recognition extension; per-term
+  campaign-cash % table). It replaces the old planned-customer + campaigns/meetings
+  driver stores. Its computed totals land in `fuel_wildcard_deal_projection_v1`
+  (localStorage-only cache, same rule as above); ReportsPanel attaches that to
+  `revenue.dealProjection`, which every P&L/CF revenue + Cost-of-campaigns driver in
+  `lib/assumptions/assumptionsData.js` reads first. With zero deals saved the legacy
+  flat-rate model still drives the P&L, so nothing goes blank before the CSM feed lands.
 
 ## Deployment & domain
 

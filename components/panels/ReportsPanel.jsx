@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { DrillPopover } from '../ui/DrillPopover';
 import { MonthInput } from '../payroll/PayrollTable';
 import { PLAssumptionsSidebar } from '../reports/PLAssumptionsSidebar';
@@ -19,9 +19,11 @@ import {
   extendWeeksThrough,
   primaryMonthForWeek,
   placementMonthForWeek,
+  normalizedWeekPlacements,
   cashOutflowForWeek,
   weekRangeLabel,
 } from '../../lib/cashflow/weeklyCashProjection';
+import { CF_INFLOW_ACCOUNTS } from '../../lib/cashflow/cashflowData';
 import {
   headcountCostByCostType,
   headcountSalariesByCostType,
@@ -40,6 +42,7 @@ import {
   costItemsTotalForMonth,
   costItemAmountForMonth,
   toggleCampaignActualOverride,
+  isDealDriven,
   generateId,
 } from '../../lib/assumptions/assumptionsData';
 
@@ -341,6 +344,32 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
     setCustomerInflow(readCustomerInflowTotals());
   }, []);
 
+  // DEAL-DRIVEN P&L (2026-09-07, Kayee: "contract accrual will be the subscription
+  // revenue, success fee accrual will be transaction revenue... bring that result into
+  // our P&L and cash flow projections"). When the Customer tab has saved its deal
+  // projection (version-3 handoff — see lib/deals), attach it to the revenue object the
+  // whole projection pipeline reads; every revenue/COGS driver in assumptionsData.js
+  // checks `revenue.dealProjection` first. The attached copy is stripped again before
+  // anything is written back to Assumptions storage (setAssumptionsStateClean below) —
+  // it's a derived cache, not a setting.
+  const dealProjection = customerInflow?.version === 3 ? customerInflow : null;
+  const assumptionsStateWithDeals = useMemo(() => {
+    if (!assumptionsState || !dealProjection) return assumptionsState;
+    return { ...assumptionsState, revenue: { ...(assumptionsState.revenue || {}), dealProjection } };
+  }, [assumptionsState, dealProjection]);
+  const setAssumptionsStateClean = useCallback(
+    (next) => {
+      const strip = (s) => {
+        if (!s || !s.revenue || !('dealProjection' in s.revenue)) return s;
+        const { dealProjection: _dp, ...revenue } = s.revenue;
+        return { ...s, revenue };
+      };
+      if (typeof next === 'function') setAssumptionsState((prev) => strip(next(prev)));
+      else setAssumptionsState(strip(next));
+    },
+    [setAssumptionsState]
+  );
+
   // The COGS/OpEx account lists the CF sidebar shows timing controls for — the actual
   // chart-of-account rows from the live P&L statement (plus Payroll's injected COGS
   // headcount line and any user-added manual P&L accounts).
@@ -352,7 +381,7 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
   // Context for computing one account's projected P&L accrual in a forecast month —
   // the same hydrated Assumptions + Payroll state the P&L projection pipeline reads.
   const cfAccrualCtx = {
-    revenue: assumptionsHydrated ? assumptionsState?.revenue : null,
+    revenue: assumptionsHydrated ? assumptionsStateWithDeals?.revenue : null,
     costItems: assumptionsHydrated ? assumptionsState?.costItems || [] : [],
     payrollState: cfPayrollHydrated ? cfPayrollState : null,
     sbSection: expenseAccounts.sbSection,
@@ -474,10 +503,10 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
               <PLAssumptionsSidebar
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-                revenue={assumptionsHydrated ? assumptionsState?.revenue : null}
+                revenue={assumptionsHydrated ? assumptionsStateWithDeals?.revenue : null}
                 costItems={assumptionsHydrated ? assumptionsState?.costItems : null}
-                onRevenueChange={(revenue) => assumptionsState && setAssumptionsState({ ...assumptionsState, revenue })}
-                onCostItemsChange={(costItems) => assumptionsState && setAssumptionsState({ ...assumptionsState, costItems })}
+                onRevenueChange={(revenue) => assumptionsState && setAssumptionsStateClean({ ...assumptionsState, revenue })}
+                onCostItemsChange={(costItems) => assumptionsState && setAssumptionsStateClean({ ...assumptionsState, costItems })}
                 costItemOrder={costItemOrder}
               />
             ) : reportType === 'CF' || reportType === 'WeeklyCF' ? (
@@ -535,8 +564,8 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
               <StatementDoc
                 statement={statements[reportType]}
                 range={range}
-                assumptionsState={assumptionsState}
-                setAssumptionsState={setAssumptionsState}
+                assumptionsState={assumptionsStateWithDeals}
+                setAssumptionsState={setAssumptionsStateClean}
                 assumptionsHydrated={assumptionsHydrated}
                 mode={mode}
                 // Weekly CF's own actual/forecast boundary (2026-08-24, Kayee: "it
@@ -1299,6 +1328,9 @@ function buildDriverRow(key, label, section, months, lastActualIndex, getValue, 
  *  ROWS exist. */
 function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCampaign, onToggleCampaignOverride) {
   if (!revenue || !onSetCampaign) return rows;
+  // Deal-driven mode (2026-09-07): campaign counts are the sum of every active deal's
+  // campaigns/month over its term (Customer tab) — shown here read-only, like meetings.
+  const dealDriven = isDealDriven(revenue);
   let next = rows;
   const subRow = next.find((r) => r.key === 'revenue_subscription_revenue');
   const txRow = next.find((r) => r.key === 'revenue_transaction_revenue');
@@ -1311,9 +1343,9 @@ function withRevenueDriverRows(rows, months, lastActualIndex, revenue, onSetCamp
       months,
       lastActualIndex,
       (iso) => campaignsForMonth(revenue, iso),
-      onSetCampaign,
-      revenue.campaignActualOverrides,
-      onToggleCampaignOverride
+      dealDriven ? null : onSetCampaign,
+      dealDriven ? undefined : revenue.campaignActualOverrides,
+      dealDriven ? undefined : onToggleCampaignOverride
     );
     next = [...next.slice(0, idx + 1), driverRow, ...next.slice(idx + 1)];
   }
@@ -1804,24 +1836,34 @@ function withCashFlowProjectionRows(rows, months, lastActualIndex, cfProjection)
  *  entire months of revenue. Now uses placementMonthForWeek to find the right month
  *  directly instead of assuming the week's majority-owner month is the right one. */
 function withWeeklyCFRevenueInflowRows(rows, weeks, lastActualIndex, cfProjection) {
-  const { accrualCtx, customerInflow } = cfProjection;
+  const { accrualCtx, customerInflow, timingByAccount } = cfProjection;
   const forecastWeeks = weeks.slice(lastActualIndex + 1);
   if (forecastWeeks.length === 0) return rows;
 
   return rows.map((row) => {
     if (row.isTotal) return row;
-    const formula = CF_REVENUE_ROW_FORMULAS[String(row.label ?? '').trim()];
+    const label = String(row.label ?? '').trim();
+    const formula = CF_REVENUE_ROW_FORMULAS[label];
     if (!formula) return row;
+    // 2026-09-07: which week a month's cash-in lands in is now adjustable per revenue
+    // row from the Weekly CF sidebar (CF_INFLOW_ACCOUNTS), exactly like the expense
+    // accounts — normalizedWeekPlacements gives [{ day: null, pct: 1 }] (last day of the
+    // month) when nothing has been configured, so the default behavior is unchanged.
+    const inflowAccount = CF_INFLOW_ACCOUNTS[label];
+    const placements = normalizedWeekPlacements(inflowAccount ? timingByAccount?.[inflowAccount.id] : null);
+    const monthValue = (month) => {
+      const fromCustomer = customerInflow?.[formula.customerField]?.[month];
+      return fromCustomer != null ? fromCustomer : accrualCtx?.revenue ? formula.fallback(accrualCtx.revenue, month) || 0 : 0;
+    };
     const values = { ...row.values };
     for (const weekIso of forecastWeeks) {
-      const month = placementMonthForWeek(weekIso, null);
-      if (month == null) {
-        values[weekIso] = 0;
-        continue;
+      let sum = 0;
+      for (const { day, pct } of placements) {
+        const month = placementMonthForWeek(weekIso, day);
+        if (month == null) continue;
+        sum += monthValue(month) * pct;
       }
-      const fromCustomer = customerInflow?.[formula.customerField]?.[month];
-      values[weekIso] =
-        fromCustomer != null ? fromCustomer : accrualCtx?.revenue ? formula.fallback(accrualCtx.revenue, month) || 0 : 0;
+      values[weekIso] = sum;
     }
     return { ...row, values };
   });

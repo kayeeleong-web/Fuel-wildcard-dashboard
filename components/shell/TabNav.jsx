@@ -1,10 +1,17 @@
 'use client';
 
 /**
- * Tab navigation — design-rules.md §2 / functionality-spec.md §2.
+ * Left sidebar nav — design-rules.md §2 / functionality-spec.md §2.
  * Click hides every panel, shows the one matching the tab id — no page reload, no
  * data refetch (all data for all tabs is fetched once, server-side, in app/page.js
  * and passed down as props to every panel regardless of which is visible).
+ *
+ * A LEFT RAIL, NOT A STRIP ACROSS THE TOP (2026-08-27, ported from Sasha's new dashboard
+ * template shown at today's product workshop). Renders as `.sidenav`, a sticky column
+ * sitting beside `.page` inside the shared `.shell` flex row (see DashboardApp.jsx) instead
+ * of a floating pill strip above it — same 4 tabs, same click behavior, different chrome.
+ * Below 900px it lies back down into a horizontally-scrolling row (see the media query in
+ * globals.css) rather than eating most of a phone screen as a fixed column.
  */
 const TABS = [
   {
@@ -59,22 +66,22 @@ const TABS = [
 
 export function TabNav({ activeTab, onChange, reportsCount }) {
   return (
-    <div className="tabnav-wrap">
-      <div className="tabnav">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            className={tab.id === activeTab ? 'active' : undefined}
-            onClick={() => onChange(tab.id)}
-          >
-            {tab.icon}
-            {tab.label}
-            {tab.countKey && typeof reportsCount === 'number' && (
-              <span className="count">{reportsCount}</span>
-            )}
-          </button>
-        ))}
-      </div>
-    </div>
+    <nav className="sidenav" aria-label="Reports">
+      {TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          className={tab.id === activeTab ? 'active' : undefined}
+          aria-current={tab.id === activeTab ? 'page' : undefined}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.icon}
+          <span className="sidenav-label">{tab.label}</span>
+          {tab.countKey && typeof reportsCount === 'number' && (
+            <span className="count">{reportsCount}</span>
+          )}
+        </button>
+      ))}
+    </nav>
   );
 }
