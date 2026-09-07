@@ -8,6 +8,13 @@ import { DealProjectionSection } from '../customer/DealProjectionSection';
 import { useDealsState } from '../../lib/deals/useDealsState';
 import { currentIsoMonth, formatMonthLabel, formatPayrollAmount, monthsForRange } from '../../lib/payroll/payrollData';
 
+// 2026-09-07 (Kayee: "you can remove this section... put it in the backend if we need
+// it we will bring it back") — the Current Customers GL waterfall is hidden from the
+// UI, not deleted: all the code below (WaterfallTable, the cash/accrued waterfall
+// builders, the section's own toggles) stays intact and working. Flip this back to
+// true to restore it exactly as it was, no rebuilding needed.
+const SHOW_CURRENT_CUSTOMERS_SECTION = false;
+
 /**
  * Customer Cash Flow tab — part of Projection (2026-08-17, Kayee: "let's build a
  * customer tab just like payroll inside of projection... i want to see the flow like
@@ -166,6 +173,7 @@ export function CustomerPanel({ glCash, glAccrued, dealsCtl }) {
     <>
       <div className="page-wide">
         {/* -------------------------- Current Customers -------------------------- */}
+        {SHOW_CURRENT_CUSTOMERS_SECTION && (
         <CollapsibleSection
           title="Current Customers"
           subtitle="Waterfall by start month — Cash (received) or Accrued (recognized) · GL accounts 4xxxx"
@@ -232,8 +240,9 @@ export function CustomerPanel({ glCash, glAccrued, dealsCtl }) {
             />
           )}
         </CollapsibleSection>
+        )}
 
-        <div style={{ height: 20 }} />
+        {SHOW_CURRENT_CUSTOMERS_SECTION && <div style={{ height: 20 }} />}
 
         {/* ---------------------- Customer Revenue Projection ---------------------- */}
         <CollapsibleSection
