@@ -299,7 +299,11 @@ export function ReportsPanel({ statements, customReports, mode = 'actual', fixed
     setState: setAssumptionsState,
     hydrated: assumptionsHydrated,
   } = assumptionsCtl;
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Defaults COLLAPSED (2026-09-07, Kayee: "keep all of the assumption on each tab to
+  // be automatically default to collapse") — reverses the 2026-08-20 "don't default to
+  // collapse" call; the P&L table itself is what people land on now, with Assumptions
+  // one click away via the hamburger rail rather than open by default.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // Cash Flow timing state (2026-08-18 rebuild) — per-P&L-account cash-timing config
   // (Follow P&L / custom interval / manual), persisted to localStorage via the same

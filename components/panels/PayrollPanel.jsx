@@ -41,9 +41,11 @@ export function PayrollPanel({ payrollCtl }) {
 
   // Sidebar mirrors the Reports/P&L merged-Assumptions pattern (2026-08-10, Kayee: "in
   // the payroll tab move the payroll assumption to the left just like the p&l with a
-  // hamburger") — defaults open, collapses to a slim rail via the same
-  // .payroll-sidebar-rail chrome as .reports-sidebar-rail.
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // hamburger") — collapses to a slim rail via the same .payroll-sidebar-rail chrome
+  // as .reports-sidebar-rail. Defaults COLLAPSED (2026-09-07, Kayee: "keep all of the
+  // assumption on each tab to be automatically default to collapse"), matching
+  // ReportsPanel's same change.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // 2026-08-10, Kayee: "give me a hide button also for [older years] so that now I
   // only see 2026 to 2028... that button work in sync for all sections in payroll as
