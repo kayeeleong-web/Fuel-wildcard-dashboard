@@ -116,7 +116,13 @@ export function DashboardApp({ clientName, initialActiveTab, initialNavCollapsed
 
           <section className={`panel-view${activeTab === 'projection' ? ' active' : ''}`}>
             <PanelErrorBoundary name="Projection">
-              <ProjectionPanel statements={statements} customReports={customReportsList} glCash={glCash} glAccrued={glAccrued} />
+              <ProjectionPanel
+                statements={statements}
+                customReports={customReportsList}
+                glCash={glCash}
+                glAccrued={glAccrued}
+                isActive={activeTab === 'projection'}
+              />
             </PanelErrorBoundary>
           </section>
         </div>

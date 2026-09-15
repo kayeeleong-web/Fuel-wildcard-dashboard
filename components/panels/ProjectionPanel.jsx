@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { TOPBAR_SLOT_ID } from '../shell/Topbar';
 import { ReportsPanel } from './ReportsPanel';
 import { PayrollPanel } from './PayrollPanel';
 import { CustomerPanel } from './CustomerPanel';
@@ -37,7 +39,7 @@ const SUB_TAB_IDS = SUB_TABS.map((t) => t.id);
  * of the P&L view). Always opens on 'pl'; switching sub-tabs during a session still
  * works exactly the same, it just isn't persisted anymore.
  */
-export function ProjectionPanel({ statements, customReports, glCash, glAccrued }) {
+export function ProjectionPanel({ statements, customReports, glCash, glAccrued, isActive = true }) {
   const [projectionSubTab, setProjectionSubTab] = useState('pl');
 
   // Cash Flow granularity toggle (2026-08-24, Kayee: "keep one tab for cash flow...
@@ -92,8 +94,30 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
     setProjectionSubTab(tab);
   }
 
+  // Save button lives in the sticky black Topbar now (2026-09-15, Kayee: "when I scroll
+  // down, the save button at the top got hidden... move it next to FM on the black bar
+  // so it wouldn't get scrolled away"). Rendered via a portal into Topbar's slot element
+  // — looked up after mount (the slot doesn't exist during SSR), and only while THIS
+  // panel is the visible tab (every panel stays mounted, hidden by CSS, so without the
+  // isActive gate the Save button would show on KPI/Dashboard/Reports too).
+  const [topbarSlot, setTopbarSlot] = useState(null);
+  useEffect(() => {
+    setTopbarSlot(document.getElementById(TOPBAR_SLOT_ID));
+  }, []);
+  const saveBlock = (
+    <div className="report-save-block topbar-save">
+      {saveHandleForSubTab.lastSavedAt != null && (
+        <span className="report-saved-note">Saved {new Date(saveHandleForSubTab.lastSavedAt).toLocaleTimeString()}</span>
+      )}
+      <button type="button" className="btn" onClick={saveHandleForSubTab.saveNow} title="Save this tab's entries now">
+        Save
+      </button>
+    </div>
+  );
+
   return (
     <>
+      {isActive && topbarSlot && createPortal(saveBlock, topbarSlot)}
       {/* Sub-tab navigation — local to this panel only, separate from the main
           TabNav in the shell. Clicking "Reports" in the main bar entirely hides
           this panel and switches to actual-data-only view. */}
@@ -157,14 +181,9 @@ export function ProjectionPanel({ statements, customReports, glCash, glAccrued }
               THAT tab's own persisted state via saveHandleForSubTab above. Customer's
               handle flushes both of its stores (planned customers + driver grids) in
               one click. */}
-          <div className="report-save-block">
-            {saveHandleForSubTab.lastSavedAt != null && (
-              <span className="report-saved-note">Saved {new Date(saveHandleForSubTab.lastSavedAt).toLocaleTimeString()}</span>
-            )}
-            <button type="button" className="btn" onClick={saveHandleForSubTab.saveNow} title="Force-save this tab's entries to this browser now">
-              Save
-            </button>
-          </div>
+          {/* Fallback only: if the Topbar slot isn't available (portal not mounted yet),
+              keep the Save block here so the control never silently disappears. */}
+          {!(isActive && topbarSlot) && saveBlock}
         </div>
       </div>
 

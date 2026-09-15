@@ -124,6 +124,12 @@ a {
 .crumb .name { font-size: 13px; color: var(--on-black-muted); }
 .crumb .name b { color: #fff; font-weight: 600; }
 .top-actions { display: flex; align-items: center; gap: 12px; }
+/* Portal slot for the Projection Save button (2026-09-15) — sits left of the avatar. */
+.topbar-slot { display: flex; align-items: center; }
+.topbar-slot:empty { display: none; }
+.topbar-save .report-saved-note { color: var(--on-black-muted); }
+.topbar-save .btn { background: #fff; color: var(--black); border-color: #fff; }
+.topbar-save .btn:hover { background: #f1f1f1; }
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; background: var(--green);
   display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #06210F;
