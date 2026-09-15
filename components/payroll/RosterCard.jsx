@@ -523,6 +523,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       subtitle={`${uniquePeopleCount} people`}
       tintForecast={false}
       frozenColumns={frozenColumns}
+      defaultCollapsed
       months={months}
       todayIso={todayIso}
       totalRow={totalRow}

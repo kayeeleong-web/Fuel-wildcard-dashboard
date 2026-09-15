@@ -1380,7 +1380,7 @@ tbody tr.total td.pr-fcst { background: var(--table-chrome); border-top-color: v
 }
 .payroll-card-head {
   width: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  background: var(--table-chrome); color: #fff; padding: 13px 18px;
+  background: var(--table-chrome); color: #fff; padding: 6px 16px;
 }
 /* Every black card header bar renders the SAME height, button or no button
    (2026-08-20, Kayee, comparing Employees/Bonus/Hiring Plan/Bonus collapsed bars:
@@ -1390,7 +1390,9 @@ tbody tr.total td.pr-fcst { background: var(--table-chrome); border-top-color: v
    (2) every header control (+ Add Employee / + Add Role .btn, the "+ Add bonus
    for…" select) shrunk to the title's own line height so it stops stretching its
    bar taller than the rest. */
-.payroll-card-head { min-height: 46px; box-sizing: border-box; }
+.payroll-card-head { min-height: 38px; box-sizing: border-box; } /* 46 → 38 (2026-09-15, Kayee: card bars a little smaller than the outer Existing/Planned bars, which are 44) */
+.payroll-card-head .seg { padding: 2px; }
+.payroll-card-head .seg button { padding: 4px 12px; font-size: 11px; }
 .payroll-card-head .btn { padding: 3px 10px; font-size: 11px; white-space: nowrap; }
 .payroll-card-head .pr-input.pr-add-bonus { padding: 3px 10px; font-size: 11px; height: auto; }
 .payroll-card-title-btn {

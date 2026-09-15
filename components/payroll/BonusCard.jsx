@@ -282,6 +282,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
       } · milestone hit rate ${assumptions.milestoneHitRate == null ? 90 : assumptions.milestoneHitRate}%`}
       tintForecast={false}
       frozenColumns={frozenColumns}
+      defaultCollapsed
       months={months}
       todayIso={todayIso}
       totalRow={totalRow}
