@@ -24,7 +24,7 @@
   --black: #0A0A0A;
   /* Table chrome (2026-09-15, Kayee: "the black is a little too stark... a very dark gray for
      everything" — column headers, Total rows, card heads; the topbar/toggles stay --black). */
-  --table-chrome: #262626;
+  --table-chrome: #2E2E2E;
   --black-2: #161616;
   --on-black-muted: rgba(255, 255, 255, .55);
   --on-black-border: rgba(255, 255, 255, .12);
