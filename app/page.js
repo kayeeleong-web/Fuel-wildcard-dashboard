@@ -57,8 +57,17 @@ export default async function HomePage() {
   // Reading the last-active tab from a cookie here instead means the server itself
   // already knows which tab to render on the very first response — no wrong tab is
   // ever painted, so there's nothing to flash away from.
-  const savedTab = (await cookies()).get(ACTIVE_TAB_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const savedTab = cookieStore.get(ACTIVE_TAB_COOKIE)?.value;
   const initialActiveTab = VALID_TABS.includes(savedTab) ? savedTab : 'kpi';
+  // Sidenav collapsed state (2026-09-15, Kayee: "the sidebar is taking up some real
+  // estate... precious space") — same cookie-not-localStorage reasoning as the active
+  // tab above, so the rail renders in the right width on the very first paint. Default
+  // is COLLAPSED (icon rail) when no cookie is set: the wide Projection tables are
+  // where the horizontal room actually matters, and the 4 icons are self-explanatory
+  // with the hover tooltips TabNav adds.
+  const savedNav = cookieStore.get('fuel_wildcard_nav_collapsed')?.value;
+  const initialNavCollapsed = savedNav == null ? true : savedNav === '1';
 
   const source = getDataSource();
 
@@ -79,6 +88,7 @@ export default async function HomePage() {
     <DashboardApp
       clientName={clientConfig.name}
       initialActiveTab={initialActiveTab}
+      initialNavCollapsed={initialNavCollapsed}
       kpiData={kpiData}
       dashboardSummary={dashboardSummary}
       statements={{ PL: pl, CF: cf, BS: bs, WeeklyCF: weeklyCf }}

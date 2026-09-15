@@ -66,6 +66,15 @@ export function PayrollAssumptionsSidebar({ collapsed, onToggleCollapse, assumpt
               value={assumptions.bonusAttainment}
               onCommit={(v) => setField('bonusAttainment', v)}
             />
+            {/* 2026-09-15 — % of coordinators expected to hit their campaign milestone
+                in a given month (Hannah: "90% is a fair buffer"). Only affects
+                'Campaign milestone' bonus plans; Bonus Attainment above still governs
+                the fixed-annual plans. */}
+            <AssumptionField
+              label="Milestone Hit Rate"
+              value={assumptions.milestoneHitRate == null ? 90 : assumptions.milestoneHitRate}
+              onCommit={(v) => setField('milestoneHitRate', v)}
+            />
             <AssumptionField
               label="Yrly Merit Increase"
               value={assumptions.yearlyMeritIncrease}

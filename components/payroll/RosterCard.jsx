@@ -9,33 +9,44 @@ import {
   generateId,
   monthlyCostFor,
 } from '../../lib/payroll/payrollData';
-import { DateInput, FillRangeButton, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
+import { DateInput, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
 // Narrowed across the board (2026-08-17, Kayee: "i can only see one month... push
 // the width to further both side") — these 9 frozen columns alone used to run
 // ~1154px before a single month column started; trimmed to ~1020px so more months
 // fit in view, combined with the wider .page-wide cap in globals.css.
+// Frozen block slimmed from ~1150px to 600px (2026-09-15, Kayee: "the whole control
+// section is too long, the monthly section is really small space for me to look at
+// things... simplify it but don't make it so annoying"). Only what you read at a
+// glance stays frozen — Name, Base Salary, and a one-line read-only summary of the
+// rest (title · CoGS/OpEx · dates). Everything editable beyond the name and base
+// (department, CoGS/OpEx + % split, title, start/end date, employment) lives in a
+// full-width "Details" panel that opens UNDER the row (the pencil button), using the
+// same isExpanded/expandedContent mechanism the Software tab's Planning table added
+// on 2026-08-27 — so the date inputs finally have room to show the full year too.
 const FROZEN_COLUMNS = [
-  // Widened 64 -> 100 (2026-08-20, Kayee: "is there an option to delete? i added a
-  // few rows but i dont need all three") — a full (non-child, non-grouped) row packs
-  // 3 icon buttons in here (drag handle, fill-range, trash), each 28px wide with 4px
-  // gaps = 92px of icons alone; 64px was clipping the trash button off the edge of
-  // this sticky column, making "Remove from roster" invisible even though the button
-  // (and its onClick) was there all along.
   { key: 'actions', label: '', width: 100 },
-  { key: 'name', label: 'Name', width: 200 },
-  { key: 'department', label: 'Department', width: 105 },
-  { key: 'costType', label: 'CoGS or OpEx?', width: 90 },
-  // % CoGS split (2026-09-15, per the Sept 10 Wildcard sync) — only meaningfully
-  // editable when costType is 'CoGS' (a pure OpEx row is fixed at 0%); lets a role
-  // like Designer be entered as 75% CoGS / 25% OpEx instead of one flat bucket.
-  { key: 'cogsPercent', label: '% CoGS', width: 76, align: 'right' },
-  { key: 'title', label: 'Title', width: 140 },
-  { key: 'startDate', label: 'Start Date', width: 110 },
-  { key: 'endDate', label: 'End Date', width: 110 },
-  { key: 'employment', label: 'Employment', width: 90 },
-  { key: 'baseSalary', label: 'Base Salaries', width: 105, align: 'right' },
+  { key: 'name', label: 'Name', width: 190 },
+  { key: 'baseSalary', label: 'Base Salary', width: 100, align: 'right' },
+  { key: 'summary', label: 'Role · Type · Dates', width: 210 },
 ];
+
+function shortDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+}
+
+/** The read-only summary shown in the frozen block for one roster line. */
+function summarizeEmployee(employee) {
+  const pct = cogsPercentFor(employee);
+  const type = pct >= 100 ? 'CoGS' : pct <= 0 ? 'OpEx' : `${pct}% CoGS`;
+  // No start date = the row costs $0 every month (payrollData.js isActiveInMonth) —
+  // say so right in the summary so a blank month grid is never a mystery.
+  const dates = employee.startDate ? `${shortDate(employee.startDate)} → ${shortDate(employee.endDate) || 'open'}` : 'NO START DATE → $0';
+  return [employee.title, type, dates].filter(Boolean).join(' · ');
+}
 
 const SECTION_ORDER = [
   { key: 'Active', label: 'Active', rowModifier: '' },
@@ -74,6 +85,17 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   // Scoped to this card only (Kayee: "existing only") — Hiring Plan keeps its simpler
   // one-row-per-role layout.
   const [expandedGroups, setExpandedGroups] = useState(new Set());
+  // Which roster lines have their Details editor panel open (2026-09-15).
+  const [openDetails, setOpenDetails] = useState(new Set());
+
+  function toggleDetails(id) {
+    setOpenDetails((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleGroup(personId) {
     setExpandedGroups((prev) => {
@@ -101,6 +123,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     };
     onChange([...roster, newEmployee]);
     setJustAddedId(id);
+    setOpenDetails((prev) => new Set(prev).add(id)); // new person: open Details so the fields are right there
   }
 
   // Adds a new salary line to an EXISTING person (2026-08-17, Kayee: "when i add a new
@@ -131,6 +154,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     onChange([...roster, newLine]);
     setExpandedGroups((prev) => new Set(prev).add(personId));
     setJustAddedId(id);
+    setOpenDetails((prev) => new Set(prev).add(id)); // the new line's own start date is the first thing to fill in
   }
 
   // Drag-to-reorder (Kayee, 2026-08-05: "turn it into draggable so people can rearrange
@@ -181,25 +205,6 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     onChange(roster.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
-  function updateMonthly(id, iso, value) {
-    onChange(
-      roster.map((r) =>
-        r.id === id ? { ...r, monthlyOverrides: { ...r.monthlyOverrides, [iso]: value } } : r
-      )
-    );
-  }
-
-  function fillRange(id, targetMonths, value) {
-    onChange(
-      roster.map((r) => {
-        if (r.id !== id) return r;
-        const patch = {};
-        for (const m of targetMonths) patch[m] = value;
-        return { ...r, monthlyOverrides: { ...r.monthlyOverrides, ...patch } };
-      })
-    );
-  }
-
   function removeEmployee(id, name) {
     // No confirm() dialog (2026-08-20, Kayee: "i dont want no pop up when i delete stuff").
     onChange(roster.filter((r) => r.id !== id));
@@ -227,11 +232,29 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       }
       rowsByPerson.get(pid).push(r);
     }
+    // Automatic sort within each section (2026-09-15, Kayee: "sort it descending by
+    // base salary, then followed by Cost of goods sold or OpEx, then followed by
+    // department"). A multi-line person sorts by their highest base (their current /
+    // latest rate is what you'd look for). Because ordering is now rule-based, the
+    // drag-to-reorder handle is hidden — a manual drag would just snap back.
+    const rank = (rows) => {
+      const top = rows.reduce((best, r) => (Number(r.baseSalary) || 0) > (Number(best.baseSalary) || 0) ? r : best, rows[0]);
+      return top;
+    };
+    order.sort((a, b) => {
+      const ra = rank(rowsByPerson.get(a));
+      const rb = rank(rowsByPerson.get(b));
+      const baseDiff = (Number(rb.baseSalary) || 0) - (Number(ra.baseSalary) || 0);
+      if (baseDiff !== 0) return baseDiff;
+      const typeDiff = String(ra.costType || 'zz').localeCompare(String(rb.costType || 'zz'));
+      if (typeDiff !== 0) return typeDiff; // 'CoGS' before 'OpEx', blanks last
+      return String(ra.department || 'zz').localeCompare(String(rb.department || 'zz'));
+    });
     const rows = [];
     for (const pid of order) {
       const groupRows = rowsByPerson.get(pid);
       if (groupRows.length === 1) {
-        rows.push(buildRow(groupRows[0], section.key, { dragKey: pid, showDragHandle: true }));
+        rows.push(buildRow(groupRows[0], section.key, { dragKey: pid, showDragHandle: false }));
         continue;
       }
       rows.push(buildGroupSummaryRow(pid, groupRows, section.key));
@@ -254,13 +277,17 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       id: `group_${personId}`,
       monthCells,
       className: `pr-comp-group-row${draggedGroupId === personId ? ' pr-dragging' : ''}`,
-      draggable: true,
+      draggable: false, // ordering is rule-based now (see the sort above)
       onDragStart: (e) => {
         if (!e.target.closest('[data-drag-handle]')) {
           e.preventDefault();
           return;
         }
         e.dataTransfer.effectAllowed = 'move';
+        // Firefox refuses to start a drag at all unless SOME data is set (2026-09-15,
+        // Kayee: "the hamburger next to the employee name doesn't work") — Chrome
+        // doesn't care, which is why it looked fine in earlier testing.
+        try { e.dataTransfer.setData('text/plain', personId); } catch { /* older engines */ }
         setDraggedGroupId(personId);
       },
       onDragOver: (e) => e.preventDefault(),
@@ -281,11 +308,6 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             >
               <span className={`pr-comp-chevron${isExpanded ? ' open' : ''}`}>▸</span>
             </button>
-            <span className="icon-btn pr-drag-handle" data-drag-handle title="Drag to reorder within this section">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 7h16M4 12h16M4 17h16" />
-              </svg>
-            </span>
             <button type="button" className="icon-btn" title="Add another salary line for this person" onClick={() => addLine(personId)}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14" />
@@ -303,10 +325,14 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   }
 
   function buildRow(employee, sectionKey, { dragKey, showDragHandle = false, isChild = false } = {}) {
+    // Month cells are READ-ONLY (2026-09-15, Kayee: "why is the monthly amount
+    // editable? the control is from the base annual salary... those shouldn't have
+    // boxes, it should just have the amount"). Everything is derived from Base Salary
+    // × load factor × the prorated days-active fraction (see payrollData.js
+    // activeFractionFor), so there's nothing left to type per cell.
     const monthCells = {};
     for (const iso of months) {
-      const val = monthlyCostFor(employee, iso, assumptions);
-      monthCells[iso] = <MonthInput value={val} onCommit={(n) => updateMonthly(employee.id, iso, n)} />;
+      monthCells[iso] = formatPayrollAmount(monthlyCostFor(employee, iso, assumptions));
     }
 
     return {
@@ -328,6 +354,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
               return;
             }
             e.dataTransfer.effectAllowed = 'move';
+            try { e.dataTransfer.setData('text/plain', dragKey); } catch { /* see note above */ }
             setDraggedGroupId(dragKey);
           }
         : undefined,
@@ -340,6 +367,74 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
           }
         : undefined,
       onDragEnd: showDragHandle ? () => setDraggedGroupId(null) : undefined,
+      isExpanded: openDetails.has(employee.id),
+      expandedContent: (
+        <div className="pr-details-grid">
+          <label className="pr-details-field">
+            <span>Department</span>
+            <PickerInput
+              value={employee.department}
+              options={departmentOptions}
+              placeholder="Department"
+              onCommit={(v) => updateEmployee(employee.id, { department: v })}
+            />
+          </label>
+          <label className="pr-details-field">
+            <span>Title</span>
+            <TextInput value={employee.title} placeholder="Title" onCommit={(v) => updateEmployee(employee.id, { title: v })} />
+          </label>
+          <label className="pr-details-field">
+            <span>CoGS or OpEx?</span>
+            <select
+              className="pr-input pr-select"
+              value={employee.costType || ''}
+              onChange={(e) => {
+                // Switching to a clean single bucket clears any split % so the row goes
+                // back to a plain 100%/0% row (cogsPercentFor's costType fallback)
+                // instead of silently keeping a stale split around.
+                updateEmployee(employee.id, { costType: e.target.value, cogsPercent: null });
+              }}
+            >
+              <option value="">—</option>
+              <option value="CoGS">CoGS</option>
+              <option value="OpEx">OpEx</option>
+            </select>
+          </label>
+          <label className="pr-details-field">
+            <span>% CoGS (split)</span>
+            <MonthInput
+              value={cogsPercentFor(employee)}
+              onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)) })}
+            />
+          </label>
+          <label className="pr-details-field">
+            <span>Start Date</span>
+            <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />
+          </label>
+          <label className="pr-details-field">
+            <span>End Date</span>
+            <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />
+          </label>
+          <label className="pr-details-field">
+            <span>Employment</span>
+            <select
+              className="pr-input pr-select"
+              value={employee.employment || 'Active'}
+              onChange={(e) => updateEmployee(employee.id, { employment: e.target.value })}
+            >
+              {EMPLOYMENT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="pr-details-note">
+            Monthly cost = Base ÷ 12 × (1 + Tax + Benefits), prorated by days in the start/end month. A raise = add a new
+            line for this person (the + on the name row) with its own start date; end-date the old line the day before.
+          </div>
+        </div>
+      ),
       cells: {
         actions: (
           <div className="pr-row-actions">
@@ -350,7 +445,17 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
                 </svg>
               </span>
             )}
-            <FillRangeButton months={months} onApply={(targetMonths, value) => fillRange(employee.id, targetMonths, value)} />
+            <button
+              type="button"
+              className={`icon-btn${openDetails.has(employee.id) ? ' is-active' : ''}`}
+              title={openDetails.has(employee.id) ? 'Hide details' : 'Edit details (department, type, title, dates, status)'}
+              onClick={() => toggleDetails(employee.id)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+            </button>
             <button
               type="button"
               className="icon-btn"
@@ -374,64 +479,16 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             }}
           />
         ),
-        department: (
-          <PickerInput
-            value={employee.department}
-            options={departmentOptions}
-            placeholder="Department"
-            onCommit={(v) => updateEmployee(employee.id, { department: v })}
-          />
-        ),
-        costType: (
-          <select
-            className="pr-input pr-select"
-            value={employee.costType || ''}
-            onChange={(e) => {
-              const nextCostType = e.target.value;
-              // Switching to a clean single bucket clears any split percentage so the
-              // row goes back to a plain 100%/0% row (cogsPercentFor's costType
-              // fallback) instead of silently keeping a stale split percentage around.
-              updateEmployee(employee.id, { costType: nextCostType, cogsPercent: null });
-            }}
-          >
-            <option value="">—</option>
-            <option value="CoGS">CoGS</option>
-            <option value="OpEx">OpEx</option>
-          </select>
-        ),
-        cogsPercent: (
-          <MonthInput
-            value={cogsPercentFor(employee)}
-            onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)) })}
-          />
-        ),
-        title: (
-          <TextInput
-            value={employee.title}
-            placeholder="Title"
-            onCommit={(v) => updateEmployee(employee.id, { title: v })}
-          />
-        ),
-        startDate: <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />,
-        endDate: <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />,
-        employment: (
-          <select
-            className="pr-input pr-select"
-            value={employee.employment || 'Active'}
-            onChange={(e) => updateEmployee(employee.id, { employment: e.target.value })}
-          >
-            {EMPLOYMENT_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        ),
         baseSalary: (
           <MonthInput
             value={employee.baseSalary}
             onCommit={(n) => updateEmployee(employee.id, { baseSalary: n })}
           />
+        ),
+        summary: (
+          <span className="pr-nowrap-cell pr-row-summary" title={summarizeEmployee(employee) || 'No details yet — click the pencil'}>
+            {summarizeEmployee(employee) || <i className="pr-comp-noname">no details</i>}
+          </span>
         ),
       },
     };

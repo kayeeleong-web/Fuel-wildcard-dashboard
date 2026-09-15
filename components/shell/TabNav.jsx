@@ -64,15 +64,41 @@ const TABS = [
   },
 ];
 
-export function TabNav({ activeTab, onChange, reportsCount }) {
+/**
+ * `collapsed` (2026-09-15, Kayee: "the sidebar is taking up some real estate...
+ * find the UI/UX best solution") — the standard collapsible-rail pattern: a chevron
+ * toggle at the top, and in the collapsed state only the 4 icons show (56px rail)
+ * with the label moved into a native tooltip (`title`) + aria-label so the buttons
+ * stay fully accessible. Labels are still rendered in the DOM and hidden with CSS
+ * (`.nav-collapsed .sidenav-label`) so the expand/collapse is a pure width
+ * transition with no layout jank. Kept as a controlled component so DashboardApp can
+ * persist the choice in a cookie alongside the active tab.
+ */
+export function TabNav({ activeTab, onChange, reportsCount, collapsed = false, onToggleCollapse }) {
   return (
-    <nav className="sidenav" aria-label="Reports">
+    <nav className={`sidenav${collapsed ? ' is-collapsed' : ''}`} aria-label="Reports">
+      {onToggleCollapse && (
+        <button
+          type="button"
+          className="sidenav-toggle"
+          onClick={onToggleCollapse}
+          title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-expanded={!collapsed}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            {collapsed ? <path d="M9 6l6 6-6 6" /> : <path d="M15 6l-6 6 6 6" />}
+          </svg>
+        </button>
+      )}
       {TABS.map((tab) => (
         <button
           key={tab.id}
           type="button"
           className={tab.id === activeTab ? 'active' : undefined}
           aria-current={tab.id === activeTab ? 'page' : undefined}
+          aria-label={tab.label}
+          title={collapsed ? tab.label : undefined}
           onClick={() => onChange(tab.id)}
         >
           {tab.icon}

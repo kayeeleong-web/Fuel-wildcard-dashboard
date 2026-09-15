@@ -50,13 +50,28 @@ const ACTIVE_TAB_STORAGE_KEY = 'fuel_wildcard_active_tab';
  * cookie, so there's no wrong tab left to flash away from. localStorage is gone
  * entirely; changeTab now just sets the cookie the server reads next time.
  */
-export function DashboardApp({ clientName, initialActiveTab, kpiData, dashboardSummary, statements, customReportsList, glCash, glAccrued }) {
+const NAV_COLLAPSED_STORAGE_KEY = 'fuel_wildcard_nav_collapsed';
+
+export function DashboardApp({ clientName, initialActiveTab, initialNavCollapsed = true, kpiData, dashboardSummary, statements, customReportsList, glCash, glAccrued }) {
   const [activeTab, setActiveTab] = useState(TABS.includes(initialActiveTab) ? initialActiveTab : 'kpi');
+  // Collapsible left rail (2026-09-15, Kayee: "the sidebar is taking up some real
+  // estate... that doesn't need to constantly take up the space"). Collapsed = 56px
+  // icon-only rail with hover tooltips; expanded = the original 206px labelled column.
+  // Persisted in a cookie (not localStorage) for the same no-flash reason as activeTab.
+  const [navCollapsed, setNavCollapsed] = useState(!!initialNavCollapsed);
 
   function changeTab(tab) {
     setActiveTab(tab);
     // 1-year expiry, path=/ so app/page.js can read it on any hard refresh.
     document.cookie = `${ACTIVE_TAB_STORAGE_KEY}=${tab}; path=/; max-age=31536000; samesite=lax`;
+  }
+
+  function toggleNav() {
+    setNavCollapsed((c) => {
+      const next = !c;
+      document.cookie = `${NAV_COLLAPSED_STORAGE_KEY}=${next ? '1' : '0'}; path=/; max-age=31536000; samesite=lax`;
+      return next;
+    });
   }
 
   return (
@@ -67,8 +82,14 @@ export function DashboardApp({ clientName, initialActiveTab, kpiData, dashboardS
           style) — they share `.shell` so the rail can be sticky against the topbar while
           the page scrolls past it, and on a narrow screen the same container lays them
           back out one above the other (see the 900px media query in globals.css). */}
-      <div className="shell">
-        <TabNav activeTab={activeTab} onChange={changeTab} reportsCount={customReportsList.length + 3} />
+      <div className={`shell${navCollapsed ? ' nav-collapsed' : ''}`}>
+        <TabNav
+          activeTab={activeTab}
+          onChange={changeTab}
+          reportsCount={customReportsList.length + 3}
+          collapsed={navCollapsed}
+          onToggleCollapse={toggleNav}
+        />
 
         <div className="page">
           {/* Every panel below stays mounted regardless of activeTab (see file header) —

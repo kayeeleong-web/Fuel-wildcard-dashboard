@@ -392,13 +392,106 @@ export function TextInput({ value, onCommit, placeholder, align, focusOnMount })
 }
 
 /** Discrete picker (date) — commits immediately on change, no typing session to debounce. */
-export function DateInput({ value, onCommit }) {
+/** Turns whatever someone typed or pasted into a YYYY-MM-DD string, or '' if it isn't a
+ *  date. Accepts 05/01/2024, 5/1/24, 2024-05-01, 05-01-2024, "May 1, 2024", "1 May 2024".
+ *  Two-digit years are read as 20xx. */
+export function parseDateText(text) {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  let y;
+  let m;
+  let d;
+  let match;
+  if ((match = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(s))) {
+    [, y, m, d] = match.map(Number);
+  } else if ((match = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/.exec(s))) {
+    [, m, d, y] = match.map(Number);
+    if (y < 100) y += 2000;
+  } else {
+    const parsed = new Date(s);
+    if (Number.isNaN(parsed.getTime())) return '';
+    y = parsed.getFullYear();
+    m = parsed.getMonth() + 1;
+    d = parsed.getDate();
+  }
+  if (!(m >= 1 && m <= 12) || !(d >= 1 && d <= 31) || !(y >= 1900 && y <= 2200)) return '';
+  const check = new Date(y, m - 1, d);
+  if (check.getMonth() !== m - 1 || check.getDate() !== d) return '';
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function displayDate(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return match ? `${match[2]}/${match[3]}/${match[1]}` : iso || '';
+}
+
+/** Date field (2026-09-15 rewrite — Kayee: "if there's no date, no need to show
+ *  mm/dd/yyyy, it just looks messy... I want the user to be able to spot that they
+ *  forgot to put in a date. And I want to be able to copy and paste the date and have
+ *  it recognized"). A plain text box instead of the native date picker: blank shows a
+ *  short "Add date" hint in a warning tint so a missing date stands out (a missing
+ *  START date means the row costs $0 — see payrollData.js isActiveInMonth); any pasted
+ *  or typed format parseDateText understands is normalised to YYYY-MM-DD on blur/Enter;
+ *  something unrecognisable flashes red and is not saved. Displays as MM/DD/YYYY. */
+export function DateInput({ value, onCommit, placeholder = 'Add date' }) {
+  const [draft, setDraft] = useState(displayDate(value));
+  const [focused, setFocused] = useState(false);
+  const [invalid, setInvalid] = useState(false);
+
+  const shown = focused ? draft : displayDate(value);
+
+  function commit() {
+    setFocused(false);
+    const trimmed = draft.trim();
+    if (!trimmed) {
+      setInvalid(false);
+      if (value) onCommit('');
+      return;
+    }
+    const iso = parseDateText(trimmed);
+    if (!iso) {
+      setInvalid(true);
+      setDraft(displayDate(value));
+      return;
+    }
+    setInvalid(false);
+    if (iso !== value) onCommit(iso);
+  }
+
   return (
     <input
-      type="date"
-      className="pr-input pr-input-date"
-      value={value || ''}
-      onChange={(e) => onCommit(e.target.value)}
+      type="text"
+      inputMode="numeric"
+      className={`pr-input pr-input-date${!value && !focused ? ' is-empty' : ''}${invalid ? ' is-invalid' : ''}`}
+      value={shown}
+      placeholder={placeholder}
+      title={value ? displayDate(value) : 'No date set — type or paste one (e.g. 05/01/2024)'}
+      onFocus={(e) => {
+        setDraft(displayDate(value));
+        setFocused(true);
+        setInvalid(false);
+        e.target.select();
+      }}
+      onChange={(e) => setDraft(e.target.value)}
+      onPaste={(e) => {
+        // Commit a pasted date immediately so it "just gets recognised" without an extra click.
+        const text = e.clipboardData?.getData('text');
+        const iso = parseDateText(text);
+        if (iso) {
+          e.preventDefault();
+          setDraft(displayDate(iso));
+          setInvalid(false);
+          if (iso !== value) onCommit(iso);
+        }
+      }}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') {
+          setDraft(displayDate(value));
+          e.currentTarget.blur();
+        }
+      }}
     />
   );
 }
