@@ -1829,8 +1829,14 @@ tr.pr-dragging { opacity: .4; }
 .pr-details-field > span { font-size: 10.5px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--muted); }
 .pr-details-field .pr-input { width: 100%; box-sizing: border-box; }
 .pr-details-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); line-height: 1.45; }
-.pr-row-summary { display: inline-block; max-width: 100%; font-size: 11.5px; color: var(--muted); }
 .icon-btn.is-active { color: var(--text); background: var(--panel-2); }
+/* Compact read-only roster columns (Role / Type / Start / End) — aligned real columns, muted so
+   they read as reference info next to the editable Name/Base fields. */
+.pr-read-cell { display: inline-block; max-width: 100%; font-size: 11.5px; color: var(--muted); line-height: 28px; }
+.pr-read-date { font-family: var(--font-num); }
+.pr-read-open { color: var(--muted-2); }
+.pr-read-missing { color: #9A6B00; background: #FFF6DB; border-radius: 6px; padding: 0 7px; font-style: italic; }
+.btn.is-active { background: var(--panel-2); }
 
 /* ---- Fill-range bulk-edit popover ---- */
 .pr-fill-wrap { position: relative; display: inline-flex; }

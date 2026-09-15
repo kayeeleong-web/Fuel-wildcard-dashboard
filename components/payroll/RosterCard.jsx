@@ -15,37 +15,48 @@ import { DateInput, MonthInput, PayrollTable, PickerInput, TextInput } from './P
 // the width to further both side") — these 9 frozen columns alone used to run
 // ~1154px before a single month column started; trimmed to ~1020px so more months
 // fit in view, combined with the wider .page-wide cap in globals.css.
-// Frozen block slimmed from ~1150px to 600px (2026-09-15, Kayee: "the whole control
-// section is too long, the monthly section is really small space for me to look at
-// things... simplify it but don't make it so annoying"). Only what you read at a
-// glance stays frozen — Name, Base Salary, and a one-line read-only summary of the
-// rest (title · CoGS/OpEx · dates). Everything editable beyond the name and base
-// (department, CoGS/OpEx + % split, title, start/end date, employment) lives in a
-// full-width "Details" panel that opens UNDER the row (the pencil button), using the
-// same isExpanded/expandedContent mechanism the Software tab's Planning table added
-// on 2026-08-27 — so the date inputs finally have room to show the full year too.
-const FROZEN_COLUMNS = [
-  { key: 'actions', label: '', width: 100 },
-  { key: 'name', label: 'Name', width: 190 },
-  { key: 'baseSalary', label: 'Base Salary', width: 100, align: 'right' },
-  { key: 'summary', label: 'Role · Type · Dates', width: 210 },
+// Frozen block, Excel/Sheets "grouped columns" style (2026-09-15, Kayee: "the whole
+// control section is too long, the monthly section is really small... handle it like
+// Excel or Google Sheets where you click something and it expands... when you don't
+// expand it, [show it] aligned"). Two column sets, toggled by the ▸/◂ button in the
+// card header:
+//  - COLLAPSED (default, ~660px): Name, Base Salary, then a compact READ-ONLY Role ·
+//    Type · Start · End as four real aligned columns — not one dot-joined string.
+//  - EXPANDED (~1080px): the same slots become the full editors (Department, Title,
+//    CoGS/OpEx, % split, Start, End, Employment).
+// Month cells are derived either way; nothing about the math depends on the toggle.
+const BASE_COLUMNS = [
+  { key: 'actions', label: '', width: 72 },
+  { key: 'name', label: 'Name', width: 180 },
+  { key: 'baseSalary', label: 'Base Salary', width: 98, align: 'right' },
+];
+const COMPACT_COLUMNS = [
+  { key: 'roleRead', label: 'Role', width: 138 },
+  { key: 'typeRead', label: 'Type', width: 66 },
+  { key: 'startRead', label: 'Start', width: 76 },
+  { key: 'endRead', label: 'End', width: 76 },
+];
+const EXPANDED_COLUMNS = [
+  { key: 'department', label: 'Department', width: 108 },
+  { key: 'title', label: 'Title', width: 150 },
+  { key: 'costType', label: 'CoGS / OpEx', width: 92 },
+  { key: 'cogsPercent', label: '% CoGS', width: 70, align: 'right' },
+  { key: 'startDate', label: 'Start Date', width: 118 },
+  { key: 'endDate', label: 'End Date', width: 118 },
+  { key: 'employment', label: 'Employment', width: 104 },
 ];
 
+/** MM/DD/YY for the compact read-only date columns (dates are stored YYYY-MM-DD). */
 function shortDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return dateStr;
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+  return m ? `${m[2]}/${m[3]}/${m[1].slice(2)}` : dateStr || '';
 }
 
-/** The read-only summary shown in the frozen block for one roster line. */
-function summarizeEmployee(employee) {
+function typeLabel(employee) {
   const pct = cogsPercentFor(employee);
-  const type = pct >= 100 ? 'CoGS' : pct <= 0 ? 'OpEx' : `${pct}% CoGS`;
-  // No start date = the row costs $0 every month (payrollData.js isActiveInMonth) —
-  // say so right in the summary so a blank month grid is never a mystery.
-  const dates = employee.startDate ? `${shortDate(employee.startDate)} → ${shortDate(employee.endDate) || 'open'}` : 'NO START DATE → $0';
-  return [employee.title, type, dates].filter(Boolean).join(' · ');
+  if (pct >= 100) return 'CoGS';
+  if (pct <= 0) return 'OpEx';
+  return `${pct}% CoGS`;
 }
 
 const SECTION_ORDER = [
@@ -85,17 +96,10 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   // Scoped to this card only (Kayee: "existing only") — Hiring Plan keeps its simpler
   // one-row-per-role layout.
   const [expandedGroups, setExpandedGroups] = useState(new Set());
-  // Which roster lines have their Details editor panel open (2026-09-15).
-  const [openDetails, setOpenDetails] = useState(new Set());
-
-  function toggleDetails(id) {
-    setOpenDetails((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  // Excel-style grouped-columns toggle (2026-09-15): false = compact read-only Role /
+  // Type / Start / End columns; true = the full editors inline.
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const frozenColumns = [...BASE_COLUMNS, ...(detailsExpanded ? EXPANDED_COLUMNS : COMPACT_COLUMNS)];
 
   function toggleGroup(personId) {
     setExpandedGroups((prev) => {
@@ -123,7 +127,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     };
     onChange([...roster, newEmployee]);
     setJustAddedId(id);
-    setOpenDetails((prev) => new Set(prev).add(id)); // new person: open Details so the fields are right there
+    setDetailsExpanded(true); // new person: open the editor columns so the fields are right there
   }
 
   // Adds a new salary line to an EXISTING person (2026-08-17, Kayee: "when i add a new
@@ -154,7 +158,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     onChange([...roster, newLine]);
     setExpandedGroups((prev) => new Set(prev).add(personId));
     setJustAddedId(id);
-    setOpenDetails((prev) => new Set(prev).add(id)); // the new line's own start date is the first thing to fill in
+    setDetailsExpanded(true); // the new line's own start date is the first thing to fill in
   }
 
   // Drag-to-reorder (Kayee, 2026-08-05: "turn it into draggable so people can rearrange
@@ -367,74 +371,6 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
           }
         : undefined,
       onDragEnd: showDragHandle ? () => setDraggedGroupId(null) : undefined,
-      isExpanded: openDetails.has(employee.id),
-      expandedContent: (
-        <div className="pr-details-grid">
-          <label className="pr-details-field">
-            <span>Department</span>
-            <PickerInput
-              value={employee.department}
-              options={departmentOptions}
-              placeholder="Department"
-              onCommit={(v) => updateEmployee(employee.id, { department: v })}
-            />
-          </label>
-          <label className="pr-details-field">
-            <span>Title</span>
-            <TextInput value={employee.title} placeholder="Title" onCommit={(v) => updateEmployee(employee.id, { title: v })} />
-          </label>
-          <label className="pr-details-field">
-            <span>CoGS or OpEx?</span>
-            <select
-              className="pr-input pr-select"
-              value={employee.costType || ''}
-              onChange={(e) => {
-                // Switching to a clean single bucket clears any split % so the row goes
-                // back to a plain 100%/0% row (cogsPercentFor's costType fallback)
-                // instead of silently keeping a stale split around.
-                updateEmployee(employee.id, { costType: e.target.value, cogsPercent: null });
-              }}
-            >
-              <option value="">—</option>
-              <option value="CoGS">CoGS</option>
-              <option value="OpEx">OpEx</option>
-            </select>
-          </label>
-          <label className="pr-details-field">
-            <span>% CoGS (split)</span>
-            <MonthInput
-              value={cogsPercentFor(employee)}
-              onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)) })}
-            />
-          </label>
-          <label className="pr-details-field">
-            <span>Start Date</span>
-            <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />
-          </label>
-          <label className="pr-details-field">
-            <span>End Date</span>
-            <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} />
-          </label>
-          <label className="pr-details-field">
-            <span>Employment</span>
-            <select
-              className="pr-input pr-select"
-              value={employee.employment || 'Active'}
-              onChange={(e) => updateEmployee(employee.id, { employment: e.target.value })}
-            >
-              {EMPLOYMENT_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="pr-details-note">
-            Monthly cost = Base ÷ 12 × (1 + Tax + Benefits), prorated by days in the start/end month. A raise = add a new
-            line for this person (the + on the name row) with its own start date; end-date the old line the day before.
-          </div>
-        </div>
-      ),
       cells: {
         actions: (
           <div className="pr-row-actions">
@@ -445,17 +381,6 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
                 </svg>
               </span>
             )}
-            <button
-              type="button"
-              className={`icon-btn${openDetails.has(employee.id) ? ' is-active' : ''}`}
-              title={openDetails.has(employee.id) ? 'Hide details' : 'Edit details (department, type, title, dates, status)'}
-              onClick={() => toggleDetails(employee.id)}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-              </svg>
-            </button>
             <button
               type="button"
               className="icon-btn"
@@ -485,10 +410,70 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             onCommit={(n) => updateEmployee(employee.id, { baseSalary: n })}
           />
         ),
-        summary: (
-          <span className="pr-nowrap-cell pr-row-summary" title={summarizeEmployee(employee) || 'No details yet — click the pencil'}>
-            {summarizeEmployee(employee) || <i className="pr-comp-noname">no details</i>}
+
+        // ---- compact (read-only, aligned) ----
+        roleRead: (
+          <span className="pr-nowrap-cell pr-read-cell" title={[employee.title, employee.department].filter(Boolean).join(' — ')}>
+            {employee.title || <i className="pr-comp-noname">—</i>}
           </span>
+        ),
+        typeRead: <span className="pr-read-cell">{typeLabel(employee)}</span>,
+        // No start date = the row costs $0 (payrollData.js isActiveInMonth) — flagged
+        // here so a blank month grid is never a mystery.
+        startRead: employee.startDate ? (
+          <span className="pr-read-cell pr-read-date">{shortDate(employee.startDate)}</span>
+        ) : (
+          <span className="pr-read-cell pr-read-missing" title="No start date — this row costs $0 until one is set">missing</span>
+        ),
+        endRead: (
+          <span className="pr-read-cell pr-read-date">{employee.endDate ? shortDate(employee.endDate) : <span className="pr-read-open">open</span>}</span>
+        ),
+
+        // ---- expanded (editors) ----
+        department: (
+          <PickerInput
+            value={employee.department}
+            options={departmentOptions}
+            placeholder="Department"
+            onCommit={(v) => updateEmployee(employee.id, { department: v })}
+          />
+        ),
+        title: <TextInput value={employee.title} placeholder="Title" onCommit={(v) => updateEmployee(employee.id, { title: v })} />,
+        costType: (
+          <select
+            className="pr-input pr-select"
+            value={employee.costType || ''}
+            onChange={(e) => {
+              // Switching to a clean single bucket clears any split % so the row goes
+              // back to a plain 100%/0% row (cogsPercentFor's costType fallback).
+              updateEmployee(employee.id, { costType: e.target.value, cogsPercent: null });
+            }}
+          >
+            <option value="">—</option>
+            <option value="CoGS">CoGS</option>
+            <option value="OpEx">OpEx</option>
+          </select>
+        ),
+        cogsPercent: (
+          <MonthInput
+            value={cogsPercentFor(employee)}
+            onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)) })}
+          />
+        ),
+        startDate: <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />,
+        endDate: <DateInput value={employee.endDate} onCommit={(v) => updateEmployee(employee.id, { endDate: v })} placeholder="open" />,
+        employment: (
+          <select
+            className="pr-input pr-select"
+            value={employee.employment || 'Active'}
+            onChange={(e) => updateEmployee(employee.id, { employment: e.target.value })}
+          >
+            {EMPLOYMENT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
         ),
       },
     };
@@ -511,7 +496,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       title="Employees"
       subtitle={`${uniquePeopleCount} people`}
       tintForecast={false}
-      frozenColumns={FROZEN_COLUMNS}
+      frozenColumns={frozenColumns}
       months={months}
       todayIso={todayIso}
       totalRow={totalRow}
@@ -519,9 +504,19 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       headActions={
         // Plain .btn (white bg), not .btn.primary — .btn.primary is solid black and
         // would disappear against this card's own black header bar.
-        <button type="button" className="btn" onClick={addEmployee}>
-          + Add Employee
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            type="button"
+            className={`btn${detailsExpanded ? ' is-active' : ''}`}
+            onClick={() => setDetailsExpanded((v) => !v)}
+            title={detailsExpanded ? 'Collapse to the compact Role / Type / Start / End view' : 'Expand to edit department, title, CoGS/OpEx split, dates, status'}
+          >
+            {detailsExpanded ? '◂ Collapse details' : 'Expand details ▸'}
+          </button>
+          <button type="button" className="btn" onClick={addEmployee}>
+            + Add Employee
+          </button>
+        </div>
       }
     />
   );
