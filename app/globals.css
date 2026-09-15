@@ -22,6 +22,9 @@
   --border-soft: #ECEDEF;
 
   --black: #0A0A0A;
+  /* Table chrome (2026-09-15, Kayee: "the black is a little too stark... a very dark gray for
+     everything" — column headers, Total rows, card heads; the topbar/toggles stay --black). */
+  --table-chrome: #262626;
   --black-2: #161616;
   --on-black-muted: rgba(255, 255, 255, .55);
   --on-black-border: rgba(255, 255, 255, .12);
@@ -128,7 +131,7 @@ a {
 .topbar-slot { display: flex; align-items: center; }
 .topbar-slot:empty { display: none; }
 .topbar-save .report-saved-note { color: var(--on-black-muted); }
-.topbar-save .btn { background: #fff; color: var(--black); border-color: #fff; }
+.topbar-save .btn { background: #fff; color: var(--black); border-color: #fff; padding: 5px 12px; font-size: 12px; line-height: 1.2; height: 28px; }
 .topbar-save .btn:hover { background: #f1f1f1; }
 .avatar {
   width: 32px; height: 32px; border-radius: 50%; background: var(--green);
@@ -550,7 +553,7 @@ table { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .report-doc th:first-child, .report-doc td:first-child { width: 240px; }
 .report-doc th:not(:first-child), .report-doc td:not(:first-child) { width: 92px; }
-thead th { position: sticky; top: 0; z-index: 3; text-align: right; font-size: 10.5px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: .5px; padding: 13px 18px; white-space: nowrap; background: var(--black); border-bottom: 2px solid var(--green); }
+thead th { position: sticky; top: 0; z-index: 3; text-align: right; font-size: 10.5px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: .5px; padding: 13px 18px; white-space: nowrap; background: var(--table-chrome); border-bottom: 2px solid var(--green); }
 thead th:first-child { text-align: left; }
 tbody td { padding: 10px 18px; text-align: right; color: var(--text); white-space: nowrap; font-family: var(--font-num); }
 tbody td:first-child { text-align: left; color: var(--text); font-family: 'Space Grotesk', sans-serif; }
@@ -597,7 +600,7 @@ tbody tr.report-section-toggle { cursor: pointer; }
   font-size: 10.5px; font-weight: 700; color: var(--black); text-transform: uppercase;
   letter-spacing: .6px; font-family: 'Space Grotesk', sans-serif;
 }
-tbody tr.total td { font-weight: 700; background: var(--black); color: #fff; border-top: 2px solid var(--green); border-bottom: 2px solid var(--green); }
+tbody tr.total td { font-weight: 700; background: var(--table-chrome); color: #fff; border-top: 2px solid var(--green); border-bottom: 2px solid var(--green); }
 tbody tr.total td:first-child { color: #fff; }
 /* Belt-and-suspenders (2026-08-20, Kayee, pointing at unreadable rows on the CF
    statement: "i think here is blank because the text is black") — every hero (black)
@@ -727,9 +730,9 @@ tbody tr.total .m { color: var(--on-black-muted); }
 /* Current-period column highlight — must always show its value, on every row type,
    including total rows (design-rules.md §3: never a blank cell here). */
 th.active-col, td.active-col { background: var(--green-soft); }
-thead th.active-col { background: var(--black); color: #fff; }
+thead th.active-col { background: var(--table-chrome); color: #fff; }
 tbody td.active-col { color: var(--text); font-weight: 600; }
-tbody tr.total td.active-col { background: var(--black); color: #fff; }
+tbody tr.total td.active-col { background: var(--table-chrome); color: #fff; }
 tbody tr.section td.active-col { background: var(--green-soft); }
 /* ...EXCEPT inside the Reports/Projection statement docs (2026-08-20, Kayee, pointing
    at the June 2026 column: "no need make it a darker green just have the normal green
@@ -765,7 +768,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 /* The header's first cell is sticky on BOTH axes at once (top from the rule above, left
    from here) — it's the "frozen corner" and needs the highest z-index so it stays above
    both a plain sticky-top header cell and a plain sticky-left body cell as they scroll under it. */
-.table-wrap table thead th:first-child { background: var(--black); z-index: 4; }
+.table-wrap table thead th:first-child { background: var(--table-chrome); z-index: 4; }
 .table-wrap table tbody tr td:first-child { background: var(--panel); }
 .table-wrap table tbody tr:nth-child(even) td:first-child { background: var(--panel-2); }
 .table-wrap table tbody tr:hover td:first-child { background: #F0FBF4; }
@@ -777,7 +780,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
    — no real text scrolls underneath it to show through — but it's the same latent
    bug, so fixed to the equivalent solid color on principle rather than left ticking. */
 .table-wrap table tbody tr.section td:first-child { background: #E5F7EC; }
-.table-wrap table tbody tr.total td:first-child { background: var(--black); }
+.table-wrap table tbody tr.total td:first-child { background: var(--table-chrome); }
 
 /* Reports tab range toggle (2026-08-07 rewrite, Kayee: "show 2026 and up until end of
    2028 as default... if I want to see historical let me select historical and it will
@@ -857,7 +860,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
      the toolbar above, with no scrolling required to notice it's there. */
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px;
   width: 40px; align-self: stretch; border: none; border-radius: 10px;
-  background: var(--black); color: #fff; cursor: pointer; padding: 20px 0;
+  background: var(--table-chrome); color: #fff; cursor: pointer; padding: 20px 0;
   transition: background .12s ease;
 }
 .reports-sidebar-toggle-rail:hover { background: #000; }
@@ -954,7 +957,7 @@ tbody tr.section td.active-col { background: var(--green-soft); }
 .payroll-sidebar-toggle-rail {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 10px;
   width: 40px; align-self: stretch; border: none; border-radius: 10px;
-  background: var(--black); color: #fff; cursor: pointer; padding: 20px 0;
+  background: var(--table-chrome); color: #fff; cursor: pointer; padding: 20px 0;
 }
 .payroll-sidebar-toggle-rail:hover { background: #000; }
 .payroll-sidebar-toggle-rail svg { width: 16px; height: 16px; flex: none; }
@@ -1252,7 +1255,7 @@ tr.cf-manual-row .pr-input { padding: 4px 6px; font-size: 11px; }
    another while the table scrolls vertically, so the second row gets pushed down by
    exactly the year-band row's own fixed height. */
 .report-year-row th { background: var(--black-2); text-align: center; font-size: 10px; letter-spacing: 1px; height: 26px; padding: 0 18px; }
-.report-year-row th:first-child { background: var(--black); }
+.report-year-row th:first-child { background: var(--table-chrome); }
 .report-year-row + tr th { top: 26px; }
 
 /* Month header now stacks a label + an ACT/FCST status chip instead of plain text.
@@ -1294,7 +1297,7 @@ tbody td.pr-fcst { background: rgba(17, 179, 231, .06); }
    shadow sat just inside the still-green 2px border, so forecast cells read as one
    ~4px two-tone line next to the actual cells' clean 2px green. Same-thickness blue
    border = same visual weight as green, just a different color. */
-tbody tr.total td.pr-fcst { background: var(--black); border-top-color: var(--blue); border-bottom-color: var(--blue); box-shadow: none; }
+tbody tr.total td.pr-fcst { background: var(--table-chrome); border-top-color: var(--blue); border-bottom-color: var(--blue); box-shadow: none; }
 
 /* ==================== Payroll tab ==================== */
 /* This tab is the one exception to "every tab lives inside the shared table/.table-wrap
@@ -1377,7 +1380,7 @@ tbody tr.total td.pr-fcst { background: var(--black); border-top-color: var(--bl
 }
 .payroll-card-head {
   width: 100%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  background: var(--black); color: #fff; padding: 13px 18px;
+  background: var(--table-chrome); color: #fff; padding: 13px 18px;
 }
 /* Every black card header bar renders the SAME height, button or no button
    (2026-08-20, Kayee, comparing Employees/Bonus/Hiring Plan/Bonus collapsed bars:
@@ -2343,3 +2346,20 @@ tr.pr-row-expanded td {
   .payroll-card-actions, .pr-row-actions { display: none !important; }
   .pr-input { border: none !important; background: transparent !important; padding: 0 !important; }
 }
+
+/* Bonus card group bands (2026-09-15): the green section band doubles as the group header —
+   name · people · its own "+ Plan" / "+ Person" controls — so each role group reads as its own
+   clearly separated section, Sheets-style. Driver rows show the campaign/meeting counts each
+   person is measured on, right above the people they apply to. */
+.pr-group-band { display: inline-flex; align-items: center; gap: 12px; width: 100%; text-transform: none; letter-spacing: 0; }
+.pr-group-band-name { font-size: 12px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; }
+.pr-group-band .pr-comp-count { font-weight: 600; }
+.pr-group-band-actions { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.pr-mini-btn { appearance: none; border: 1px solid rgba(0,0,0,.15); background: #fff; color: var(--text); font: inherit; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.pr-mini-btn:hover { background: var(--panel-2); }
+.pr-mini-select { width: auto !important; font-size: 11px; padding: 3px 22px 3px 9px !important; border-radius: 999px; background: #fff; border-color: rgba(0,0,0,.15); text-transform: none; letter-spacing: 0; }
+.pr-group-band .pr-input:not(.pr-mini-select) { width: 240px; font-size: 12px; font-weight: 700; }
+tr.pr-driver-row td { background: rgba(17,179,231,.05); }
+.pr-driver-label { font-style: italic; }
+.pr-driver-note { font-size: 10.5px; color: var(--muted-2); font-style: italic; }
+.pr-driver-val { font-family: var(--font-num); font-size: 11.5px; color: var(--muted); }

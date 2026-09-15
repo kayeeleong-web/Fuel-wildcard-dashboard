@@ -13,6 +13,7 @@ import {
   explainBonus,
   formatPayrollAmount,
   generateId,
+  resolveBonusDrivers,
 } from '../../lib/payroll/payrollData';
 import { DateInput, MonthInput, PayrollTable, TextInput } from './PayrollTable';
 
@@ -44,21 +45,24 @@ import { DateInput, MonthInput, PayrollTable, TextInput } from './PayrollTable';
  * same `bonuses` array.
  */
 const BASE_COLUMNS = [
-  { key: 'actions', label: '', width: 72 },
-  { key: 'name', label: 'Group / Person', width: 220 },
-  { key: 'role', label: 'Role', width: 140 },
+  { key: 'actions', label: '', width: 60 },
+  { key: 'name', label: 'Person / Plan', width: 230 },
+  { key: 'role', label: 'Role', width: 150 },
 ];
 const COMPACT_COLUMNS = [
   { key: 'planRead', label: 'Plan', width: 150 },
-  { key: 'termsRead', label: 'Terms', width: 200 },
-  { key: 'paidRead', label: 'Paid', width: 74 },
+  { key: 'termsRead', label: 'Terms', width: 210 },
+  { key: 'paidRead', label: 'Paid', width: 84 },
 ];
+// Widths sized so no <select> text is ever clipped (Kayee: "why put the box at all if I
+// cannot even see what it's saying") — "Fixed quarterly" / "Individual milestone" and
+// "Quarterly" fit with room for the chevron.
 const EXPANDED_COLUMNS = [
-  { key: 'type', label: 'Plan', width: 160 },
-  { key: 'amount', label: '$', width: 88, align: 'right' },
-  { key: 'per', label: 'Per (campaigns)', width: 104, align: 'right' },
-  { key: 'sharePct', label: 'Share %', width: 72, align: 'right' },
-  { key: 'payout', label: 'Paid', width: 104 },
+  { key: 'type', label: 'Plan', width: 190 },
+  { key: 'amount', label: '$', width: 90, align: 'right' },
+  { key: 'per', label: 'Per (campaigns)', width: 110, align: 'right' },
+  { key: 'sharePct', label: 'Share %', width: 80, align: 'right' },
+  { key: 'payout', label: 'Paid', width: 124 },
   { key: 'startDate', label: 'Plan start', width: 108 },
   { key: 'endDate', label: 'Plan end', width: 108 },
 ];
@@ -70,7 +74,6 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
   const inScope = (emp) => (scope === 'planned' ? !!emp?.isRamp : scope === 'existing' ? !emp?.isRamp : true);
   const [view, setView] = useState('accrual');
   const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
 
   const flow = view === 'cash' ? bonusCashFlow : bonusMonthlyFlow;
   const planTotal = view === 'cash' ? bonusPlanCashTotal : bonusPlanMonthlyTotal;
@@ -147,14 +150,6 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
     }[type];
     updatePlan(plan.id, { type, ...defaults });
   }
-  function toggleGroupCollapsed(label) {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  }
 
   const usesPer = (type) => type === 'milestone' || type === 'teamMilestone';
   const usesShare = (type) => type === 'milestone' || type === 'perMeeting';
@@ -165,67 +160,46 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
     </svg>
   );
 
-  const rows = [];
-  for (const group of visibleGroups) {
+  const d = resolveBonusDrivers(drivers);
+  const hasCampaignData = Object.values(d.campaignsByMonth).some((v) => Number(v) > 0);
+  const usesCampaigns = (type) => type === 'milestone' || type === 'teamMilestone';
+
+  const smallBtn = (label, title, onClick) => (
+    <button type="button" className="pr-mini-btn" title={title} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+      {label}
+    </button>
+  );
+
+  // One PayrollTable rowGroup per bonus group — the green section band is the group's
+  // header (name · people · its own +Plan / +Person controls), and everything under it
+  // reads top-down: the plan(s) and their terms, the DRIVER rows that show exactly what
+  // each person is being measured on (projected campaigns / meetings per person that
+  // month — Kayee: "if it's 55 campaigns, how do you know how many campaigns she did?"),
+  // then one row per person with THEIR bonus. Group total sits first, in bold.
+  const rowGroups = visibleGroups.map((group) => {
     const memberIds = [...new Set(group.plans.flatMap((p) => p.memberIds || []))];
     const members = memberIds.map((id) => rosterById[id]).filter((e) => e && inScope(e));
-    const collapsed = collapsedGroups.has(group.label);
     const addable = roster.filter((e) => inScope(e) && !memberIds.includes(e.id));
+    const rows = [];
 
-    // ---- group header ----
-    const groupCells = {};
+    // Group total
+    const totalCells = {};
     for (const iso of months) {
       const sum = group.plans.reduce((acc, p) => acc + members.reduce((a, m) => a + flow(p, m, iso, assumptions, drivers, roster), 0), 0);
-      groupCells[iso] = <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>;
+      totalCells[iso] = <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>;
     }
-    rows.push({
-      id: `group_${group.label}`,
-      className: 'pr-comp-group-row',
-      monthCells: groupCells,
-      cells: {
-        actions: (
-          <div className="pr-row-actions">
-            <button type="button" className="icon-btn pr-comp-expand-toggle" onClick={() => toggleGroupCollapsed(group.label)} title={collapsed ? 'Show plans & people' : 'Hide plans & people'}>
-              <span className={`pr-comp-chevron${collapsed ? '' : ' open'}`}>▸</span>
-            </button>
-            <button type="button" className="icon-btn" title="Add another plan to this group" onClick={() => addPlanToGroup(group)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
-          </div>
-        ),
-        name: detailsExpanded ? (
-          <TextInput value={group.label} placeholder="Group name" onCommit={(v) => v && updateGroup(group.label, { groupLabel: v })} />
-        ) : (
-          <span className="pr-comp-group-name pr-nowrap-cell" title={group.label}>
-            {group.label} <span className="pr-comp-count">({members.length})</span>
-          </span>
-        ),
-        role: addable.length > 0 && (
-          <select className="pr-input pr-select pr-add-bonus" value="" onChange={(e) => addMember(group, e.target.value)} title="Add a person to this group">
-            <option value="">+ Add person…</option>
-            {addable.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name || '(unnamed)'}
-              </option>
-            ))}
-          </select>
-        ),
-      },
-    });
-    if (collapsed) continue;
+    rows.push({ id: `total_${group.label}`, className: 'pr-comp-group-row', monthCells: totalCells, cells: { name: <b>Group total</b> } });
 
-    // ---- plan rows ----
+    // Plan rows
     for (const plan of group.plans) {
       const type = bonusTypeOf(plan);
+      const payout = plan.payout || (type === 'quarterly' ? 'quarterly' : 'monthly');
+      const typeLabel = BONUS_TYPES.find((t) => t.id === type)?.label || type;
       const monthCells = {};
       for (const iso of months) {
         const sum = members.reduce((a, m) => a + flow(plan, m, iso, assumptions, drivers, roster), 0);
         monthCells[iso] = <span className="pr-plan-total">{formatPayrollAmount(sum)}</span>;
       }
-      const payout = plan.payout || (type === 'quarterly' ? 'quarterly' : 'monthly');
-      const typeLabel = BONUS_TYPES.find((t) => t.id === type)?.label || type;
       rows.push({
         id: plan.id,
         className: 'pr-plan-row',
@@ -238,18 +212,20 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
               </button>
             </div>
           ),
-          name: <span className="pr-read-cell pr-plan-label" title={explainBonus(plan, assumptions)}>↳ {typeLabel}</span>,
+          name: (
+            <span className="pr-read-cell pr-plan-label" title={explainBonus(plan, assumptions)}>
+              Plan · {typeLabel}
+            </span>
+          ),
           role: null,
-          // compact
           planRead: <span className="pr-read-cell">{typeLabel}</span>,
           termsRead: (
             <span className="pr-read-cell pr-nowrap-cell" title={explainBonus(plan, assumptions)}>
               {describeBonus(plan)}
-              {usesShare(type) && (plan.sharePct == null ? 100 : plan.sharePct) !== 100 ? ` · ${plan.sharePct}% share` : ''}
+              {usesShare(type) && (plan.sharePct == null ? 100 : plan.sharePct) !== 100 ? ` · ${plan.sharePct}% of company` : ''}
             </span>
           ),
           paidRead: <span className="pr-read-cell">{PAYOUT_LABEL[payout]}</span>,
-          // expanded
           type: (
             <select className="pr-input pr-select" value={type} onChange={(e) => changeType(plan, e.target.value)}>
               {BONUS_TYPES.map((t) => (
@@ -278,7 +254,58 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
       });
     }
 
-    // ---- member rows ----
+    // Driver rows — what the people are measured on. Shown for any campaign/meeting plan.
+    const campaignPlan = group.plans.find((p) => usesCampaigns(bonusTypeOf(p)));
+    const meetingPlan = group.plans.find((p) => bonusTypeOf(p) === 'perMeeting');
+    const driverRow = (id, label, valueFor, note) => {
+      const monthCells = {};
+      for (const iso of months) {
+        const v = valueFor(iso);
+        monthCells[iso] = <span className="pr-driver-val">{v > 0 ? Math.round(v).toLocaleString('en-US') : ''}</span>;
+      }
+      return {
+        id,
+        className: 'pr-driver-row',
+        monthCells,
+        cells: {
+          name: <span className="pr-read-cell pr-plan-label pr-driver-label" title={note}>{label}</span>,
+          role: <span className="pr-read-cell pr-driver-note">{hasCampaignData ? 'from Customer tab' : 'no deals in Customer tab yet → $0'}</span>,
+        },
+      };
+    };
+    if (campaignPlan) {
+      const t = bonusTypeOf(campaignPlan);
+      const share = (Number(campaignPlan.sharePct == null ? 100 : campaignPlan.sharePct) || 0) / 100;
+      rows.push(
+        driverRow(
+          `drv_c_${group.label}`,
+          t === 'teamMilestone' ? '# campaigns · company total' : '# campaigns · per person',
+          (iso) => {
+            const total = Number(d.campaignsByMonth[iso]) || 0;
+            if (t === 'teamMilestone') return total;
+            const heads = activeBonusHeadcount(campaignPlan, roster, iso);
+            return heads > 0 ? (total * share) / heads : 0;
+          },
+          'Projected campaigns from the Customer tab deals, × this group’s share %, split evenly across the active people in the group'
+        )
+      );
+    }
+    if (meetingPlan) {
+      const share = (Number(meetingPlan.sharePct == null ? 100 : meetingPlan.sharePct) || 0) / 100;
+      rows.push(
+        driverRow(
+          `drv_m_${group.label}`,
+          '# meetings · per person',
+          (iso) => {
+            const heads = activeBonusHeadcount(meetingPlan, roster, iso);
+            return heads > 0 ? ((Number(d.meetingsByMonth[iso]) || 0) * share) / heads : 0;
+          },
+          'Projected meetings from the Customer tab deals, × this group’s share %, split evenly across the active people in the group'
+        )
+      );
+    }
+
+    // People
     for (const emp of members) {
       const monthCells = {};
       for (const iso of months) {
@@ -287,7 +314,6 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
       }
       rows.push({
         id: `member_${group.label}_${emp.id}`,
-        className: 'pr-comp-child-row',
         monthCells,
         cells: {
           actions: (
@@ -298,7 +324,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
             </div>
           ),
           name: (
-            <span className="pr-name-cell pr-nowrap-cell pr-member-name" title={emp.name}>
+            <span className="pr-name-cell pr-nowrap-cell" title={emp.name}>
               {emp.name || <i className="pr-comp-noname">(unnamed)</i>}
               {emp.isRamp && <span className="pr-ramp-badge">Ramp</span>}
             </span>
@@ -311,7 +337,41 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
         },
       });
     }
-  }
+    if (members.length === 0) {
+      rows.push({
+        id: `empty_${group.label}`,
+        monthCells: {},
+        cells: { name: <i className="pr-comp-noname">No one in this group yet — use “+ Person”</i> },
+      });
+    }
+
+    const label = (
+      <span className="pr-group-band">
+        {detailsExpanded ? (
+          <span onClick={(e) => e.stopPropagation()}>
+            <TextInput value={group.label} placeholder="Group name" onCommit={(v) => v && updateGroup(group.label, { groupLabel: v })} />
+          </span>
+        ) : (
+          <span className="pr-group-band-name">{group.label}</span>
+        )}
+        <span className="pr-comp-count">{members.length} {members.length === 1 ? 'person' : 'people'}</span>
+        <span className="pr-group-band-actions" onClick={(e) => e.stopPropagation()}>
+          {smallBtn('+ Plan', 'Add another bonus plan to this group', () => addPlanToGroup(group))}
+          {addable.length > 0 && (
+            <select className="pr-input pr-select pr-mini-select" value="" onChange={(e) => addMember(group, e.target.value)} title="Add a person to this group">
+              <option value="">+ Person</option>
+              {addable.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name || '(unnamed)'}
+                </option>
+              ))}
+            </select>
+          )}
+        </span>
+      </span>
+    );
+    return { key: group.label, label, collapsible: true, rows };
+  });
 
   const detailCols = detailsExpanded ? EXPANDED_COLUMNS : COMPACT_COLUMNS;
   const frozenColumns = [
@@ -366,7 +426,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
       months={months}
       todayIso={todayIso}
       totalRow={totalRow}
-      rowGroups={[{ key: 'all', label: null, rows }]}
+      rowGroups={rowGroups}
       headActions={
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div className="seg">
