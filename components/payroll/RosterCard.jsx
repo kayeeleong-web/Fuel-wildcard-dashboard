@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
   DEPARTMENT_OPTIONS,
   EMPLOYMENT_STATUSES,
+  cogsPercentFor,
   formatPayrollAmount,
   generateId,
   monthlyCostFor,
@@ -25,6 +26,10 @@ const FROZEN_COLUMNS = [
   { key: 'name', label: 'Name', width: 200 },
   { key: 'department', label: 'Department', width: 105 },
   { key: 'costType', label: 'CoGS or OpEx?', width: 90 },
+  // % CoGS split (2026-09-15, per the Sept 10 Wildcard sync) — only meaningfully
+  // editable when costType is 'CoGS' (a pure OpEx row is fixed at 0%); lets a role
+  // like Designer be entered as 75% CoGS / 25% OpEx instead of one flat bucket.
+  { key: 'cogsPercent', label: '% CoGS', width: 76, align: 'right' },
   { key: 'title', label: 'Title', width: 140 },
   { key: 'startDate', label: 'Start Date', width: 110 },
   { key: 'endDate', label: 'End Date', width: 110 },
@@ -381,12 +386,24 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
           <select
             className="pr-input pr-select"
             value={employee.costType || ''}
-            onChange={(e) => updateEmployee(employee.id, { costType: e.target.value })}
+            onChange={(e) => {
+              const nextCostType = e.target.value;
+              // Switching to a clean single bucket clears any split percentage so the
+              // row goes back to a plain 100%/0% row (cogsPercentFor's costType
+              // fallback) instead of silently keeping a stale split percentage around.
+              updateEmployee(employee.id, { costType: nextCostType, cogsPercent: null });
+            }}
           >
             <option value="">—</option>
             <option value="CoGS">CoGS</option>
             <option value="OpEx">OpEx</option>
           </select>
+        ),
+        cogsPercent: (
+          <MonthInput
+            value={cogsPercentFor(employee)}
+            onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)) })}
+          />
         ),
         title: (
           <TextInput
