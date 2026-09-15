@@ -99,7 +99,31 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   // Excel-style grouped-columns toggle (2026-09-15): false = compact read-only Role /
   // Type / Start / End columns; true = the full editors inline.
   const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const frozenColumns = [...BASE_COLUMNS, ...(detailsExpanded ? EXPANDED_COLUMNS : COMPACT_COLUMNS)];
+  // The toggle lives IN the column header of the first details column (Kayee: "it should
+  // be at the top, on top of Role / Type / Start / End") — the same place Sheets puts its
+  // column-group [+]/[−] control — instead of the card's far-right header bar.
+  const detailCols = detailsExpanded ? EXPANDED_COLUMNS : COMPACT_COLUMNS;
+  const frozenColumns = [
+    ...BASE_COLUMNS,
+    ...detailCols.map((col, i) =>
+      i === 0
+        ? {
+            ...col,
+            label: (
+              <button
+                type="button"
+                className="pr-colgroup-toggle"
+                onClick={() => setDetailsExpanded((v) => !v)}
+                title={detailsExpanded ? 'Collapse to Role / Type / Start / End' : 'Expand to edit department, title, CoGS/OpEx split, dates, status'}
+              >
+                <span className="pr-colgroup-toggle-icon">{detailsExpanded ? '−' : '+'}</span>
+                {col.label}
+              </button>
+            ),
+          }
+        : col
+    ),
+  ];
 
   function toggleGroup(personId) {
     setExpandedGroups((prev) => {
@@ -504,19 +528,9 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       headActions={
         // Plain .btn (white bg), not .btn.primary — .btn.primary is solid black and
         // would disappear against this card's own black header bar.
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            type="button"
-            className={`btn${detailsExpanded ? ' is-active' : ''}`}
-            onClick={() => setDetailsExpanded((v) => !v)}
-            title={detailsExpanded ? 'Collapse to the compact Role / Type / Start / End view' : 'Expand to edit department, title, CoGS/OpEx split, dates, status'}
-          >
-            {detailsExpanded ? '◂ Collapse details' : 'Expand details ▸'}
-          </button>
-          <button type="button" className="btn" onClick={addEmployee}>
-            + Add Employee
-          </button>
-        </div>
+        <button type="button" className="btn" onClick={addEmployee}>
+          + Add Employee
+        </button>
       }
     />
   );

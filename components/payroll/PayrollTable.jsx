@@ -395,18 +395,53 @@ export function TextInput({ value, onCommit, placeholder, align, focusOnMount })
 /** Turns whatever someone typed or pasted into a YYYY-MM-DD string, or '' if it isn't a
  *  date. Accepts 05/01/2024, 5/1/24, 2024-05-01, 05-01-2024, "May 1, 2024", "1 May 2024".
  *  Two-digit years are read as 20xx. */
-export function parseDateText(text) {
+export function parseDateText(text, today = new Date()) {
   const s = String(text || '').trim();
   if (!s) return '';
   let y;
   let m;
   let d;
   let match;
-  if ((match = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(s))) {
+  // Digits only, no separators (2026-09-15, Kayee: "if I put it without slash, you'll be
+  // able to recognize it. Like if I say 25, you know it's 25"):
+  //   25        → the 25th of the current month
+  //   1125 / 925 → Nov 25 / Sep 25 of the current year (M/MM + DD)
+  //   112525    → 11/25/25   (MMDDYY)   11225 → 1/12/25 (MDDYY)
+  //   11252025  → 11/25/2025 (MMDDYYYY) 20251125 → 2025-11-25 (YYYYMMDD)
+  if (/^\d+$/.test(s)) {
+    const n = s.length;
+    if (n <= 2) {
+      y = today.getFullYear();
+      m = today.getMonth() + 1;
+      d = Number(s);
+    } else if (n <= 4) {
+      y = today.getFullYear();
+      m = Number(s.slice(0, n - 2));
+      d = Number(s.slice(n - 2));
+    } else if (n <= 6) {
+      y = 2000 + Number(s.slice(n - 2));
+      d = Number(s.slice(n - 4, n - 2));
+      m = Number(s.slice(0, n - 4));
+    } else if (n === 8 && /^(19|20)\d{2}/.test(s) && Number(s.slice(4, 6)) <= 12) {
+      y = Number(s.slice(0, 4));
+      m = Number(s.slice(4, 6));
+      d = Number(s.slice(6, 8));
+    } else if (n <= 8) {
+      y = Number(s.slice(n - 4));
+      d = Number(s.slice(n - 6, n - 4));
+      m = Number(s.slice(0, n - 6));
+    } else {
+      return '';
+    }
+  } else if ((match = /^(\d{4})[-/. ](\d{1,2})[-/. ](\d{1,2})$/.exec(s))) {
     [, y, m, d] = match.map(Number);
-  } else if ((match = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/.exec(s))) {
+  } else if ((match = /^(\d{1,2})[-/. ](\d{1,2})[-/. ](\d{2}|\d{4})$/.exec(s))) {
     [, m, d, y] = match.map(Number);
     if (y < 100) y += 2000;
+  } else if ((match = /^(\d{1,2})[-/. ](\d{1,2})$/.exec(s))) {
+    // "11/25" → Nov 25 of the current year
+    [, m, d] = match.map(Number);
+    y = today.getFullYear();
   } else {
     const parsed = new Date(s);
     if (Number.isNaN(parsed.getTime())) return '';
