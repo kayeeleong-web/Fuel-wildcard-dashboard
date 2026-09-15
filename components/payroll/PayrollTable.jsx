@@ -497,7 +497,7 @@ export function DateInput({ value, onCommit, placeholder = 'Add date' }) {
     <input
       type="text"
       inputMode="numeric"
-      className={`pr-input pr-input-date${!value && !focused ? ' is-empty' : ''}${invalid ? ' is-invalid' : ''}`}
+      className={`pr-input pr-input-date${!value && !focused ? ' is-empty' : ''}${!value && placeholder !== 'Add date' ? ' is-default' : ''}${invalid ? ' is-invalid' : ''}`}
       value={shown}
       placeholder={placeholder}
       title={value ? displayDate(value) : 'No date set — type or paste one (e.g. 05/01/2024)'}

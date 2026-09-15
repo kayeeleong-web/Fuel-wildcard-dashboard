@@ -15,7 +15,7 @@ import {
   meetingsPerPersonFor,
   resolveBonusDrivers,
 } from '../../lib/payroll/payrollData';
-import { MonthInput, PayrollTable } from './PayrollTable';
+import { DateInput, MonthInput, PayrollTable } from './PayrollTable';
 
 /**
  * Bonus — one row per person, exactly like the Employees card (2026-09-15 v4, Kayee:
@@ -37,16 +37,35 @@ import { MonthInput, PayrollTable } from './PayrollTable';
  * `scope` ('existing' | 'planned') = real people vs. Hiring Plan ramp roles; both
  * instances write the same `bonuses` array.
  */
-const FROZEN_COLUMNS = [
-  { key: 'actions', label: '', width: 40 },
+// Same Excel-style grouped columns as the Employees card (Kayee: "use the same collapse
+// method you had in the employees section... so the controls section doesn't get too
+// wide"). Compact = Bonus type (dropdown) + read-only Terms + Frequency; the [+] in the
+// header swaps in the editors ($, per campaigns, $/meeting, Frequency, Start, End).
+const BASE_COLUMNS = [
   { key: 'name', label: 'Name', width: 180 },
   { key: 'role', label: 'Role', width: 150 },
   { key: 'type', label: 'Bonus type', width: 208 },
+];
+const COMPACT_COLUMNS = [
+  { key: 'termsRead', label: 'Terms', width: 196 },
+  { key: 'payoutRead', label: 'Frequency', width: 80 },
+];
+const EXPANDED_COLUMNS = [
   { key: 'amount', label: '$', width: 84, align: 'right' },
   { key: 'per', label: 'per campaigns', width: 96, align: 'right' },
   { key: 'perMeeting', label: '$ / meeting', width: 84, align: 'right' },
-  { key: 'payout', label: 'Paid', width: 104 },
+  { key: 'payout', label: 'Frequency', width: 124 },
+  // Bonus start/end default to the person's own roster dates (shown greyed as the
+  // placeholder); typing a date here overrides just the bonus window.
+  { key: 'startDate', label: 'Start', width: 104 },
+  { key: 'endDate', label: 'End', width: 104 },
 ];
+
+/** MM/DD/YY of a stored YYYY-MM-DD date, for the greyed default in the Start/End boxes. */
+function shortDate(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+  return m ? `${m[2]}/${m[3]}/${m[1].slice(2)}` : dateStr || '';
+}
 
 const SECTIONS = [
   { type: 'coordinator', label: 'Campaign milestone + meetings' },
@@ -67,6 +86,29 @@ const TYPE_DEFAULTS = {
 export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onChange, scope = 'all', drivers }) {
   const inScope = (emp) => (scope === 'planned' ? !!emp?.isRamp : scope === 'existing' ? !emp?.isRamp : true);
   const [view, setView] = useState('accrual');
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
+  const detailCols = detailsExpanded ? EXPANDED_COLUMNS : COMPACT_COLUMNS;
+  const frozenColumns = [
+    ...BASE_COLUMNS,
+    ...detailCols.map((col, i) =>
+      i === 0
+        ? {
+            ...col,
+            label: (
+              <button
+                type="button"
+                className="pr-colgroup-toggle"
+                onClick={() => setDetailsExpanded((v) => !v)}
+                title={detailsExpanded ? 'Collapse to Terms / Frequency' : 'Expand to edit $, thresholds, frequency, start/end'}
+              >
+                <span className="pr-colgroup-toggle-icon">{detailsExpanded ? '−' : '+'}</span>
+                {col.label}
+              </button>
+            ),
+          }
+        : col
+    ),
+  ];
   const flow = view === 'cash' ? bonusCashFlow : bonusMonthlyFlow;
   const d = resolveBonusDrivers(drivers);
   const hasCampaignData = Object.values(d.campaignsByMonth).some((v) => Number(v) > 0);
@@ -104,14 +146,14 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
         camp[iso] = <span className="pr-driver-val">{c > 0 ? Math.round(c).toLocaleString('en-US') : ''}</span>;
         mtg[iso] = <span className="pr-driver-val">{m > 0 ? Math.round(m).toLocaleString('en-US') : ''}</span>;
       }
-      const note = hasCampaignData ? 'from Customer tab deals' : 'no deals in Customer tab yet → $0';
+      const note = hasCampaignData ? 'from Customer tab' : 'no deals yet → $0';
       rows.push({
         id: `drv_c_${section.type}`,
         className: 'pr-driver-row',
         monthCells: camp,
         cells: {
           name: <span className="pr-read-cell pr-driver-label">{isTeam ? 'campaigns · team total' : 'campaigns · per person'}</span>,
-          role: <span className="pr-read-cell pr-driver-note">{note}</span>,
+          role: <span className="pr-read-cell pr-driver-note pr-nowrap-cell" title="Company projected campaigns (Customer tab deals) ÷ people on campaign plans">{note}</span>,
         },
       });
       rows.push({
@@ -164,6 +206,24 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
             ),
           per: isCampaign ? <MonthInput value={bonus.per} onCommit={(n) => updateField(emp.id, { per: n })} /> : dash,
           perMeeting: isCampaign ? <MonthInput value={bonus.perMeeting} onCommit={(n) => updateField(emp.id, { perMeeting: n })} /> : dash,
+          termsRead: <span className="pr-read-cell pr-nowrap-cell" title={bonus ? explainBonus(bonus, assumptions) : ''}>{bonus ? describeBonus(bonus) : '—'}</span>,
+          payoutRead: <span className="pr-read-cell">{type === 'none' ? '—' : (bonus.payout || 'monthly') === 'quarterly' ? 'Quarterly' : 'Monthly'}</span>,
+          startDate:
+            type === 'none' ? dash : (
+              <DateInput
+                value={bonus.startDate || ''}
+                placeholder={emp.startDate ? shortDate(emp.startDate) : 'hire date'}
+                onCommit={(v) => updateField(emp.id, { startDate: v })}
+              />
+            ),
+          endDate:
+            type === 'none' ? dash : (
+              <DateInput
+                value={bonus.endDate || ''}
+                placeholder={emp.endDate ? shortDate(emp.endDate) : 'open'}
+                onCommit={(v) => updateField(emp.id, { endDate: v })}
+              />
+            ),
           payout:
             type === 'none' ? dash : (
               <select className="pr-input pr-select" value={bonus.payout || 'monthly'} onChange={(e) => updateField(emp.id, { payout: e.target.value })}>
@@ -221,7 +281,7 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
         view === 'cash' ? 'cash paid out' : 'P&L accrual'
       } · milestone hit rate ${assumptions.milestoneHitRate == null ? 90 : assumptions.milestoneHitRate}%`}
       tintForecast={false}
-      frozenColumns={FROZEN_COLUMNS}
+      frozenColumns={frozenColumns}
       months={months}
       todayIso={todayIso}
       totalRow={totalRow}

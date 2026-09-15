@@ -1594,6 +1594,10 @@ thead th.pr-month-historical { background: #3a3a3d; }
    picker's grey "mm/dd/yyyy" mask, so a forgotten start date (which zeroes the row) jumps out. */
 .pr-input-date.is-empty { background: #FFF6DB; border-color: rgba(214,152,0,.45); }
 .pr-input-date.is-empty::placeholder { color: #9A6B00; font-style: italic; font-family: inherit; }
+/* A blank date box whose placeholder is an inherited DEFAULT (e.g. a bonus falling back to the
+   person's hire date) is fine, not a warning — plain grey instead of amber. */
+.pr-input-date.is-empty.is-default { background: var(--blue-soft); border-color: rgba(17,179,231,.35); }
+.pr-input-date.is-empty.is-default::placeholder { color: var(--muted-2); font-style: normal; font-family: var(--font-num); }
 .pr-input-date.is-invalid { background: #FDECEC; border-color: rgba(220,53,69,.55); }
 .pr-select { appearance: auto; cursor: pointer; }
 
@@ -2361,7 +2365,8 @@ tr.pr-row-expanded td {
 .pr-mini-btn:hover { background: var(--panel-2); }
 .pr-mini-select { width: auto !important; font-size: 11px; padding: 3px 22px 3px 9px !important; border-radius: 999px; background: #fff; border-color: rgba(0,0,0,.15); text-transform: none; letter-spacing: 0; }
 .pr-group-band .pr-input:not(.pr-mini-select) { width: 240px; font-size: 12px; font-weight: 700; }
-tr.pr-driver-row td { background: rgba(17,179,231,.05); }
+tr.pr-driver-row td { background: rgba(17,179,231,.05); height: 24px; padding-top: 0; padding-bottom: 0; }
+tr.pr-driver-row .pr-read-cell { line-height: 22px; font-size: 11px; }
 .pr-driver-label { font-style: italic; }
 .pr-driver-note { font-size: 10.5px; color: var(--muted-2); font-style: italic; }
 .pr-driver-val { font-family: var(--font-num); font-size: 11.5px; color: var(--muted); }
