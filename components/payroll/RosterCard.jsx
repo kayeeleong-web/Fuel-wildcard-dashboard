@@ -37,13 +37,15 @@ const COMPACT_COLUMNS = [
   { key: 'endRead', label: 'End', width: 76 },
 ];
 const EXPANDED_COLUMNS = [
-  { key: 'department', label: 'Department', width: 108 },
+  // Select cells sized to their longest option + chevron, so nothing renders as "O…"
+  // (2026-09-15, Kayee: "the text is being covered"). "Employment" relabelled "Status".
+  { key: 'department', label: 'Department', width: 124 },
   { key: 'title', label: 'Title', width: 150 },
-  { key: 'costType', label: 'CoGS / OpEx', width: 92 },
+  { key: 'costType', label: 'CoGS / OpEx', width: 112 },
   { key: 'cogsPercent', label: '% CoGS', width: 70, align: 'right' },
-  { key: 'startDate', label: 'Start Date', width: 118 },
-  { key: 'endDate', label: 'End Date', width: 118 },
-  { key: 'employment', label: 'Employment', width: 104 },
+  { key: 'startDate', label: 'Start Date', width: 112 },
+  { key: 'endDate', label: 'End Date', width: 112 },
+  { key: 'employment', label: 'Status', width: 116 },
 ];
 
 /** MM/DD/YY for the compact read-only date columns (dates are stored YYYY-MM-DD). */

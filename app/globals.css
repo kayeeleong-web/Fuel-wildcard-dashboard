@@ -1854,7 +1854,9 @@ tr.pr-plan-row td { background: rgba(0,0,0,.02); }
 .pr-member-name { padding-left: 22px; }
 /* Native <select> in a narrow frozen cell was clipping its own text ("Month", "Quart") —
    give the control a right-side reserve for the chevron and never let the text wrap. */
-.payroll-table .pr-select { padding-right: 18px; white-space: nowrap; text-overflow: ellipsis; }
+/* No text-overflow:ellipsis on selects — Chrome applies it to the chosen option's text and
+   turns "OpEx" into "O…" in any snug cell. Cells are sized to fit the longest option instead. */
+.payroll-table .pr-select { padding-right: 20px; white-space: nowrap; }
 /* Column-group [+]/[−] toggle sitting inside a frozen <th> (Sheets-style), inheriting the
    header's own font/color so it reads as "the Role header, clickable" rather than a button. */
 .pr-colgroup-toggle {
