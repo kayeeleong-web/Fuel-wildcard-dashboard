@@ -1843,6 +1843,15 @@ tr.pr-dragging { opacity: .4; }
 .pr-read-open { color: var(--muted-2); }
 .pr-read-missing { color: #9A6B00; background: #FFF6DB; border-radius: 6px; padding: 0 7px; font-style: italic; }
 .btn.is-active { background: var(--panel-2); }
+/* Bonus card (2026-09-15 role-group model): plan rows sit between the group header and its
+   member rows; muted so the eye lands on the group total and each person's own figure. */
+tr.pr-plan-row td { background: rgba(0,0,0,.02); }
+.pr-plan-label { padding-left: 10px; }
+.pr-plan-total { color: var(--muted); font-size: 11.5px; }
+.pr-member-name { padding-left: 22px; }
+/* Native <select> in a narrow frozen cell was clipping its own text ("Month", "Quart") —
+   give the control a right-side reserve for the chevron and never let the text wrap. */
+.payroll-table .pr-select { padding-right: 18px; white-space: nowrap; text-overflow: ellipsis; }
 /* Column-group [+]/[−] toggle sitting inside a frozen <th> (Sheets-style), inheriting the
    header's own font/color so it reads as "the Role header, clickable" rather than a button. */
 .pr-colgroup-toggle {

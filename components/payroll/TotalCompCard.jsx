@@ -1,6 +1,6 @@
 'use client';
 
-import { bonusMonthlyFlow, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
+import { employeeBonusMonthly, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
 import { PayrollTable } from './PayrollTable';
 
 const FROZEN_COLUMNS = [
@@ -17,18 +17,13 @@ const FROZEN_COLUMNS = [
  * it's one of only two rollup cards on the tab and shouldn't need an extra click to see.
  */
 export function TotalCompCard({ roster, bonuses, assumptions, months, todayIso }) {
-  const bonusesByEmployee = {};
-  for (const b of bonuses) {
-    if (!bonusesByEmployee[b.employeeId]) bonusesByEmployee[b.employeeId] = [];
-    bonusesByEmployee[b.employeeId].push(b);
-  }
-
+  // Bonus plans are per role group (2026-09-15) — employeeBonusMonthly sums every plan
+  // this person is a member of.
   const rows = roster.map((employee) => {
-    const linkedBonuses = bonusesByEmployee[employee.id] || [];
     const monthCells = {};
     for (const iso of months) {
       const base = monthlyCostFor(employee, iso, assumptions);
-      const bonus = linkedBonuses.reduce((acc, b) => acc + bonusMonthlyFlow(b, employee, iso, assumptions), 0);
+      const bonus = employeeBonusMonthly(bonuses, employee, iso, assumptions, undefined, roster);
       monthCells[iso] = formatPayrollAmount(base + bonus);
     }
     return {
@@ -47,9 +42,8 @@ export function TotalCompCard({ roster, bonuses, assumptions, months, todayIso }
     monthCells: Object.fromEntries(
       months.map((iso) => {
         const sum = roster.reduce((acc, employee) => {
-          const linkedBonuses = bonusesByEmployee[employee.id] || [];
           const base = monthlyCostFor(employee, iso, assumptions);
-          const bonus = linkedBonuses.reduce((bAcc, b) => bAcc + bonusMonthlyFlow(b, employee, iso, assumptions), 0);
+          const bonus = employeeBonusMonthly(bonuses, employee, iso, assumptions, undefined, roster);
           return acc + base + bonus;
         }, 0);
         return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];

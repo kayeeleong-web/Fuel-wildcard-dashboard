@@ -1,6 +1,6 @@
 'use client';
 
-import { bonusMonthlyFlow, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
+import { employeeBonusMonthly, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
 import { PayrollTable } from './PayrollTable';
 
 const FROZEN_COLUMNS = [{ key: 'line', label: 'Line item', width: 220 }];
@@ -34,19 +34,13 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
   function plannedBaseMonthly(iso) {
     return planned.reduce((sum, role) => sum + monthlyCostFor(role, iso, assumptions), 0);
   }
+  // Bonus plans are per role group with memberIds (2026-09-15) — sum each plan across
+  // its members, bucketed by whether the member is a real person or a Hiring Plan ramp.
   function existingBonusMonthly(iso) {
-    return bonuses.reduce((sum, bonus) => {
-      const employee = roster.find((e) => e.id === bonus.employeeId);
-      if (employee && employee.isRamp) return sum;
-      return sum + bonusMonthlyFlow(bonus, employee, iso, assumptions);
-    }, 0);
+    return existing.reduce((sum, employee) => sum + employeeBonusMonthly(bonuses, employee, iso, assumptions, undefined, roster), 0);
   }
   function plannedBonusMonthly(iso) {
-    return bonuses.reduce((sum, bonus) => {
-      const employee = roster.find((e) => e.id === bonus.employeeId);
-      if (!employee || !employee.isRamp) return sum;
-      return sum + bonusMonthlyFlow(bonus, employee, iso, assumptions);
-    }, 0);
+    return planned.reduce((sum, role) => sum + employeeBonusMonthly(bonuses, role, iso, assumptions, undefined, roster), 0);
   }
 
   const totalRow = {
