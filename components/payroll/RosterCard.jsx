@@ -301,7 +301,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     const monthCells = {};
     for (const iso of months) {
       const sum = groupRows.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
-      monthCells[iso] = <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>;
+      monthCells[iso] = <b key={iso}>{formatPayrollAmount(sum)}</b>;
     }
     return {
       id: `group_${personId}`,
@@ -510,7 +510,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     monthCells: Object.fromEntries(
       months.map((iso) => {
         const sum = employees.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
-        return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
+        return [iso, <b key={iso}>{formatPayrollAmount(sum)}</b>];
       })
     ),
   };

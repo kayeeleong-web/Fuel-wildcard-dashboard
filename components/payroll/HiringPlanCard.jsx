@@ -167,7 +167,7 @@ export function HiringPlanCard({ roster, assumptions, months, todayIso, onChange
     monthCells: Object.fromEntries(
       months.map((iso) => {
         const sum = roles.reduce((acc, r) => acc + monthlyCostFor(r, iso, assumptions), 0);
-        return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
+        return [iso, <b key={iso}>{formatPayrollAmount(sum)}</b>];
       })
     ),
   };

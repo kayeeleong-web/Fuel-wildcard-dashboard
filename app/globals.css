@@ -24,7 +24,7 @@
   --black: #0A0A0A;
   /* Table chrome (2026-09-15, Kayee: "the black is a little too stark... a very dark gray for
      everything" — column headers, Total rows, card heads; the topbar/toggles stay --black). */
-  --table-chrome: #2E2E2E;
+  --table-chrome: #383838;
   --black-2: #161616;
   --on-black-muted: rgba(255, 255, 255, .55);
   --on-black-border: rgba(255, 255, 255, .12);
@@ -1457,8 +1457,10 @@ tbody tr.total td.pr-fcst { background: var(--table-chrome); border-top-color: v
    `thead th`/`tbody td` padding (13px/10px vertical) that every other table on the app
    still uses, scoped to Payroll's own table only so nothing elsewhere changes. */
 .payroll-table thead th { padding: 8px 12px; font-size: 10px; }
-.payroll-table tbody td { padding: 5px 12px; }
-.payroll-table .pr-input { font-size: 11.5px; padding: 4px 7px; }
+.payroll-table tbody td { padding: 2px 12px; height: 30px; box-sizing: border-box; }
+/* Row height (2026-09-15, Kayee: "every line needs to be the same height, but shorter") —
+   every roster/bonus row is a fixed 30px: inputs are 24px tall, read-only cells line up. */
+.payroll-table .pr-input { font-size: 11.5px; padding: 2px 7px; height: 24px; box-sizing: border-box; line-height: 18px; }
 
 /* Frozen leading columns — position:sticky with a per-column `left` offset computed in
    JS (PayrollTable.jsx), NOT the single-column .table-wrap rule used elsewhere in this
@@ -1841,7 +1843,7 @@ tr.pr-dragging { opacity: .4; }
 .icon-btn.is-active { color: var(--text); background: var(--panel-2); }
 /* Compact read-only roster columns (Role / Type / Start / End) — aligned real columns, muted so
    they read as reference info next to the editable Name/Base fields. */
-.pr-read-cell { display: inline-block; max-width: 100%; font-size: 11.5px; color: var(--muted); line-height: 28px; }
+.pr-read-cell { display: inline-block; max-width: 100%; font-size: 11.5px; color: var(--muted); line-height: 24px; }
 .pr-read-date { font-family: var(--font-num); }
 .pr-read-open { color: var(--muted-2); }
 .pr-read-missing { color: #9A6B00; background: #FFF6DB; border-radius: 6px; padding: 0 7px; font-style: italic; }
@@ -2377,3 +2379,10 @@ tr.pr-driver-row td { background: rgba(17,179,231,.05); }
 .pr-terms-editor { display: flex; flex-direction: column; gap: 12px; }
 .pr-terms-part { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .pr-terms-explain { margin-top: 6px; font-size: 11px; color: var(--muted); }
+
+/* Zero = blank (2026-09-15, Kayee: "if it's zero, don't show zero, keep it clean — only show
+   when there's a mouse"): the Hiring Plan's per-month count boxes hide their "0" placeholder
+   until hovered or focused; every $ cell already renders blank for 0 via formatPayrollAmount. */
+.pr-input-headcount::placeholder { color: transparent; }
+.pr-input-headcount:hover::placeholder, .pr-input-headcount:focus::placeholder { color: var(--muted-2); }
+.pr-headcount-cost:empty { display: none; }

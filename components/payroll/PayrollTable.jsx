@@ -339,7 +339,7 @@ export function HeadcountMonthInput({ count, costPreview, onCommit }) {
         inputMode="numeric"
         className="pr-input pr-input-headcount"
         value={display}
-        placeholder="0"
+        placeholder="0" // shown only on hover/focus (CSS) — 2026-09-15, Kayee: "if it's zero, don't show zero"
         onFocus={(e) => {
           const current = count ? String(count) : '';
           const next = current === '0' ? '' : current;

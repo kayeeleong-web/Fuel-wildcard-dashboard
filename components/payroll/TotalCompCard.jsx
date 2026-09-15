@@ -46,7 +46,7 @@ export function TotalCompCard({ roster, bonuses, assumptions, months, todayIso }
           const bonus = employeeBonusMonthly(bonuses, employee, iso, assumptions, undefined, roster);
           return acc + base + bonus;
         }, 0);
-        return [iso, <b key={iso}>{formatPayrollAmount(sum) || '$0'}</b>];
+        return [iso, <b key={iso}>{formatPayrollAmount(sum)}</b>];
       })
     ),
   };

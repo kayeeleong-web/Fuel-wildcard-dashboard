@@ -51,7 +51,7 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
         <b key={iso}>
           {formatPayrollAmount(
             existingBaseMonthly(iso) + plannedBaseMonthly(iso) + existingBonusMonthly(iso) + plannedBonusMonthly(iso)
-          ) || '$0'}
+          )}
         </b>,
       ])
     ),
@@ -78,22 +78,22 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
     {
       id: 'existing-base',
       cells: { line: lineLabel('Existing — Base Salaries', '--blue', 'existing') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingBaseMonthly(iso)) || '$0'])),
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingBaseMonthly(iso))])),
     },
     {
       id: 'existing-bonus',
       cells: { line: lineLabel('Existing — Bonus', '--blue', 'existing') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingBonusMonthly(iso)) || '$0'])),
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingBonusMonthly(iso))])),
     },
     {
       id: 'planned-base',
       cells: { line: lineLabel('Planned — Base (Hiring Plan)', '--purple', 'planned') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedBaseMonthly(iso)) || '$0'])),
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedBaseMonthly(iso))])),
     },
     {
       id: 'planned-bonus',
       cells: { line: lineLabel('Planned — Bonus', '--purple', 'planned') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedBonusMonthly(iso)) || '$0'])),
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedBonusMonthly(iso))])),
     },
   ];
 
