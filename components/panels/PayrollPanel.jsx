@@ -7,7 +7,6 @@ import { RosterCard } from '../payroll/RosterCard';
 import { HiringPlanCard } from '../payroll/HiringPlanCard';
 import { BonusCard } from '../payroll/BonusCard';
 import { TotalCompCard } from '../payroll/TotalCompCard';
-import { TotalCompByCategoryCard } from '../payroll/TotalCompByCategoryCard';
 import { CollapsibleSection } from '../payroll/CollapsibleSection';
 import { usePayrollState } from '../../lib/payroll/usePayrollState';
 import { currentIsoMonth, monthsForRange } from '../../lib/payroll/payrollData';
@@ -59,8 +58,9 @@ export function PayrollPanel({ payrollCtl }) {
   // collapsed when open up this page") — Payroll Summary at the top already shows the
   // headline numbers, and each summary row jumps to + expands its matching section on
   // click, so nothing below needs to be open by default just to land on the page.
-  // 2026-09-15 (Kayee): Total Comp by Employee + by CoGS/OpEx merged into ONE
-  // "Total Comp Summary" box (key `totalComp`), moved ABOVE Payroll Summary, collapsed.
+  // 2026-09-16 (Kayee): Payroll Summary now leads with the CoGS/OpEx split; the only
+  // remaining outer rollup box is Total Comp by Employee (key `totalComp`), collapsed,
+  // at the very bottom of the tab.
   const [collapsedSections, setCollapsedSections] = useState({
     totalComp: true,
     existing: true,
@@ -136,37 +136,6 @@ export function PayrollPanel({ payrollCtl }) {
           />
 
           <div className="payroll-main">
-            {/* Total Comp Summary — the two read-only rollups (by CoGS/OpEx first, then by
-                employee) in ONE box at the top, collapsed by default (2026-09-15, Kayee:
-                "since it's a summary role it should get moved up above existing and
-                planned... same box... total comp by CoGS/OpEx at the top, by employee
-                at the bottom... keep it collapsed"). */}
-            <CollapsibleSection
-              id={SECTION_IDS.totalComp}
-              title="Total Comp Summary"
-              subtitle="Base + bonus · by CoGS/OpEx, then by person · read-only"
-              colorVar="--green"
-              collapsed={collapsedSections.totalComp}
-              onToggle={() => toggleSection('totalComp')}
-            >
-              <TotalCompByCategoryCard
-                roster={state.roster}
-                bonuses={state.bonuses}
-                assumptions={state.assumptions}
-                months={visibleMonths}
-                todayIso={todayIso}
-              />
-              <TotalCompCard
-                roster={state.roster}
-                bonuses={state.bonuses}
-                assumptions={state.assumptions}
-                months={visibleMonths}
-                todayIso={todayIso}
-              />
-            </CollapsibleSection>
-
-            <div style={{ height: 20 }} />
-
             <PayrollSummaryCard
               roster={state.roster}
               bonuses={state.bonuses}
@@ -230,6 +199,29 @@ export function PayrollPanel({ payrollCtl }) {
                 todayIso={todayIso}
                 onChange={setBonuses}
                 scope="planned"
+              />
+            </CollapsibleSection>
+
+            <div style={{ height: 20 }} />
+
+            {/* Total Comp by employee — read-only rollup, collapsed, at the very bottom
+                (2026-09-16, Kayee: "the green dot total comp summary, when we expand we'll
+                only see total comp by employee, move it all the way to the bottom"). The
+                CoGS/OpEx split that used to sit in here now leads the Payroll Summary. */}
+            <CollapsibleSection
+              id={SECTION_IDS.totalComp}
+              title="Total Comp by Employee"
+              subtitle="Base + bonus per person · read-only"
+              colorVar="--green"
+              collapsed={collapsedSections.totalComp}
+              onToggle={() => toggleSection('totalComp')}
+            >
+              <TotalCompCard
+                roster={state.roster}
+                bonuses={state.bonuses}
+                assumptions={state.assumptions}
+                months={visibleMonths}
+                todayIso={todayIso}
               />
             </CollapsibleSection>
           </div>

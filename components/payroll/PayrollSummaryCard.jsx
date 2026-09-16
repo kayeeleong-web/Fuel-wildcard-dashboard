@@ -1,6 +1,6 @@
 'use client';
 
-import { employeeBonusMonthly, formatPayrollAmount, monthlyCostFor } from '../../lib/payroll/payrollData';
+import { employeeBonusMonthly, formatPayrollAmount, headcountCostByCostType, monthlyCostFor } from '../../lib/payroll/payrollData';
 import { PayrollTable } from './PayrollTable';
 
 const FROZEN_COLUMNS = [{ key: 'line', label: 'Line item', width: 220 }];
@@ -74,7 +74,22 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
     );
   }
 
+  // CoGS / OpEx split first (2026-09-16, Kayee: "payroll summary would have a breakdown
+  // of cost of goods sold and OPEX, then existing base / bonus, then planned base /
+  // bonus") — the exact totals the P&L's Payroll lines read (headcountCostByCostType),
+  // moved here from the former Total Comp by CoGS/OpEx card. Both pairs sum to the same
+  // Total row: CoGS + OpEx = Existing + Planned.
   const rows = [
+    {
+      id: 'cogs',
+      cells: { line: lineLabel('CoGS — Total Comp', '--green', 'totalComp') },
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(headcountCostByCostType(roster, bonuses, assumptions, 'CoGS', iso))])),
+    },
+    {
+      id: 'opex',
+      cells: { line: lineLabel('OpEx — Total Comp', '--green', 'totalComp') },
+      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(headcountCostByCostType(roster, bonuses, assumptions, 'OpEx', iso))])),
+    },
     {
       id: 'existing-base',
       cells: { line: lineLabel('Existing — Base Salaries', '--blue', 'existing') },
@@ -100,7 +115,7 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
   return (
     <PayrollTable
       title="Payroll Summary"
-      subtitle="Total comp rollup — click a line to jump to that section"
+      subtitle="Base + bonus — by CoGS/OpEx, then Existing / Planned · click a line to jump to that section"
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}
