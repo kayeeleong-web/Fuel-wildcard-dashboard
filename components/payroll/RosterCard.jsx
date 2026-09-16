@@ -306,6 +306,10 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   function buildGroupSummaryRow(personId, groupRows, sectionKey) {
     const isExpanded = expandedGroups.has(personId);
     const name = groupRows[0]?.name || '';
+    const today = new Date().toISOString().slice(0, 10);
+    const current =
+      groupRows.find((r) => r.startDate && r.startDate <= today && (!r.endDate || r.endDate >= today)) ||
+      [...groupRows].sort((x, y) => String(y.startDate || '').localeCompare(String(x.startDate || '')))[0];
     const monthCells = {};
     for (const iso of months) {
       const sum = groupRows.reduce((acc, e) => acc + baseSalaryMonthlyFor(e, iso), 0);
@@ -358,6 +362,22 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             {name || <i className="pr-comp-noname">Unnamed</i>} <span className="pr-comp-count">({groupRows.length})</span>
           </span>
         ),
+        // Collapsed block shows the CURRENT line's details read-only (2026-09-16, Kayee:
+        // "you don't have any information when Brennan and Shane are collapsed... show what
+        // is the current one so it doesn't look so bare"). Current = the line active
+        // today, else the newest by start date. Expand the block to edit any line.
+        baseSalary: <span className="pr-read-cell pr-read-num">{formatPayrollAmount(current.baseSalary)}</span>,
+        roleRead: <span className="pr-read-cell pr-nowrap-cell" title={current.title}>{current.title || <i className="pr-comp-noname">—</i>}</span>,
+        typeRead: <span className="pr-read-cell">{typeLabel(current)}</span>,
+        startRead: <span className="pr-read-cell pr-read-date">{shortDate(current.startDate)}</span>,
+        endRead: <span className="pr-read-cell pr-read-date">{current.endDate ? shortDate(current.endDate) : <span className="pr-read-open">open</span>}</span>,
+        department: <span className="pr-read-cell pr-nowrap-cell">{current.department}</span>,
+        title: <span className="pr-read-cell pr-nowrap-cell" title={current.title}>{current.title}</span>,
+        costType: <span className="pr-read-cell">{current.costType}</span>,
+        cogsPercent: <span className="pr-read-cell pr-read-num">{cogsPercentFor(current) > 0 ? cogsPercentFor(current) : ''}</span>,
+        startDate: <span className="pr-read-cell pr-read-date">{shortDate(current.startDate)}</span>,
+        endDate: <span className="pr-read-cell pr-read-date">{current.endDate ? shortDate(current.endDate) : <span className="pr-read-open">open</span>}</span>,
+        employment: <span className="pr-read-cell">{current.employment || 'Active'}</span>,
       },
     };
   }

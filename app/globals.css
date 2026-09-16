@@ -2393,3 +2393,4 @@ tr.pr-driver-row .pr-read-cell { line-height: 22px; font-size: 11px; }
 .pr-input-headcount::placeholder { color: transparent; }
 .pr-input-headcount:hover::placeholder, .pr-input-headcount:focus::placeholder { color: var(--muted-2); }
 .pr-headcount-cost:empty { display: none; }
+.pr-read-num { font-family: var(--font-num); display: block; text-align: right; }
