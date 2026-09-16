@@ -4,10 +4,10 @@ import { useState } from 'react';
 import {
   DEPARTMENT_OPTIONS,
   EMPLOYMENT_STATUSES,
+  baseSalaryMonthlyFor,
   cogsPercentFor,
   formatPayrollAmount,
   generateId,
-  monthlyCostFor,
 } from '../../lib/payroll/payrollData';
 import { DateInput, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
@@ -262,23 +262,17 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       }
       rowsByPerson.get(pid).push(r);
     }
-    // Automatic sort within each section (2026-09-15, Kayee: "sort it descending by
-    // base salary, then followed by Cost of goods sold or OpEx, then followed by
-    // department"). A multi-line person sorts by their highest base (their current /
-    // latest rate is what you'd look for). Because ordering is now rule-based, the
-    // drag-to-reorder handle is hidden — a manual drag would just snap back.
-    const rank = (rows) => {
-      const top = rows.reduce((best, r) => (Number(r.baseSalary) || 0) > (Number(best.baseSalary) || 0) ? r : best, rows[0]);
-      return top;
-    };
+    // Automatic sort within each section (2026-09-16, Kayee: "sort by person name and
+    // then by descending base salary") — A→Z by name so a person's multiple salary lines
+    // sit together, then highest base first. Rule-based ordering, so the drag handle is
+    // hidden (a manual drag would just snap back).
+    const rank = (rows) => rows.reduce((best, r) => ((Number(r.baseSalary) || 0) > (Number(best.baseSalary) || 0) ? r : best), rows[0]);
     order.sort((a, b) => {
       const ra = rank(rowsByPerson.get(a));
       const rb = rank(rowsByPerson.get(b));
-      const baseDiff = (Number(rb.baseSalary) || 0) - (Number(ra.baseSalary) || 0);
-      if (baseDiff !== 0) return baseDiff;
-      const typeDiff = String(ra.costType || 'zz').localeCompare(String(rb.costType || 'zz'));
-      if (typeDiff !== 0) return typeDiff; // 'CoGS' before 'OpEx', blanks last
-      return String(ra.department || 'zz').localeCompare(String(rb.department || 'zz'));
+      const byName = String(ra.name || '').localeCompare(String(rb.name || ''), undefined, { sensitivity: 'base' });
+      if (byName !== 0) return byName;
+      return (Number(rb.baseSalary) || 0) - (Number(ra.baseSalary) || 0);
     });
     const rows = [];
     for (const pid of order) {
@@ -300,7 +294,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     const name = groupRows[0]?.name || '';
     const monthCells = {};
     for (const iso of months) {
-      const sum = groupRows.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
+      const sum = groupRows.reduce((acc, e) => acc + baseSalaryMonthlyFor(e, iso), 0);
       monthCells[iso] = <b key={iso}>{formatPayrollAmount(sum)}</b>;
     }
     return {
@@ -360,9 +354,13 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     // boxes, it should just have the amount"). Everything is derived from Base Salary
     // × load factor × the prorated days-active fraction (see payrollData.js
     // activeFractionFor), so there's nothing left to type per cell.
+    // Month cells = BASE SALARY only (2026-09-16, Kayee: "in the existing people portion I
+    // only want to see the monthly salary" — payroll taxes and benefits roll up to their
+    // own P&L lines, so they're shown in the Payroll Summary, not per person here).
+    // Still prorated by start/end date.
     const monthCells = {};
     for (const iso of months) {
-      monthCells[iso] = formatPayrollAmount(monthlyCostFor(employee, iso, assumptions));
+      monthCells[iso] = formatPayrollAmount(baseSalaryMonthlyFor(employee, iso));
     }
 
     return {
@@ -509,7 +507,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     cells: { name: <b>TOTAL</b> },
     monthCells: Object.fromEntries(
       months.map((iso) => {
-        const sum = employees.reduce((acc, e) => acc + monthlyCostFor(e, iso, assumptions), 0);
+        const sum = employees.reduce((acc, e) => acc + baseSalaryMonthlyFor(e, iso), 0);
         return [iso, <b key={iso}>{formatPayrollAmount(sum)}</b>];
       })
     ),
@@ -519,7 +517,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
 
   return (
     <PayrollTable
-      title="Employees"
+      title="Employees — Base Salary"
       subtitle={`${uniquePeopleCount} people`}
       tintForecast={false}
       frozenColumns={frozenColumns}

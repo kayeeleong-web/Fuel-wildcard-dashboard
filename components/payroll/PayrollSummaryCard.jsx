@@ -1,6 +1,15 @@
 'use client';
 
-import { employeeBonusMonthly, formatPayrollAmount, headcountCostByCostType, monthlyCostFor } from '../../lib/payroll/payrollData';
+import {
+  employeeBonusMonthly,
+  formatPayrollAmount,
+  headcountBenefitsByCostType,
+  headcountBonusByCostType,
+  headcountCostByCostType,
+  headcountPayrollTaxesByCostType,
+  headcountSalariesByCostType,
+  monthlyCostFor,
+} from '../../lib/payroll/payrollData';
 import { PayrollTable } from './PayrollTable';
 
 const FROZEN_COLUMNS = [{ key: 'line', label: 'Line item', width: 220 }];
@@ -74,54 +83,58 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
     );
   }
 
-  // CoGS / OpEx split first (2026-09-16, Kayee: "payroll summary would have a breakdown
-  // of cost of goods sold and OPEX, then existing base / bonus, then planned base /
-  // bonus") — the exact totals the P&L's Payroll lines read (headcountCostByCostType),
-  // moved here from the former Total Comp by CoGS/OpEx card. Both pairs sum to the same
-  // Total row: CoGS + OpEx = Existing + Planned.
-  const rows = [
+  // Three SEPARATE breakdowns of the same Total, each under its own band so none reads
+  // as adding up with the others (2026-09-16, Kayee: "it looks like you're totaling
+  // everything... the green dot is one total, the blue and purple is another total —
+  // misleading"). Each group sums to the Total row on its own:
+  //   By P&L line   — Salaries / Payroll Taxes / Benefits / Bonuses (what the P&L books)
+  //   By cost type  — CoGS / OpEx (the two Payroll headcount lines on the P&L)
+  //   By section    — Existing base+bonus / Planned base+bonus (the boxes below)
+  const both = (fn, iso) => fn(roster, bonuses, assumptions, 'CoGS', iso) + fn(roster, bonuses, assumptions, 'OpEx', iso);
+  const cells = (valueFor) => Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(valueFor(iso))]));
+  const band = (text) => <span className="pr-group-band"><span className="pr-group-band-name">{text}</span></span>;
+
+  const rowGroups = [
     {
-      id: 'cogs',
-      cells: { line: lineLabel('CoGS — Total Comp', '--green', 'totalComp') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(headcountCostByCostType(roster, bonuses, assumptions, 'CoGS', iso))])),
+      key: 'pl',
+      label: band('By P&L line'),
+      rows: [
+        { id: 'salaries', cells: { line: lineLabel('Salaries', '--muted-2', 'existing') }, monthCells: cells((iso) => both(headcountSalariesByCostType, iso)) },
+        { id: 'taxes', cells: { line: lineLabel('Payroll Taxes', '--muted-2', 'existing') }, monthCells: cells((iso) => both(headcountPayrollTaxesByCostType, iso)) },
+        { id: 'benefits', cells: { line: lineLabel('Benefits', '--muted-2', 'existing') }, monthCells: cells((iso) => both(headcountBenefitsByCostType, iso)) },
+        { id: 'bonuses', cells: { line: lineLabel('Bonuses', '--muted-2', 'existing') }, monthCells: cells((iso) => both(headcountBonusByCostType, iso)) },
+      ],
     },
     {
-      id: 'opex',
-      cells: { line: lineLabel('OpEx — Total Comp', '--green', 'totalComp') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(headcountCostByCostType(roster, bonuses, assumptions, 'OpEx', iso))])),
+      key: 'type',
+      label: band('By cost type'),
+      rows: [
+        { id: 'cogs', cells: { line: lineLabel('CoGS — Total Comp', '--green', 'totalComp') }, monthCells: cells((iso) => headcountCostByCostType(roster, bonuses, assumptions, 'CoGS', iso)) },
+        { id: 'opex', cells: { line: lineLabel('OpEx — Total Comp', '--green', 'totalComp') }, monthCells: cells((iso) => headcountCostByCostType(roster, bonuses, assumptions, 'OpEx', iso)) },
+      ],
     },
     {
-      id: 'existing-base',
-      cells: { line: lineLabel('Existing — Base Salaries', '--blue', 'existing') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingBaseMonthly(iso))])),
-    },
-    {
-      id: 'existing-bonus',
-      cells: { line: lineLabel('Existing — Bonus', '--blue', 'existing') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(existingBonusMonthly(iso))])),
-    },
-    {
-      id: 'planned-base',
-      cells: { line: lineLabel('Planned — Base (Hiring Plan)', '--purple', 'planned') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedBaseMonthly(iso))])),
-    },
-    {
-      id: 'planned-bonus',
-      cells: { line: lineLabel('Planned — Bonus', '--purple', 'planned') },
-      monthCells: Object.fromEntries(months.map((iso) => [iso, formatPayrollAmount(plannedBonusMonthly(iso))])),
+      key: 'section',
+      label: band('By section'),
+      rows: [
+        { id: 'existing-base', cells: { line: lineLabel('Existing — Base Salaries (loaded)', '--blue', 'existing') }, monthCells: cells(existingBaseMonthly) },
+        { id: 'existing-bonus', cells: { line: lineLabel('Existing — Bonus', '--blue', 'existing') }, monthCells: cells(existingBonusMonthly) },
+        { id: 'planned-base', cells: { line: lineLabel('Planned — Base (Hiring Plan, loaded)', '--purple', 'planned') }, monthCells: cells(plannedBaseMonthly) },
+        { id: 'planned-bonus', cells: { line: lineLabel('Planned — Bonus', '--purple', 'planned') }, monthCells: cells(plannedBonusMonthly) },
+      ],
     },
   ];
 
   return (
     <PayrollTable
       title="Payroll Summary"
-      subtitle="Base + bonus — by CoGS/OpEx, then Existing / Planned · click a line to jump to that section"
+      subtitle="Total comp — three ways to slice the same Total · click a line to jump to that section"
       tintForecast={false}
       frozenColumns={FROZEN_COLUMNS}
       months={months}
       todayIso={todayIso}
       totalRow={totalRow}
-      rowGroups={[{ key: 'summary', label: null, rows }]}
+      rowGroups={rowGroups}
     />
   );
 }

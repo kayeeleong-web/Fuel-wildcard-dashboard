@@ -6,6 +6,7 @@ import {
   formatPayrollAmount,
   generateId,
   monthlyCostFor,
+  baseSalaryMonthlyFor,
   newHiresFor,
 } from '../../lib/payroll/payrollData';
 import { FillRangeButton, HeadcountMonthInput, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
@@ -98,7 +99,7 @@ export function HiringPlanCard({ roster, assumptions, months, todayIso, onChange
       monthCells[iso] = (
         <HeadcountMonthInput
           count={newHiresFor(role, iso)}
-          costPreview={formatPayrollAmount(monthlyCostFor(role, iso, assumptions))}
+          costPreview={formatPayrollAmount(baseSalaryMonthlyFor(role, iso))} // base only (2026-09-16), taxes/benefits live in the Summary
           onCommit={(n) => updateNewHires(role.id, iso, n)}
         />
       );
