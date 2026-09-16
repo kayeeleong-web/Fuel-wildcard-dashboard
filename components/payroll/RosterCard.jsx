@@ -262,18 +262,21 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       }
       rowsByPerson.get(pid).push(r);
     }
-    // Automatic sort within each section (2026-09-16, Kayee: "sort by person name and
-    // then by descending base salary") — A→Z by name so a person's multiple salary lines
-    // sit together, then highest base first. Rule-based ordering, so the drag handle is
-    // hidden (a manual drag would just snap back).
-    const rank = (rows) => rows.reduce((best, r) => ((Number(r.baseSalary) || 0) > (Number(best.baseSalary) || 0) ? r : best), rows[0]);
+    // Automatic sort within each section (2026-09-16, Kayee: "sort by name and then
+    // start date descending") — A→Z by name so a person's salary lines sit together,
+    // then newest start date first (so a raise line sits above the line it replaced).
+    // Rule-based ordering, so the drag handle is hidden.
+    const latestStart = (rows) => rows.reduce((best, r) => (String(r.startDate || '') > best ? String(r.startDate || '') : best), '');
     order.sort((a, b) => {
-      const ra = rank(rowsByPerson.get(a));
-      const rb = rank(rowsByPerson.get(b));
-      const byName = String(ra.name || '').localeCompare(String(rb.name || ''), undefined, { sensitivity: 'base' });
+      const ra = rowsByPerson.get(a);
+      const rb = rowsByPerson.get(b);
+      const byName = String(ra[0].name || '').localeCompare(String(rb[0].name || ''), undefined, { sensitivity: 'base' });
       if (byName !== 0) return byName;
-      return (Number(rb.baseSalary) || 0) - (Number(ra.baseSalary) || 0);
+      return latestStart(rb).localeCompare(latestStart(ra));
     });
+    for (const rows of rowsByPerson.values()) {
+      rows.sort((x, y) => String(y.startDate || '').localeCompare(String(x.startDate || '')));
+    }
     const rows = [];
     for (const pid of order) {
       const groupRows = rowsByPerson.get(pid);
