@@ -31,7 +31,7 @@ const BASE_COLUMNS = [
   { key: 'baseSalary', label: 'Base Salary', width: 98, align: 'right' },
 ];
 const COMPACT_COLUMNS = [
-  { key: 'roleRead', label: 'Role', width: 138 },
+  { key: 'roleRead', label: 'Role', width: 176 },
   { key: 'typeRead', label: 'Type', width: 66 },
   { key: 'startRead', label: 'Start', width: 76 },
   { key: 'endRead', label: 'End', width: 76 },
@@ -40,13 +40,22 @@ const EXPANDED_COLUMNS = [
   // Select cells sized to their longest option + chevron, so nothing renders as "O…"
   // (2026-09-15, Kayee: "the text is being covered"). "Employment" relabelled "Status".
   { key: 'department', label: 'Department', width: 124 },
-  { key: 'title', label: 'Title', width: 150 },
+  { key: 'title', label: 'Title', width: 190 },
   { key: 'costType', label: 'CoGS / OpEx', width: 112 },
   { key: 'cogsPercent', label: '% CoGS', width: 70, align: 'right' },
   { key: 'startDate', label: 'Start Date', width: 112 },
   { key: 'endDate', label: 'End Date', width: 112 },
   { key: 'employment', label: 'Status', width: 116 },
 ];
+
+/** One block per PERSON: explicit personId when set, else the (case/space-insensitive)
+ *  name, else the row id — so three "Brennan Keough" salary lines entered separately
+ *  still roll into one block (2026-09-16, Kayee: "Brandon stay together"). */
+function personKey(r) {
+  const n = String(r.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (n) return `name:${n}`; // same full name = same person, however the lines were added
+  return r.personId || r.id;
+}
 
 /** MM/DD/YY for the compact read-only date columns (dates are stored YYYY-MM-DD). */
 function shortDate(dateStr) {
@@ -164,7 +173,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   // roster. A genuinely NEW person still goes through addEmployee() above (blank
   // name), which is the only way to reach a state with no name populated.
   function addLine(personId) {
-    const groupRows = employees.filter((r) => (r.personId || r.id) === personId);
+    const groupRows = employees.filter((r) => personKey(r) === personId);
     const template = groupRows[groupRows.length - 1] || groupRows[0];
     if (!template) return;
     const id = generateId('emp');
@@ -201,7 +210,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     const order = [];
     const rowsByPerson = new Map();
     for (const r of sectionRows) {
-      const pid = r.personId || r.id;
+      const pid = personKey(r);
       if (!rowsByPerson.has(pid)) {
         rowsByPerson.set(pid, []);
         order.push(pid);
@@ -255,24 +264,26 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     const order = [];
     const rowsByPerson = new Map();
     for (const r of sectionEmployees) {
-      const pid = r.personId || r.id;
+      const pid = personKey(r);
       if (!rowsByPerson.has(pid)) {
         rowsByPerson.set(pid, []);
         order.push(pid);
       }
       rowsByPerson.get(pid).push(r);
     }
-    // Automatic sort within each section (2026-09-16, Kayee: "sort by name and then
-    // start date descending") — A→Z by name so a person's salary lines sit together,
-    // then newest start date first (so a raise line sits above the line it replaced).
-    // Rule-based ordering, so the drag handle is hidden.
-    const latestStart = (rows) => rows.reduce((best, r) => (String(r.startDate || '') > best ? String(r.startDate || '') : best), '');
+    // Ordering (2026-09-16, Kayee: "Brennan and Shane are the co-founders so they should
+    // be at the top... followed by higher level people... go with salary"): one BLOCK per
+    // person; blocks ranked by seniority using the person's highest base salary across
+    // their lines (salary as the proxy for level — co-founders first, then heads, then
+    // coordinators), ties A→Z by name. Inside a block, lines run newest start date first
+    // so a raise sits above the line it replaced. Rule-based, so no drag handle.
+    const topBase = (rows) => rows.reduce((m, r) => Math.max(m, Number(r.baseSalary) || 0), 0);
     order.sort((a, b) => {
       const ra = rowsByPerson.get(a);
       const rb = rowsByPerson.get(b);
-      const byName = String(ra[0].name || '').localeCompare(String(rb[0].name || ''), undefined, { sensitivity: 'base' });
-      if (byName !== 0) return byName;
-      return latestStart(rb).localeCompare(latestStart(ra));
+      const bySalary = topBase(rb) - topBase(ra);
+      if (bySalary !== 0) return bySalary;
+      return String(ra[0].name || '').localeCompare(String(rb[0].name || ''), undefined, { sensitivity: 'base' });
     });
     for (const rows of rowsByPerson.values()) {
       rows.sort((x, y) => String(y.startDate || '').localeCompare(String(x.startDate || '')));
@@ -516,7 +527,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     ),
   };
 
-  const uniquePeopleCount = new Set(employees.map((r) => r.personId || r.id)).size;
+  const uniquePeopleCount = new Set(employees.map(personKey)).size;
 
   return (
     <PayrollTable
