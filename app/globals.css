@@ -1517,7 +1517,7 @@ thead .pr-frozen-last { box-shadow: inset -2px 0 0 var(--grid-line); }
    nested-table layout. */
 .pr-comp-group-row td.pr-frozen { font-weight: 600; }
 .pr-comp-expand-toggle { padding: 0; }
-.pr-comp-chevron { display: inline-block; font-size: 10px; color: var(--muted-2); transition: transform .15s ease; }
+.pr-comp-chevron { display: inline-block; font-size: 15px; line-height: 1; color: var(--muted-2); transition: transform .15s ease; }
 .pr-comp-chevron.open { transform: rotate(90deg); color: var(--black); }
 .pr-comp-count { font-size: 11px; color: var(--muted-2); font-weight: 400; }
 .pr-comp-noname { color: var(--muted-2); font-style: italic; font-weight: 400; }

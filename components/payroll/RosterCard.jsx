@@ -350,11 +350,15 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             >
               <span className={`pr-comp-chevron${isExpanded ? ' open' : ''}`}>▸</span>
             </button>
-            <button type="button" className="icon-btn" title="Add another salary line for this person" onClick={() => addLine(personId)}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </button>
+            {/* [+] only once the block is open — collapsed, it sat right next to the chevron
+                and kept getting hit by mistake (2026-09-17, Kayee). */}
+            {isExpanded && (
+              <button type="button" className="icon-btn" title="Add another salary line for this person" onClick={() => addLine(personId)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
+            )}
           </div>
         ),
         name: (
