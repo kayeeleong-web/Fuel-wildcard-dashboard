@@ -97,7 +97,11 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
   const rowGroups = [
     {
       key: 'pl',
+      // By P&L line and By cost type start collapsed; only By section is open by default
+      // (2026-09-17, Kayee: "so it's not eating up a lot of space"). Click the band to open.
       label: band('By P&L line'),
+      collapsible: true,
+      defaultCollapsed: true,
       rows: [
         { id: 'salaries', cells: { line: lineLabel('Salaries', '--muted-2', 'existing') }, monthCells: cells((iso) => both(headcountSalariesByCostType, iso)) },
         { id: 'taxes', cells: { line: lineLabel('Payroll Taxes', '--muted-2', 'existing') }, monthCells: cells((iso) => both(headcountPayrollTaxesByCostType, iso)) },
@@ -108,6 +112,8 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
     {
       key: 'type',
       label: band('By cost type'),
+      collapsible: true,
+      defaultCollapsed: true,
       rows: [
         { id: 'cogs', cells: { line: lineLabel('CoGS — Total Comp', '--green', 'totalComp') }, monthCells: cells((iso) => headcountCostByCostType(roster, bonuses, assumptions, 'CoGS', iso)) },
         { id: 'opex', cells: { line: lineLabel('OpEx — Total Comp', '--green', 'totalComp') }, monthCells: cells((iso) => headcountCostByCostType(roster, bonuses, assumptions, 'OpEx', iso)) },
@@ -116,6 +122,7 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
     {
       key: 'section',
       label: band('By section'),
+      collapsible: true,
       rows: [
         { id: 'existing-base', cells: { line: lineLabel('Existing — Base Salaries (loaded)', '--blue', 'existing') }, monthCells: cells(existingBaseMonthly) },
         { id: 'existing-bonus', cells: { line: lineLabel('Existing — Bonus', '--blue', 'existing') }, monthCells: cells(existingBonusMonthly) },

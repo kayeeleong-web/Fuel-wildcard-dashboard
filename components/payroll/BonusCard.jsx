@@ -15,6 +15,7 @@ import {
   meetingsPerPersonFor,
   resolveBonusDrivers,
 } from '../../lib/payroll/payrollData';
+import { csvDate, downloadCsv, todayStamp } from '../../lib/payroll/exportCsv';
 import { DateInput, MonthInput, PayrollTable } from './PayrollTable';
 
 /**
@@ -274,6 +275,32 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
 
   const withBonus = people.filter((emp) => bonusFor(emp.id)).length;
 
+  // Export = one row per person with their bonus terms, in the on-screen section order
+  // (2026-09-17, Kayee: "an export button... for the bonus part, I want it listed out").
+  function exportCsv() {
+    const headers = ['Bonus type', 'Name', 'Title', 'Terms', '$', 'Per campaigns', '$ / meeting', 'Frequency', 'Start Date', 'End Date'];
+    const rows = [];
+    for (const section of SECTIONS) {
+      for (const emp of people.filter((e) => bonusTypeOf(bonusFor(e.id)) === section.type)) {
+        const b = bonusFor(emp.id);
+        const isCampaign = CAMPAIGN_BONUS_TYPES.includes(section.type);
+        rows.push([
+          section.label,
+          emp.name || '',
+          emp.title || '',
+          b ? describeBonus(b) : '',
+          b ? Number(b.amount) || 0 : '',
+          b && isCampaign ? Number(b.per) || 0 : '',
+          b && isCampaign ? Number(b.perMeeting) || 0 : '',
+          b ? ((b.payout || 'monthly') === 'quarterly' ? 'Quarterly' : 'Monthly') : '',
+          b ? csvDate(b.startDate || emp.startDate) : '',
+          b ? (b.endDate || emp.endDate ? csvDate(b.endDate || emp.endDate) : 'open') : '',
+        ]);
+      }
+    }
+    downloadCsv(`wildcard-bonus-${scope}-${todayStamp()}.csv`, headers, rows);
+  }
+
   return (
     <PayrollTable
       title="Bonus"
@@ -288,14 +315,19 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
       totalRow={totalRow}
       rowGroups={rowGroups}
       headActions={
-        <div className="seg">
+        <>
+          <button type="button" className="btn" onClick={exportCsv} title="Download each person's bonus terms as CSV — to confirm with accounting">
+            Export
+          </button>
+          <div className="seg">
           <button type="button" className={view === 'accrual' ? 'active' : undefined} onClick={() => setView('accrual')}>
             Accrual
           </button>
           <button type="button" className={view === 'cash' ? 'active' : undefined} onClick={() => setView('cash')}>
             Cash
           </button>
-        </div>
+          </div>
+        </>
       }
     />
   );

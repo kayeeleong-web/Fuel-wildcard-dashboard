@@ -10,6 +10,7 @@ import {
   formatPayrollAmount,
   generateId,
 } from '../../lib/payroll/payrollData';
+import { csvDate, downloadCsv, todayStamp } from '../../lib/payroll/exportCsv';
 import { DateInput, MonthInput, PayrollTable, PickerInput, TextInput } from './PayrollTable';
 
 // Narrowed across the board (2026-08-17, Kayee: "i can only see one month... push
@@ -264,6 +265,8 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
   // summary row (name + count badge + the SUM of every line's monthly cost) and, only
   // when expanded, each individual line below it — Kayee: "it will get roll up to one
   // line, only expand if i want to see."
+  // Every salary line in display order, for the Export button (accounting confirmation).
+  const exportLines = [];
   const rowGroups = SECTION_ORDER.map((section) => {
     const sectionEmployees = employees.filter((r) => (r.employment || 'Active') === section.key);
     const order = [];
@@ -300,6 +303,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     const rows = [];
     for (const pid of order) {
       const groupRows = rowsByPerson.get(pid);
+      for (const r of groupRows) exportLines.push({ section: section.label, r });
       if (groupRows.length === 1) {
         rows.push(buildRow(groupRows[0], section.key, { dragKey: pid, showDragHandle: false }));
         continue;
@@ -311,6 +315,25 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     }
     return { key: section.key, label: section.label, rowModifier: section.rowModifier, rows };
   });
+
+  // Export = the input columns only, one row per salary line, in the order shown on
+  // screen (2026-09-17, Kayee: "I want to confirm with accounting... I want it listed out").
+  function exportCsv() {
+    const headers = ['Section', 'Name', 'Base Salary', 'Department', 'Title', 'CoGS / OpEx', '% CoGS', 'Start Date', 'End Date', 'Status'];
+    const rows = exportLines.map(({ section, r }) => [
+      section,
+      r.name || '',
+      Number(r.baseSalary) || 0,
+      r.department || '',
+      r.title || '',
+      r.costType || '',
+      cogsPercentFor(r),
+      csvDate(r.startDate),
+      r.endDate ? csvDate(r.endDate) : 'open',
+      r.employment || 'Active',
+    ]);
+    downloadCsv(`wildcard-employees-${todayStamp()}.csv`, headers, rows);
+  }
 
   function buildGroupSummaryRow(personId, groupRows, sectionKey) {
     const isExpanded = expandedGroups.has(personId);
@@ -593,9 +616,14 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       headActions={
         // Plain .btn (white bg), not .btn.primary — .btn.primary is solid black and
         // would disappear against this card's own black header bar.
-        <button type="button" className="btn" onClick={addEmployee}>
-          + Add Employee
-        </button>
+        <>
+          <button type="button" className="btn" onClick={exportCsv} title="Download every salary line as CSV (no month grid) — to confirm with accounting">
+            Export
+          </button>
+          <button type="button" className="btn" onClick={addEmployee}>
+            + Add Employee
+          </button>
+        </>
       }
     />
   );
