@@ -365,18 +365,15 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
         // Collapsed block shows the CURRENT line's details read-only (2026-09-16, Kayee:
         // "you don't have any information when Brennan and Shane are collapsed... show what
         // is the current one so it doesn't look so bare"). Current = the line active
-        // today, else the newest by start date. Expand the block to edit any line.
+        // today, else the newest by start date. Dates are left blank on the block row
+        // (each line has its own). Expand the block to edit any line.
         baseSalary: <span className="pr-read-cell pr-read-num">{formatPayrollAmount(current.baseSalary)}</span>,
         roleRead: <span className="pr-read-cell pr-nowrap-cell" title={current.title}>{current.title || <i className="pr-comp-noname">—</i>}</span>,
         typeRead: <span className="pr-read-cell">{typeLabel(current)}</span>,
-        startRead: <span className="pr-read-cell pr-read-date">{shortDate(current.startDate)}</span>,
-        endRead: <span className="pr-read-cell pr-read-date">{current.endDate ? shortDate(current.endDate) : <span className="pr-read-open">open</span>}</span>,
         department: <span className="pr-read-cell pr-nowrap-cell">{current.department}</span>,
         title: <span className="pr-read-cell pr-nowrap-cell" title={current.title}>{current.title}</span>,
         costType: <span className="pr-read-cell">{current.costType}</span>,
         cogsPercent: <span className="pr-read-cell pr-read-num">{cogsPercentFor(current) > 0 ? cogsPercentFor(current) : ''}</span>,
-        startDate: <span className="pr-read-cell pr-read-date">{shortDate(current.startDate)}</span>,
-        endDate: <span className="pr-read-cell pr-read-date">{current.endDate ? shortDate(current.endDate) : <span className="pr-read-open">open</span>}</span>,
         employment: <span className="pr-read-cell">{current.employment || 'Active'}</span>,
       },
     };
