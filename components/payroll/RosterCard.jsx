@@ -5,6 +5,7 @@ import {
   DEPARTMENT_OPTIONS,
   EMPLOYMENT_STATUSES,
   baseSalaryMonthlyFor,
+  classificationForTitle,
   cogsPercentFor,
   formatPayrollAmount,
   generateId,
@@ -152,7 +153,9 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       personId: id,
       name: '',
       department: '',
-      costType: 'OpEx',
+      // Blank until a title is typed — classificationForTitle then fills CoGS/OpEx, % and
+      // department (was a hard 'OpEx' default, which coordinators kept inheriting by mistake).
+      costType: '',
       title: '',
       startDate: '',
       endDate: '',
@@ -183,6 +186,8 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
       name: template.name,
       department: template.department,
       costType: template.costType,
+      cogsPercent: template.cogsPercent ?? null,
+      costTypeManual: template.costTypeManual || false,
       title: template.title,
       startDate: '',
       endDate: '',
@@ -275,19 +280,23 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
     // be at the top... followed by higher level people... go with salary"): one BLOCK per
     // person; blocks ranked by seniority using the person's highest base salary across
     // their lines (salary as the proxy for level — co-founders first, then heads, then
-    // coordinators), ties A→Z by name. Inside a block, lines run newest start date first
-    // so a raise sits above the line it replaced. Rule-based, so no drag handle.
+    // coordinators); equal salaries then group by Department, then Title, then name A→Z
+    // (2026-09-17, Kayee: "after the current sort, sort by department and then title").
+    // Inside a block, lines run newest start date first so a raise sits above the line it
+    // replaced. Rule-based, so no drag handle.
     const topBase = (rows) => rows.reduce((m, r) => Math.max(m, Number(r.baseSalary) || 0), 0);
+    for (const rows of rowsByPerson.values()) {
+      rows.sort((x, y) => String(y.startDate || '').localeCompare(String(x.startDate || '')));
+    }
+    const cmp = (x, y) => String(x || '').localeCompare(String(y || ''), undefined, { sensitivity: 'base' });
     order.sort((a, b) => {
       const ra = rowsByPerson.get(a);
       const rb = rowsByPerson.get(b);
       const bySalary = topBase(rb) - topBase(ra);
       if (bySalary !== 0) return bySalary;
-      return String(ra[0].name || '').localeCompare(String(rb[0].name || ''), undefined, { sensitivity: 'base' });
+      // ra[0] / rb[0] = the person's newest line (sorted above)
+      return cmp(ra[0].department, rb[0].department) || cmp(ra[0].title, rb[0].title) || cmp(ra[0].name, rb[0].name);
     });
-    for (const rows of rowsByPerson.values()) {
-      rows.sort((x, y) => String(y.startDate || '').localeCompare(String(x.startDate || '')));
-    }
     const rows = [];
     for (const pid of order) {
       const groupRows = rowsByPerson.get(pid);
@@ -497,7 +506,26 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             onCommit={(v) => updateEmployee(employee.id, { department: v })}
           />
         ),
-        title: <TextInput value={employee.title} placeholder="Title" onCommit={(v) => updateEmployee(employee.id, { title: v })} />,
+        title: (
+          <TextInput
+            value={employee.title}
+            placeholder="Title"
+            onCommit={(v) => {
+              // Typing a title defaults CoGS/OpEx, % and Department from the confirmed
+              // role list (classificationForTitle) — unless this row's classification was
+              // already set by hand, or the department was already filled in. Everything
+              // stays editable; this only stops a new coordinator landing in OpEx.
+              const patch = { title: v };
+              const guess = classificationForTitle(v);
+              if (guess && !employee.costTypeManual) {
+                patch.costType = guess.costType;
+                patch.cogsPercent = guess.cogsPercent;
+                if (!employee.department) patch.department = guess.department;
+              }
+              updateEmployee(employee.id, patch);
+            }}
+          />
+        ),
         costType: (
           <select
             className="pr-input pr-select"
@@ -505,7 +533,8 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             onChange={(e) => {
               // Switching to a clean single bucket clears any split % so the row goes
               // back to a plain 100%/0% row (cogsPercentFor's costType fallback).
-              updateEmployee(employee.id, { costType: e.target.value, cogsPercent: null });
+              // costTypeManual: a hand-set classification wins over title defaults.
+              updateEmployee(employee.id, { costType: e.target.value, cogsPercent: null, costTypeManual: true });
             }}
           >
             <option value="">—</option>
@@ -516,7 +545,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
         cogsPercent: (
           <MonthInput
             value={cogsPercentFor(employee)}
-            onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)) })}
+            onCommit={(n) => updateEmployee(employee.id, { cogsPercent: Math.max(0, Math.min(100, n)), costTypeManual: true })}
           />
         ),
         startDate: <DateInput value={employee.startDate} onCommit={(v) => updateEmployee(employee.id, { startDate: v })} />,
