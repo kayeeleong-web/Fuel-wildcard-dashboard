@@ -32,9 +32,12 @@ const BASE_COLUMNS = [
   { key: 'name', label: 'Name', width: 180 },
   { key: 'baseSalary', label: 'Base Salary', width: 98, align: 'right' },
 ];
+// Compact frozen block = 744px total, the SAME as the Bonus and Hiring Plan cards, so the
+// month columns line up card-to-card when collapsed (2026-09-17, Kayee: "make these two
+// align when collapsed, easier on the eyes").
 const COMPACT_COLUMNS = [
-  { key: 'roleRead', label: 'Role', width: 176 },
-  { key: 'typeRead', label: 'Type', width: 66 },
+  { key: 'roleRead', label: 'Role', width: 170 },
+  { key: 'typeRead', label: 'Type', width: 72 },
   { key: 'startRead', label: 'Start', width: 76 },
   { key: 'endRead', label: 'End', width: 76 },
 ];
@@ -405,7 +408,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
         // (each line has its own). Expand the block to edit any line.
         baseSalary: <span className="pr-read-cell pr-read-num">{formatPayrollAmount(current.baseSalary)}</span>,
         roleRead: <span className="pr-read-cell pr-nowrap-cell" title={current.title}>{current.title || <i className="pr-comp-noname">—</i>}</span>,
-        typeRead: <span className="pr-read-cell">{typeLabel(current)}</span>,
+        typeRead: <span className="pr-read-cell pr-nowrap-cell">{typeLabel(current)}</span>,
         department: <span className="pr-read-cell pr-nowrap-cell">{current.department}</span>,
         title: <span className="pr-read-cell pr-nowrap-cell" title={current.title}>{current.title}</span>,
         costType: <span className="pr-read-cell">{current.costType}</span>,
@@ -508,7 +511,7 @@ export function RosterCard({ roster, assumptions, months, todayIso, onChange }) 
             {employee.title || <i className="pr-comp-noname">—</i>}
           </span>
         ),
-        typeRead: <span className="pr-read-cell">{typeLabel(employee)}</span>,
+        typeRead: <span className="pr-read-cell pr-nowrap-cell">{typeLabel(employee)}</span>,
         // No start date = the row costs $0 (payrollData.js isActiveInMonth) — flagged
         // here so a blank month grid is never a mystery.
         startRead: employee.startDate ? (

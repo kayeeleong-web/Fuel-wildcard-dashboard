@@ -14,11 +14,12 @@ import { FillRangeButton, HeadcountMonthInput, MonthInput, PayrollTable, PickerI
 const FROZEN_COLUMNS = [
   // Widened to match RosterCard's fix (2026-08-20) — 64px was clipping icon buttons
   // against this sticky column's edge.
-  { key: 'actions', label: '', width: 80 },
-  { key: 'name', label: 'Role', width: 210 },
+  // 744px total = Employees / Bonus compact width, so month columns align across cards.
+  { key: 'actions', label: '', width: 72 },
+  { key: 'name', label: 'Role', width: 272 },
   { key: 'department', label: 'Department', width: 130 },
   { key: 'costType', label: 'CoGS or OpEx?', width: 110 },
-  { key: 'baseSalary', label: 'Base Salary (per person)', width: 150, align: 'right' },
+  { key: 'baseSalary', label: 'Base Salary (per person)', width: 160, align: 'right' },
 ];
 
 /**

@@ -50,11 +50,12 @@ import { DateInput, MonthInput, PayrollTable } from './PayrollTable';
 const BASE_COLUMNS = [
   { key: 'name', label: 'Name', width: 180 },
   { key: 'role', label: 'Role', width: 150 },
-  { key: 'type', label: 'Bonus type', width: 208 },
+  { key: 'type', label: 'Bonus type', width: 180 },
 ];
+// Compact frozen block = 744px, same as Employees / Hiring Plan so month columns align.
 const COMPACT_COLUMNS = [
-  { key: 'termsRead', label: 'Terms', width: 196 },
-  { key: 'payoutRead', label: 'Frequency', width: 80 },
+  { key: 'termsRead', label: 'Terms', width: 170 },
+  { key: 'payoutRead', label: 'Frequency', width: 64 },
 ];
 const EXPANDED_COLUMNS = [
   { key: 'amount', label: '$', width: 84, align: 'right' },
