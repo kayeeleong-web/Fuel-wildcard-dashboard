@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BONUS_TYPES,
   CAMPAIGN_BONUS_TYPES,
@@ -8,11 +8,16 @@ import {
   bonusMonthlyFlow,
   bonusTypeOf,
   campaignsPerPersonFor,
+  coordinatorHeadcount,
+  defaultBonusTypeForTitle,
   describeBonus,
   explainBonus,
   formatPayrollAmount,
   generateId,
   meetingsPerPersonFor,
+  milestoneAchieversFor,
+  milestoneModeOf,
+  personKeyOf,
   resolveBonusDrivers,
 } from '../../lib/payroll/payrollData';
 import { csvDate, downloadCsv, todayStamp } from '../../lib/payroll/exportCsv';
@@ -114,30 +119,210 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
   const d = resolveBonusDrivers(drivers);
   const hasCampaignData = Object.values(d.campaignsByMonth).some((v) => Number(v) > 0);
 
-  const bonusFor = (employeeId) => bonuses.find((b) => b && b.employeeId === employeeId);
+  // ONE ROW PER PERSON (2026-09-17, Kayee: "Brennan is showing up twice... it's only one
+  // person, one name should show up once"). Roster lines are grouped by personKeyOf (same
+  // grouping as the Employees card); `current` = the line active today, else the newest,
+  // and is what the bonus row attaches to. A person's bonus row may still point at an
+  // older line from before this change — lookups match ANY of the person's line ids, and
+  // the math uses person-level activity, so nothing is lost.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const personMap = new Map();
+  for (const r of roster.filter(inScope)) {
+    const key = personKeyOf(r);
+    if (!personMap.has(key)) personMap.set(key, { key, lines: [] });
+    personMap.get(key).lines.push(r);
+  }
+  const people = Array.from(personMap.values()).map((p) => {
+    const lines = [...p.lines].sort((x, y) => String(y.startDate || '').localeCompare(String(x.startDate || '')));
+    const current =
+      lines.find((r) => r.startDate && r.startDate <= todayStr && (!r.endDate || r.endDate >= todayStr)) || lines[0];
+    const dismissed = lines.every((r) => (r.employment || 'Active') === 'Dismissed');
+    return { ...p, lines, current, dismissed, name: current.name, title: current.title, isRamp: !!current.isRamp };
+  });
+  const lineIds = (person) => new Set(person.lines.map((l) => l.id));
+  const bonusFor = (person) => bonuses.find((b) => b && lineIds(person).has(b.employeeId));
 
-  function setType(emp, type) {
-    const existing = bonusFor(emp.id);
+  // Title default (2026-09-17, Kayee: "if title has coordinator then put them under
+  // campaign milestone + meetings automatically, but if we want to override we could"):
+  // anyone whose title defaults to a plan and has NO bonus row yet gets one created. A
+  // stored row (including an explicit type 'none') is the override and is never touched.
+  useEffect(() => {
+    const additions = [];
+    for (const person of people) {
+      if (bonusFor(person)) continue;
+      const type = defaultBonusTypeForTitle(person.title);
+      if (!type) continue;
+      additions.push({ id: generateId('bonus'), employeeId: person.current.id, type, ...TYPE_DEFAULTS[type], autoDefault: true });
+    }
+    if (additions.length) onChange([...bonuses, ...additions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roster, bonuses]);
+
+  function setType(person, type) {
+    const existing = bonusFor(person);
     if (type === 'none') {
-      onChange(bonuses.filter((b) => b.employeeId !== emp.id));
+      // Keep an explicit 'none' row when the title would otherwise default a plan, so the
+      // override sticks; otherwise just drop the row.
+      if (defaultBonusTypeForTitle(person.title)) {
+        const row = { id: existing?.id || generateId('bonus'), employeeId: person.current.id, type: 'none' };
+        onChange(existing ? bonuses.map((b) => (b.id === existing.id ? row : b)) : [...bonuses, row]);
+      } else {
+        onChange(bonuses.filter((b) => !lineIds(person).has(b.employeeId)));
+      }
       return;
     }
-    const row = { id: existing?.id || generateId('bonus'), employeeId: emp.id, type, ...TYPE_DEFAULTS[type] };
+    const row = { id: existing?.id || generateId('bonus'), employeeId: person.current.id, type, ...TYPE_DEFAULTS[type] };
     onChange(existing ? bonuses.map((b) => (b.id === existing.id ? row : b)) : [...bonuses, row]);
   }
-  function updateField(employeeId, patch) {
-    onChange(bonuses.map((b) => (b.employeeId === employeeId ? { ...b, ...patch } : b)));
+  function updateField(person, patch) {
+    const ids = lineIds(person);
+    onChange(bonuses.map((b) => (ids.has(b.employeeId) ? { ...b, ...patch } : b)));
   }
 
-  const people = roster.filter(inScope);
   const dash = <span className="pr-read-cell pr-read-open">—</span>;
+  const headcountMode = milestoneModeOf(assumptions) === 'headcount';
+  const hitRate = assumptions.milestoneHitRate == null ? 90 : assumptions.milestoneHitRate;
+
+  // Dismissed people sit in their own band at the bottom, tagged, but keep their type /
+  // terms editable so a mid-year leaver still accrues for the months they were here.
+  const personRow = (person, section) => {
+    const bonus = bonusFor(person);
+    const type = section.type;
+    const emp = person.current;
+    const isCampaign = CAMPAIGN_BONUS_TYPES.includes(type);
+    const monthCells = {};
+    for (const iso of months) {
+      let v = 0;
+      if (bonus) for (const line of person.lines) v += flow(bonus, line, iso, assumptions, drivers, roster, bonuses);
+      monthCells[iso] = bonus ? formatPayrollAmount(v) : '';
+    }
+    return {
+      id: `p_${person.key}`,
+      monthCells,
+      cells: {
+        actions: null,
+        name: (
+          <span className="pr-name-cell pr-nowrap-cell" title={bonus ? explainBonus(bonus, assumptions) : person.name}>
+            {person.name || <i className="pr-comp-noname">(unnamed)</i>}
+            {person.isRamp && <span className="pr-ramp-badge">Ramp</span>}
+            {person.dismissed && <span className="pr-ramp-badge pr-dismissed-badge">Dismissed</span>}
+          </span>
+        ),
+        role: (
+          <span className="pr-read-cell pr-nowrap-cell" title={person.title}>
+            {person.title || <i className="pr-comp-noname">no title</i>}
+          </span>
+        ),
+        type: (
+          <select className="pr-input pr-select" value={type} onChange={(e) => setType(person, e.target.value)} title={bonus ? describeBonus(bonus, assumptions) : 'Pick a bonus type'}>
+            {BONUS_TYPES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        ),
+        amount: type === 'none' ? dash : <MonthInput value={bonus.amount} onCommit={(n) => updateField(person, { amount: n })} />,
+        per:
+          isCampaign && !(headcountMode && type === 'coordinator') ? (
+            <MonthInput value={bonus.per} onCommit={(n) => updateField(person, { per: n })} />
+          ) : (
+            dash
+          ),
+        perMeeting: isCampaign ? <MonthInput value={bonus.perMeeting} onCommit={(n) => updateField(person, { perMeeting: n })} /> : dash,
+        termsRead: (
+          <span className="pr-read-cell pr-nowrap-cell" title={bonus ? explainBonus(bonus, assumptions) : ''}>
+            {bonus ? describeBonus(bonus, assumptions) : '—'}
+          </span>
+        ),
+        payoutRead: <span className="pr-read-cell">{type === 'none' ? '—' : (bonus.payout || 'monthly') === 'quarterly' ? 'Quarterly' : 'Monthly'}</span>,
+        startDate:
+          type === 'none' ? dash : (
+            <DateInput
+              value={bonus.startDate || ''}
+              placeholder={emp.startDate ? shortDate(emp.startDate) : 'hire date'}
+              onCommit={(v) => updateField(person, { startDate: v })}
+            />
+          ),
+        endDate:
+          type === 'none' ? dash : (
+            <DateInput
+              value={bonus.endDate || ''}
+              placeholder={emp.endDate ? shortDate(emp.endDate) : 'open'}
+              onCommit={(v) => updateField(person, { endDate: v })}
+            />
+          ),
+        payout:
+          type === 'none' ? dash : (
+            <select className="pr-input pr-select" value={bonus.payout || 'monthly'} onChange={(e) => updateField(person, { payout: e.target.value })}>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+            </select>
+          ),
+      },
+    };
+  };
+
+  const active = people.filter((p) => !p.dismissed);
+  const dismissedPeople = people.filter((p) => p.dismissed);
+  const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
 
   const rowGroups = SECTIONS.map((section) => {
-    const members = people.filter((emp) => bonusTypeOf(bonusFor(emp.id)) === section.type);
+    const members = active.filter((p) => bonusTypeOf(bonusFor(p)) === section.type).sort(byName);
     const rows = [];
 
-    // Campaign sections: the counts every person in them is measured on.
-    if (CAMPAIGN_BONUS_TYPES.includes(section.type) && members.length > 0) {
+    if (section.type === 'coordinator' && members.length > 0 && headcountMode) {
+      // Section total at the top (Kayee: "10 coordinators → subject to $10k, but only $9k
+      // — whole people only"): heads → achievers → $ pool, then meetings per person.
+      const heads = {};
+      const pool = {};
+      const mtg = {};
+      for (const iso of months) {
+        const n = coordinatorHeadcount(bonuses, roster, iso);
+        const k = milestoneAchieversFor(bonuses, roster, iso, assumptions);
+        let sum = 0;
+        for (const p of members) {
+          const b = bonusFor(p);
+          if (b) for (const line of p.lines) sum += flow(b, line, iso, assumptions, drivers, roster, bonuses);
+        }
+        heads[iso] = <span className="pr-driver-val">{n > 0 ? `${k} of ${n}` : ''}</span>;
+        pool[iso] = <b>{formatPayrollAmount(sum)}</b>;
+        const m = meetingsPerPersonFor(bonuses, roster, iso, drivers);
+        mtg[iso] = <span className="pr-driver-val">{m > 0 ? Math.round(m).toLocaleString('en-US') : ''}</span>;
+      }
+      rows.push({
+        id: 'drv_heads',
+        className: 'pr-driver-row',
+        monthCells: heads,
+        cells: {
+          name: <span className="pr-read-cell pr-driver-label">coordinators hitting milestone</span>,
+          role: (
+            <span className="pr-read-cell pr-driver-note pr-nowrap-cell" title="round(active coordinators × hit rate) — whole people. Change the rate or basis in Payroll Assumptions.">
+              round(heads × {hitRate}%)
+            </span>
+          ),
+        },
+      });
+      rows.push({
+        id: 'drv_pool',
+        className: 'pr-driver-row',
+        monthCells: pool,
+        cells: {
+          name: <span className="pr-read-cell pr-driver-label"><b>section total</b></span>,
+          role: <span className="pr-read-cell pr-driver-note pr-nowrap-cell">{view === 'cash' ? 'cash out' : 'P&L accrual'}</span>,
+        },
+      });
+      rows.push({
+        id: 'drv_m_coordinator',
+        className: 'pr-driver-row',
+        monthCells: mtg,
+        cells: {
+          name: <span className="pr-read-cell pr-driver-label">meetings · per person</span>,
+          role: <span className="pr-read-cell pr-driver-note pr-nowrap-cell">{hasCampaignData ? 'from Customer tab' : 'no deals yet → $0'}</span>,
+        },
+      });
+    } else if (CAMPAIGN_BONUS_TYPES.includes(section.type) && members.length > 0) {
+      // Campaign-volume basis: the counts every person in the section is measured on.
       const isTeam = section.type === 'teamMilestone';
       const camp = {};
       const mtg = {};
@@ -165,80 +350,13 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
       });
     }
 
-    for (const emp of members) {
-      const bonus = bonusFor(emp.id);
-      const type = section.type;
-      const isCampaign = CAMPAIGN_BONUS_TYPES.includes(type);
-      const monthCells = {};
-      for (const iso of months) {
-        monthCells[iso] = bonus ? formatPayrollAmount(flow(bonus, emp, iso, assumptions, drivers, roster, bonuses)) : '';
-      }
-      rows.push({
-        id: `p_${emp.id}`,
-        monthCells,
-        cells: {
-          actions: null,
-          name: (
-            <span className="pr-name-cell pr-nowrap-cell" title={bonus ? explainBonus(bonus, assumptions) : emp.name}>
-              {emp.name || <i className="pr-comp-noname">(unnamed)</i>}
-              {emp.isRamp && <span className="pr-ramp-badge">Ramp</span>}
-            </span>
-          ),
-          role: (
-            <span className="pr-read-cell pr-nowrap-cell" title={emp.title}>
-              {emp.title || <i className="pr-comp-noname">no title</i>}
-            </span>
-          ),
-          type: (
-            <select className="pr-input pr-select" value={type} onChange={(e) => setType(emp, e.target.value)} title={bonus ? describeBonus(bonus) : 'Pick a bonus type'}>
-              {BONUS_TYPES.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          ),
-          amount:
-            type === 'none' ? dash : (
-              <MonthInput
-                value={bonus.amount}
-                onCommit={(n) => updateField(emp.id, { amount: n })}
-              />
-            ),
-          per: isCampaign ? <MonthInput value={bonus.per} onCommit={(n) => updateField(emp.id, { per: n })} /> : dash,
-          perMeeting: isCampaign ? <MonthInput value={bonus.perMeeting} onCommit={(n) => updateField(emp.id, { perMeeting: n })} /> : dash,
-          termsRead: <span className="pr-read-cell pr-nowrap-cell" title={bonus ? explainBonus(bonus, assumptions) : ''}>{bonus ? describeBonus(bonus) : '—'}</span>,
-          payoutRead: <span className="pr-read-cell">{type === 'none' ? '—' : (bonus.payout || 'monthly') === 'quarterly' ? 'Quarterly' : 'Monthly'}</span>,
-          startDate:
-            type === 'none' ? dash : (
-              <DateInput
-                value={bonus.startDate || ''}
-                placeholder={emp.startDate ? shortDate(emp.startDate) : 'hire date'}
-                onCommit={(v) => updateField(emp.id, { startDate: v })}
-              />
-            ),
-          endDate:
-            type === 'none' ? dash : (
-              <DateInput
-                value={bonus.endDate || ''}
-                placeholder={emp.endDate ? shortDate(emp.endDate) : 'open'}
-                onCommit={(v) => updateField(emp.id, { endDate: v })}
-              />
-            ),
-          payout:
-            type === 'none' ? dash : (
-              <select className="pr-input pr-select" value={bonus.payout || 'monthly'} onChange={(e) => updateField(emp.id, { payout: e.target.value })}>
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-              </select>
-            ),
-        },
-      });
-    }
+    for (const person of members) rows.push(personRow(person, section));
 
     const hint =
       section.type === 'coordinator'
-        ? '$ every N campaigns each, + $ per meeting'
+        ? headcountMode
+          ? '$ per milestone × round(heads × hit rate), + $ per meeting'
+          : '$ every N campaigns each, + $ per meeting'
         : section.type === 'teamMilestone'
           ? '$ every N team campaigns, + $ per meeting'
           : section.type === 'fixed'
@@ -259,36 +377,54 @@ export function BonusCard({ bonuses, roster, assumptions, months, todayIso, onCh
     };
   });
 
+  if (dismissedPeople.length) {
+    rowGroups.push({
+      key: 'dismissed',
+      label: (
+        <span className="pr-group-band">
+          <span className="pr-group-band-name">Dismissed</span>
+          <span className="pr-group-band-terms">no longer on payroll · set a type + dates to accrue for the months they were here</span>
+        </span>
+      ),
+      rowModifier: 'pr-dismissed',
+      collapsible: true,
+      defaultCollapsed: true,
+      rows: dismissedPeople.sort(byName).map((p) => personRow(p, { type: bonusTypeOf(bonusFor(p)) })),
+    });
+  }
+
   const totalRow = {
     cells: { name: <b>TOTAL</b> },
     monthCells: Object.fromEntries(
       months.map((iso) => {
         let sum = 0;
-        for (const emp of people) {
-          const b = bonusFor(emp.id);
-          if (b) sum += flow(b, emp, iso, assumptions, drivers, roster, bonuses);
+        for (const person of people) {
+          const b = bonusFor(person);
+          if (b) for (const line of person.lines) sum += flow(b, line, iso, assumptions, drivers, roster, bonuses);
         }
         return [iso, <b key={iso}>{formatPayrollAmount(sum)}</b>];
       })
     ),
   };
 
-  const withBonus = people.filter((emp) => bonusFor(emp.id)).length;
+  const withBonus = people.filter((p) => bonusTypeOf(bonusFor(p)) !== 'none').length;
 
   // Export = one row per person with their bonus terms, in the on-screen section order
   // (2026-09-17, Kayee: "an export button... for the bonus part, I want it listed out").
   function exportCsv() {
     const headers = ['Bonus type', 'Name', 'Title', 'Terms', '$', 'Per campaigns', '$ / meeting', 'Frequency', 'Start Date', 'End Date'];
     const rows = [];
+    const ordered = [...active.sort(byName), ...dismissedPeople.sort(byName)];
     for (const section of SECTIONS) {
-      for (const emp of people.filter((e) => bonusTypeOf(bonusFor(e.id)) === section.type)) {
-        const b = bonusFor(emp.id);
+      for (const person of ordered.filter((p) => bonusTypeOf(bonusFor(p)) === section.type)) {
+        const b = bonusFor(person);
+        const emp = person.current;
         const isCampaign = CAMPAIGN_BONUS_TYPES.includes(section.type);
         rows.push([
           section.label,
-          emp.name || '',
-          emp.title || '',
-          b ? describeBonus(b) : '',
+          (person.name || '') + (person.dismissed ? ' (dismissed)' : ''),
+          person.title || '',
+          b ? describeBonus(b, assumptions) : '',
           b ? Number(b.amount) || 0 : '',
           b && isCampaign ? Number(b.per) || 0 : '',
           b && isCampaign ? Number(b.perMeeting) || 0 : '',

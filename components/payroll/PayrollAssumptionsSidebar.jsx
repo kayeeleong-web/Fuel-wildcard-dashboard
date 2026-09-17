@@ -75,6 +75,24 @@ export function PayrollAssumptionsSidebar({ collapsed, onToggleCollapse, assumpt
               value={assumptions.milestoneHitRate == null ? 90 : assumptions.milestoneHitRate}
               onCommit={(v) => setField('milestoneHitRate', v)}
             />
+            {/* 2026-09-17 — how the coordinator milestone is projected. Headcount (default,
+                Hannah's rule of thumb): round(active coordinators × hit rate) whole people
+                × $ per milestone each month, no campaign data needed. Campaign volume:
+                the bottom-up split of the Customer tab's projected campaigns ÷ 55. */}
+            <label className="pr-assumption" title="Headcount: round(coordinators × hit rate) whole people × $ per milestone, monthly. Campaign volume: Customer-tab campaigns ÷ coordinators ÷ campaigns-per-milestone.">
+              <span className="pr-assumption-label">Milestone Basis</span>
+              <span className="pr-assumption-input-wrap">
+                <select
+                  className="pr-input pr-select"
+                  style={{ fontSize: 12, padding: '4px 20px 4px 7px' }}
+                  value={assumptions.milestoneMode === 'campaigns' ? 'campaigns' : 'headcount'}
+                  onChange={(e) => setField('milestoneMode', e.target.value)}
+                >
+                  <option value="headcount">Headcount × hit rate</option>
+                  <option value="campaigns">Campaign volume</option>
+                </select>
+              </span>
+            </label>
             <AssumptionField
               label="Yrly Merit Increase"
               value={assumptions.yearlyMeritIncrease}

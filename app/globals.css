@@ -2394,3 +2394,14 @@ tr.pr-driver-row .pr-read-cell { line-height: 22px; font-size: 11px; }
 .pr-input-headcount:hover::placeholder, .pr-input-headcount:focus::placeholder { color: var(--muted-2); }
 .pr-headcount-cost:empty { display: none; }
 .pr-read-num { font-family: var(--font-num); display: block; text-align: right; }
+
+/* Collapsible section bands inside Payroll tables (2026-09-17, Kayee: "the green part is
+   too wide... expand button is not obvious enough"): 30px band like every other row,
+   chevron inline + dark so it reads as a control instead of wrapping to its own line. */
+.payroll-table tbody tr.section td { padding-top: 3px; padding-bottom: 3px; height: 30px; }
+.pr-section-band-inner { display: inline-flex; align-items: center; gap: 8px; width: 100%; }
+.pr-section-band-inner .pr-group-band { flex: 1; width: auto; }
+.pr-section-chevron { color: var(--black); font-size: 13px; line-height: 1; opacity: .85; }
+.pr-section-chevron.open { color: var(--black); }
+tr.section:hover .pr-section-chevron { opacity: 1; }
+.pr-dismissed-badge { background: var(--muted-2); color: #fff; }

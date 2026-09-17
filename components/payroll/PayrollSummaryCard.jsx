@@ -124,9 +124,9 @@ export function PayrollSummaryCard({ roster, bonuses, assumptions, months, today
       label: band('By section'),
       collapsible: true,
       rows: [
-        { id: 'existing-base', cells: { line: lineLabel('Existing — Base Salaries (loaded)', '--blue', 'existing') }, monthCells: cells(existingBaseMonthly) },
+        { id: 'existing-base', cells: { line: lineLabel('Existing — Base Salaries', '--blue', 'existing') }, monthCells: cells(existingBaseMonthly) },
         { id: 'existing-bonus', cells: { line: lineLabel('Existing — Bonus', '--blue', 'existing') }, monthCells: cells(existingBonusMonthly) },
-        { id: 'planned-base', cells: { line: lineLabel('Planned — Base (Hiring Plan, loaded)', '--purple', 'planned') }, monthCells: cells(plannedBaseMonthly) },
+        { id: 'planned-base', cells: { line: lineLabel('Planned — Base (Hiring Plan)', '--purple', 'planned') }, monthCells: cells(plannedBaseMonthly) },
         { id: 'planned-bonus', cells: { line: lineLabel('Planned — Bonus', '--purple', 'planned') }, monthCells: cells(plannedBonusMonthly) },
       ],
     },

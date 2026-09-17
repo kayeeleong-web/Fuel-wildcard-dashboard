@@ -218,8 +218,10 @@ function RowGroup({ group, frozenColumns, offsets, months, monthWidth, todayIso,
             colSpan={frozenColumns.length}
             style={{ width: offsets.totalWidth, left: 0 }}
           >
-            {group.collapsible && <span className={`payroll-chevron${collapsed ? '' : ' open'}`}>▸ </span>}
-            {group.label}
+            <span className="pr-section-band-inner" title={group.collapsible ? (collapsed ? 'Click to expand' : 'Click to collapse') : undefined}>
+              {group.collapsible && <span className={`payroll-chevron pr-section-chevron${collapsed ? '' : ' open'}`}>▸</span>}
+              {group.label}
+            </span>
           </td>
           <td colSpan={months.length} />
         </tr>
